@@ -1,6 +1,5 @@
 'use client'
 import BreadcrumbComponent from "@/components/Breadcrumb/BreadcrumbComponent"
-import withRedirect from "@/components/Layout/withRedirect"
 import ProfileSidebar from "@/components/Profile/ProfileSidebar"
 import TransactionsTable from "@/components/Profile/TransactionsTable"
 import { CurrentLanguageData } from "@/redux/reuducer/languageSlice"
@@ -32,4 +31,4 @@ const Transactions = () => {
     )
 }
 
-export default withRedirect(Transactions)
+export default Transactions

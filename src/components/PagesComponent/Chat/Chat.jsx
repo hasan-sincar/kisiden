@@ -47,14 +47,7 @@ const Chat = ({ setActiveTab, activeTab, chatMessages, setChatMessages, selected
     const [Review, setReview] = useState('')
     const [IsTipsOpen, setIsTipsOpen] = useState(false)
     const [tipsData, setTipsData] = useState([])
-    const makeUnableToChat =
-      selectedTabData?.item?.status === "review" ||
-      selectedTabData?.item?.status === "permanent rejected" ||
-      selectedTabData?.item?.status === "soft rejected" ||
-      selectedTabData?.item?.status === "sold out" ||
-      selectedTabData?.item?.status === "resubmitted" ||
-      selectedTabData?.item?.status === "expired" ||
-      selectedTabData?.item?.status === "inactive";
+    const makeUnableToChat = selectedTabData?.item?.status === "review" || selectedTabData?.item?.status === "rejected" || selectedTabData?.item?.status === "sold out" || selectedTabData?.item?.status === "inactive"
     const IsShowRating = activeTab === 'buying' && selectedTabData?.item?.status === "sold out"
     const IsShowMakeOfferOnTop = IsTopMakeOffer && chatMessages?.length > 0 && !selectedTabData?.amount && !makeUnableToChat && activeTab === 'buying'
     const IsShowInitialMakeOffer = chatMessages?.length === 0 && !selectedTabData?.amount && !IsMakeOfferInChat && activeTab === 'buying' && !makeUnableToChat

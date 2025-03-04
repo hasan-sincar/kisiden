@@ -49,17 +49,10 @@ export const isFreeAdListing = createSelector(
     (state) => state.Settings,
     (settings) => settings?.data?.data?.free_ad_listing
 );
-export const getIsLandingPage = createSelector(
-    (state) => state.Settings,
-    (settings) => Number(settings?.data?.data?.show_landing_page)
-);
 
 export const Fcmtoken = createSelector(
     state => state.Settings,
     settings => settings?.fcmToken
 );
-
-
-
 
 

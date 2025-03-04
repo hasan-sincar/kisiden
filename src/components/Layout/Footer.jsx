@@ -44,6 +44,7 @@ const Footer = () => {
                     }}>
                         <div className="details">
                             <div className='social_text'>
+
                                 <span>{t("experienceTheMagic")} {settings?.company_name} {t("app")}</span>
                             </div>
                             <div className="social_links">
@@ -143,7 +144,7 @@ const Footer = () => {
                             </div>
                         </div>
                     </div>
-                    {showGetInTouchSection &&
+                    {showGetInTouchSection && (
 
                         <div className="col-12 col-md-6 col-lg-4">
                             <div className="get_in_touch_section">
@@ -172,29 +173,25 @@ const Footer = () => {
                                         </div>
                                     </div>
                                 }
-                                {(settings?.company_tel1 || settings?.company_tel2) &&
+                                {settings?.company_tel1 &&
                                     <div className="contact_details">
                                         <div className="details_icon">
                                             <BiPhoneCall size={22} />
                                         </div>
                                         <div className="details_list">
-                                            {
-                                                settings?.company_tel1 &&
-                                                <a href={`tel:${settings?.company_tel1}`}>
-                                                    <span>{settings?.company_tel1}</span>
-                                                </a>
-                                            }
-                                            {
-                                                settings?.company_tel2 &&
-                                                <a href={`tel:${settings?.company_tel2}`}>
-                                                    <span>{settings?.company_tel2}</span>
-                                                </a>
-                                            }
+                                            <a href={`tel:${settings?.company_tel1}`}>
+                                                <span>{settings?.company_tel1}</span>
+                                            </a>
+                                            <a href={`tel:${settings?.company_tel2}`}>
+                                                <span>{settings?.company_tel2}</span>
+                                            </a>
                                         </div>
                                     </div>
                                 }
                             </div>
                         </div>
+
+                    )
                     }
                 </div>
             </div>

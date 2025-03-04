@@ -11,7 +11,6 @@ import BreadcrumbComponent from "@/components/Breadcrumb/BreadcrumbComponent";
 import NoData from "@/components/NoDataFound/NoDataFound";
 import ProductCardSkeleton from "@/components/Skeleton/ProductCardSkeleton";
 import { CurrentLanguageData } from "@/redux/reuducer/languageSlice";
-import withRedirect from "@/components/Layout/withRedirect";
 
 const Favourites = () => {
 
@@ -134,4 +133,4 @@ const Favourites = () => {
     );
 };
 
-export default withRedirect(Favourites);
+export default Favourites;

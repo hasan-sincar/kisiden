@@ -14,7 +14,6 @@ import axios from 'axios'
 import { getMyItemsApi } from "@/utils/api";
 import { settingsData } from '@/redux/reuducer/settingSlice'
 import { CurrentLanguageData } from '@/redux/reuducer/languageSlice'
-import withRedirect from '@/components/Layout/withRedirect'
 
 
 const EditListing = ({ id }) => {
@@ -823,4 +822,4 @@ const EditListing = ({ id }) => {
     )
 }
 
-export default withRedirect(EditListing);
+export default EditListing;

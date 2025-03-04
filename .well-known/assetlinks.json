@@ -5,9 +5,9 @@
         ],
         "target": {
             "namespace": "android_app",
-            "package_name": "com.eclassify.wrteam",
+            "package_name": "com.kisiden.app",
             "sha256_cert_fingerprints": [
-                "B4:B3:AD:26:FA:94:07:B0:EA:CC:30:7E:65:B3:AB:14:B9:98:BB:AB:2F:2C:FF:81:73:9A:6C:22:DF:7C:8C:42"
+                "01:2a:9c:70:16:bf:87:89:53:ad:0a:b2:9f:b9:b5:de:54:e2:2d:ac:43:21:01:71:c9:98:79:fc:58:f4:9d:61"
             ]
         }
     },
@@ -17,9 +17,21 @@
         ],
         "target": {
             "namespace": "android_app",
-            "package_name": "com.eclassify.wrteam",
+            "package_name": "com.kisiden.app",
             "sha256_cert_fingerprints": [
-                "C8:7B:75:BD:A2:AF:6B:E2:93:50:AA:20:43:83:68:DE:AE:87:4B:1C:7A:B3:17:9E:CA:53:F9:BC:A7:9B:F2:39"
+                "2C:3C:7B:FB:FF:B5:25:CE:EA:61:6C:CD:DB:AD:8A:3A:B2:00:3E:FA:1B:26:BD:0D:5B:05:6C:24:1A:F2:33:F0"
+            ]
+        }
+    },
+    {
+        "relation": [
+            "delegate_permission/common.handle_all_urls"
+        ],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.kisiden.app",
+            "sha256_cert_fingerprints": [
+                "34:8E:6A:D8:34:9A:C2:BF:0F:1D:CA:77:DA:59:37:5A:A4:53:4D:D4:88:66:C7:61:84:27:B2:DE:8F:A5:50:5A"
             ]
         }
     }

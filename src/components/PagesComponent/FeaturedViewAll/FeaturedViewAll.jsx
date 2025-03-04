@@ -15,7 +15,6 @@ import { IoGrid } from "react-icons/io5"
 import Link from "next/link";
 import { userSignUpData } from "@/redux/reuducer/authSlice"
 import { CurrentLanguageData } from "@/redux/reuducer/languageSlice";
-import withRedirect from "@/components/Layout/withRedirect";
 
 
 const FeaturedViewAll = ({ slug }) => {
@@ -206,4 +205,4 @@ const FeaturedViewAll = ({ slug }) => {
     )
 }
 
-export default withRedirect(FeaturedViewAll);
+export default FeaturedViewAll;

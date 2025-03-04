@@ -10,7 +10,7 @@ import { FiUser } from "react-icons/fi"
 import { IoMdNotificationsOutline } from "react-icons/io"
 import { LiaAdSolid } from "react-icons/lia"
 import { LuHeart } from "react-icons/lu"
-import { MdOutlineRateReview } from "react-icons/md"
+import { MdDomainVerification, MdOutlineRateReview } from "react-icons/md"
 import { RiLogoutCircleLine } from "react-icons/ri"
 import { useSelector } from "react-redux"
 

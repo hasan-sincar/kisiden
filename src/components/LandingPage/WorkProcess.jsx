@@ -1,5 +1,6 @@
 'use client'
 import Image from 'next/image'
+import React from 'react'
 import Arrow from "../../../public/assets/Arrow.svg"
 import { placeholderImage, t } from '@/utils'
 import { settingsData } from '@/redux/reuducer/settingSlice'

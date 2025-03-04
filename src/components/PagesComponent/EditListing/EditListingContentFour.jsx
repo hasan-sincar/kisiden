@@ -24,6 +24,7 @@ const ContentFour = ({ uploadedImages, setUploadedImages, OtherImages, setOtherI
             'image/png': ['.png'],
         },
         multiple: false,
+        maxSize: 3145728
     });
 
     const removeImage = (index) => {

@@ -19,6 +19,7 @@ export const locationSlice = createSlice({
     name: "Location",
     initialState,
     reducers: {
+
         setCityData: (location, action) => {
             location.cityData = action.payload.data;
         },

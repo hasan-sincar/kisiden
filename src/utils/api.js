@@ -54,7 +54,6 @@ export const GET_VERIFICATION_STATUS = 'verification-request'
 export const MY_REVIEWS = 'my-review'
 export const RENEW_ITEM = 'renew-item'
 export const ADD_REPORT_REVIEW = 'add-review-report'
-export const SET_ITEM_TOTAL_CLICK = 'set-item-total-click'
 
 
 
@@ -343,7 +342,7 @@ export const updateProfileApi = {
         // Append only if the value is defined and not an empty string
         if (name) formData.append('name', name);
         if (email) formData.append('email', email);
-        formData.append('mobile', mobile);
+        if (mobile) formData.append('mobile', mobile);
         if (fcm_id) formData.append('fcm_id', fcm_id);
         if (address) formData.append('address', address);
 
@@ -384,20 +383,6 @@ export const assigFreePackageApi = {
         if (package_id) formData.append('package_id', package_id);
 
         return Api.post(ASSIGN_FREE_PACKAGE, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data'
-            }
-        });
-    },
-}
-export const setItemTotalClickApi = {
-    setItemTotalClick: ({ item_id } = {}) => {
-        const formData = new FormData();
-
-        // Append only if the value is defined and not an empty string
-        if (item_id) formData.append('item_id', item_id);
-
-        return Api.post(SET_ITEM_TOTAL_CLICK, formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
             }
@@ -487,8 +472,8 @@ export const createFeaturedItemApi = {
     },
 }
 // getPackageSettingsApi
-export const getPaymentSettingsApi = {
-    getPaymentSettings: () => {
+export const getPackageSettingsApi = {
+    getPackageSettings: () => {
         return Api.get(GET_PAYMENT_SETTINGS, {
             params: {
             }

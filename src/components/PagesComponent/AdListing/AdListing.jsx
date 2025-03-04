@@ -14,7 +14,6 @@ import toast from 'react-hot-toast'
 import axios from 'axios'
 import { CurrentLanguageData } from '@/redux/reuducer/languageSlice';
 import { settingsData } from '@/redux/reuducer/settingSlice'
-import withRedirect from '@/components/Layout/withRedirect'
 
 const AdListing = () => {
 
@@ -892,4 +891,4 @@ const AdListing = () => {
   )
 }
 
-export default withRedirect(AdListing)
+export default AdListing
