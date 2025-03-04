@@ -3,7 +3,6 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/css';
 import { RiArrowLeftLine, RiArrowRightLine } from "react-icons/ri";
 import { t, useIsRtl } from "@/utils";
-// import Loader from "../Loader/Loader";
 import { categoryApi } from "@/utils/api";
 import { useDispatch, useSelector } from "react-redux";
 import { CurrentPage, setCatCurrentPage, setCatLastPage, setCateData } from "@/redux/reuducer/categorySlice";
@@ -26,17 +25,7 @@ const PopularCategories = () => {
   const [isEnd, setIsEnd] = useState(false);
   const CurrentLanguage = useSelector(CurrentLanguageData)
   const catCurrentPage = useSelector(CurrentPage)
-  
-
   const [prevLang, setPrevLang] = useState(CurrentLanguage)
-
-
-  useEffect(() => {
-    if (swiperRef && swiperRef?.current) {
-      swiperRef?.current?.changeLanguageDirection(isRtl ? 'rtl' : 'ltr');
-    }
-  }, [isRtl]);
-
 
 
   // this api call only in pop cate swiper 
@@ -164,58 +153,63 @@ const PopularCategories = () => {
     1400: { slidesPerView: 9 }
   };
 
-  return (
-    isLoading ? (
-      <PopularCategoriesSkeleton />
-    ) : (
+  return isLoading ? (
+    <PopularCategoriesSkeleton />
+  ) : (
+    <div className="container main_padding">
+      {cateData?.length > 0 && (
+        <>
+          <div className="row mrg_btm">
+            <div className="col-12">
+              <div className="pop_cat_header">
+                <h4 className="pop_cat_head">{t("popularCategories")}</h4>
 
-      <div className="container main_padding">
-        {cateData?.length > 0 &&
-          <>
-            <div className="row mrg_btm">
-              <div className="col-12">
-                <div className="pop_cat_header">
-                  <h4 className="pop_cat_head">{t('popularCategories')}</h4>
-
-                  <div className="pop_cat_arrow">
-                    <button className={`pop_cat_btns ${isBeginning && 'PagArrowdisabled'}`} onClick={handlePrevPage}>
-                      <RiArrowLeftLine size={24} color="white" />
-                    </button>
-                    <button className={`pop_cat_btns ${isEnd && 'PagArrowdisabled'}`} onClick={handleNextPage}>
-                      <RiArrowRightLine size={24} color="white" />
-                    </button>
-                  </div>
+                <div className="pop_cat_arrow">
+                  <button
+                    className={`pop_cat_btns ${
+                      isBeginning && "PagArrowdisabled"
+                    }`}
+                    onClick={handlePrevPage}
+                  >
+                    <RiArrowLeftLine size={24} color="white" />
+                  </button>
+                  <button
+                    className={`pop_cat_btns ${isEnd && "PagArrowdisabled"}`}
+                    onClick={handleNextPage}
+                  >
+                    <RiArrowRightLine size={24} color="white" />
+                  </button>
                 </div>
               </div>
             </div>
-            <div className="row">
-              <div className="col-12">
-                <Swiper
-                  dir={isRtl ? "rtl" : "ltr"}
-                  spaceBetween={30}
-                  slidesPerView={9}
-                  onSlideChange={handleSlideChange}
-                  onSwiper={(swiper) => {
-                    swiperRef.current = swiper;
-                    setIsEnd(swiper?.isEnd);
-                    setIsBeginning(swiper?.isBeginning);
-                  }}
-                  breakpoints={breakpoints}
-                  className="popular_cat_slider"
-                >
-                  {cateData?.map((ele, index) => (
-                    <SwiperSlide key={index}>
-                      <PopularCategory data={ele} />
-                    </SwiperSlide>
-                  ))}
-
-                </Swiper>
-              </div>
+          </div>
+          <div className="row">
+            <div className="col-12">
+              <Swiper
+                dir={isRtl ? "rtl" : "ltr"}
+                spaceBetween={30}
+                slidesPerView={9}
+                onSlideChange={handleSlideChange}
+                onSwiper={(swiper) => {
+                  swiperRef.current = swiper;
+                  setIsEnd(swiper?.isEnd);
+                  setIsBeginning(swiper?.isBeginning);
+                }}
+                breakpoints={breakpoints}
+                className="popular_cat_slider"
+                key={isRtl}
+              >
+                {cateData?.map((ele, index) => (
+                  <SwiperSlide key={index}>
+                    <PopularCategory data={ele} />
+                  </SwiperSlide>
+                ))}
+              </Swiper>
             </div>
-          </>
-        }
-      </div>
-    )
+          </div>
+        </>
+      )}
+    </div>
   );
 };
 

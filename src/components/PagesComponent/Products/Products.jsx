@@ -21,6 +21,7 @@ import { setBreadcrumbPath } from "@/redux/reuducer/breadCrumbSlice"
 import { ViewCategory, setCategoryView } from "@/redux/reuducer/categorySlice"
 import { getCityData } from "@/redux/reuducer/locationSlice"
 import { categorySortBy, setCategorySortBy } from "@/redux/reuducer/filterSlice"
+import withRedirect from "@/components/Layout/withRedirect"
 
 
 const Products = () => {
@@ -201,7 +202,7 @@ const Products = () => {
     };
 
     // Sorting the searchedData to prioritize items with is_feature set to true
-    const sortedSearchedData = searchedData?.sort((a, b) => b.is_feature - a.is_feature);
+    // const sortedSearchedData = searchedData?.sort((a, b) => b.is_feature - a.is_feature);
 
     const clearKmRange = () => {
         setKmRange(0)
@@ -328,10 +329,8 @@ const Products = () => {
 
                                                 :
 
-                                                sortedSearchedData && sortedSearchedData.length > 0 ?
-
-
-                                                    sortedSearchedData?.map((item, index) => (
+                                                searchedData && searchedData.length > 0 ?
+                                                    searchedData?.map((item, index) => (
                                                         view === "list" ? (
 
                                                             <div className="col-12" key={index}>
@@ -357,7 +356,7 @@ const Products = () => {
                                         IsLoadMore ?
                                             <div className="loader adListingLoader"></div>
                                             :
-                                            currentPage < lastPage && sortedSearchedData && sortedSearchedData.length > 0 &&
+                                            currentPage < lastPage && searchedData && searchedData.length > 0 &&
                                             <div className="loadMore">
                                                 <button onClick={handleLoadMore}> {t('loadMore')} </button>
                                             </div>
@@ -372,4 +371,4 @@ const Products = () => {
     )
 }
 
-export default Products
+export default withRedirect(Products)

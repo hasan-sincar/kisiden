@@ -58,13 +58,6 @@ const SimilarProducts = ({ productData }) => {
     };
 
 
-    useEffect(() => {
-        if (swiperRef && swiperRef?.current) {
-            swiperRef?.current?.changeLanguageDirection(isRtl ? 'rtl' : 'ltr');
-        }
-    }, [isRtl]);
-
-
     const breakpoints = {
         0: {
             slidesPerView: 2,
@@ -97,65 +90,93 @@ const SimilarProducts = ({ productData }) => {
     }
 
     return (
-        similarData.length > 0 &&
+      similarData.length > 0 && (
         <>
-            <div className="row related_prod_head">
-                <div className="col-12">
-                    <h4 className="pop_cat_head">{t('relatedAds')}</h4>
-                </div>
+          <div className="row related_prod_head">
+            <div className="col-12">
+              <h4 className="pop_cat_head">{t("relatedAds")}</h4>
             </div>
-            <div className="row blog_card_row_gap">
-                {similarData?.length > 4 ? (
-                    <div className="col-12">
-                        <div className='similar_prod_swiper'>
-                            <Swiper
-                                dir={isRtl ? "rtl" : "ltr"}
-                                className="similar_product_swiper"
-                                slidesPerView={4}
-                                spaceBetween={30}
-                                breakpoints={breakpoints}
-                                onSlideChange={handleSlideChange}
-                                modules={[FreeMode]}
-                                freeMode={true}
-                                onSwiper={(swiper) => {
-                                    swiperRef.current = swiper;
-                                    setIsEnd(swiper.isEnd);
-                                    setIsBeginning(swiper.isBeginning);
-                                }}
-                            >
-                                {similarData && similarData.map((data, index) => (
-                                    <SwiperSlide key={index}>
-                                        <Link href={userData?.id == data?.user_id ? `/my-listing/${data?.slug}` : `/product-details/${data.slug}`} prefetch={false}>
-                                            <ProductCard data={data} handleLike={handleLike} />
-                                        </Link>
-                                    </SwiperSlide>
-                                ))}
-                            </Swiper>
-
-                            {similarData?.length > 4 &&
-                                <>
-                                    <div className={`pag_leftarrow_cont leftarrow ${isBeginning ? 'hideArrow' : ''}`} onClick={swipePrev}>
-                                        <FaArrowLeft size={24} className='arrowLeft' />
-                                    </div>
-                                    <div className={`pag_rightarrow_cont rightarrow ${isEnd ? 'hideArrow' : ''}`} onClick={swipeNext} >
-                                        <FaArrowRight size={24} className='arrowRight' />
-                                    </div>
-                                </>
+          </div>
+          <div className="row blog_card_row_gap">
+            {similarData?.length > 4 ? (
+              <div className="col-12">
+                <div className="similar_prod_swiper">
+                  <Swiper
+                    dir={isRtl ? "rtl" : "ltr"}
+                    className="similar_product_swiper"
+                    slidesPerView={4}
+                    spaceBetween={30}
+                    breakpoints={breakpoints}
+                    onSlideChange={handleSlideChange}
+                    modules={[FreeMode]}
+                    freeMode={true}
+                    onSwiper={(swiper) => {
+                      swiperRef.current = swiper;
+                      setIsEnd(swiper.isEnd);
+                      setIsBeginning(swiper.isBeginning);
+                    }}
+                    key={isRtl}
+                  >
+                    {similarData &&
+                      similarData.map((data, index) => (
+                        <SwiperSlide key={index}>
+                          <Link
+                            href={
+                              userData?.id == data?.user_id
+                                ? `/my-listing/${data?.slug}`
+                                : `/product-details/${data.slug}`
                             }
-                        </div>
-                    </div>
-                ) : (
-                    similarData && similarData.map((data, index) => (
-                        <div className="col-6 col-md-6 col-lg-3" key={index}>
-                            <Link href={userData?.id == data?.user_id ? `/my-listing/${data?.slug}` : `/product-details/${data.slug}`} prefetch={false}>
-                                <ProductCard data={data} handleLike={handleLike} />
-                            </Link>
-                        </div>
-                    ))
-                )}
-            </div>
+                            prefetch={false}
+                          >
+                            <ProductCard data={data} handleLike={handleLike} />
+                          </Link>
+                        </SwiperSlide>
+                      ))}
+                  </Swiper>
+
+                  {similarData?.length > 4 && (
+                    <>
+                      <div
+                        className={`pag_leftarrow_cont leftarrow ${
+                          isBeginning ? "hideArrow" : ""
+                        }`}
+                        onClick={swipePrev}
+                      >
+                        <FaArrowLeft size={24} className="arrowLeft" />
+                      </div>
+                      <div
+                        className={`pag_rightarrow_cont rightarrow ${
+                          isEnd ? "hideArrow" : ""
+                        }`}
+                        onClick={swipeNext}
+                      >
+                        <FaArrowRight size={24} className="arrowRight" />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              similarData &&
+              similarData.map((data, index) => (
+                <div className="col-6 col-md-6 col-lg-3" key={index}>
+                  <Link
+                    href={
+                      userData?.id == data?.user_id
+                        ? `/my-listing/${data?.slug}`
+                        : `/product-details/${data.slug}`
+                    }
+                    prefetch={false}
+                  >
+                    <ProductCard data={data} handleLike={handleLike} />
+                  </Link>
+                </div>
+              ))
+            )}
+          </div>
         </>
-    )
+      )
+    );
 }
 
 export default SimilarProducts

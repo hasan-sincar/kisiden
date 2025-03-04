@@ -22,6 +22,7 @@ import { CatItems, FullTreeData, SingleCurrentPage, SingleLastPage, ViewCategory
 import { getCityData } from "@/redux/reuducer/locationSlice"
 import { CurrentLanguageData } from "@/redux/reuducer/languageSlice"
 import { categorySortBy, setCategorySortBy } from "@/redux/reuducer/filterSlice"
+import withRedirect from "@/components/Layout/withRedirect"
 
 
 const SingleCategory = ({ slug }) => {
@@ -380,11 +381,8 @@ const SingleCategory = ({ slug }) => {
                                                         </div>
                                                     )
                                                 ))
-
                                                 :
-
                                                 SingleCatItem && SingleCatItem.length > 0 ?
-
                                                     SingleCatItem?.map((item, index) => (
                                                         view === "list" ? (
                                                             <div className="col-12" key={index}>
@@ -426,4 +424,4 @@ const SingleCategory = ({ slug }) => {
     )
 }
 
-export default SingleCategory
+export default withRedirect(SingleCategory)

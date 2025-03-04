@@ -2,12 +2,10 @@
 import { CurrentLanguageData } from "@/redux/reuducer/languageSlice.js"
 import { getFaqApi } from "@/utils/api.js"
 import { t } from "@/utils/index.jsx"
-import dynamic from "next/dynamic"
 import { useEffect, useState } from "react"
 import { useSelector } from "react-redux"
-const QuickAnswerAccordion = dynamic(() => import('./QuickAnswerAccordion.jsx'), {
-    ssr: false
-})
+import QuickAnswerAccordion from "./QuickAnswerAccordion"
+
 
 
 const QuickAnswers = () => {
@@ -29,7 +27,6 @@ const QuickAnswers = () => {
 
 
     return (
-
         <div className="quick_answers" id="faq">
             {Faq && Faq.length > 0 &&
                 <div className="container">

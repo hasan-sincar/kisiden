@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Slider } from 'antd';
 import { loadGoogleMaps, t } from '@/utils';
 import { MdClose } from 'react-icons/md';

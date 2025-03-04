@@ -1,4 +1,3 @@
-import React from "react";
 import NoDataFound from "../../../public/assets/no_data_found_illustrator.svg";
 import Image from "next/image";
 import { placeholderImage, t } from "@/utils";

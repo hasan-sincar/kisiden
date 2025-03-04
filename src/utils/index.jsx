@@ -405,17 +405,44 @@ export const createStickyNote = () => {
     document.body.removeChild(stickyNote);
   };
 
-  const link = document.createElement('a');
-  link.style.textDecoration = 'underline';
-  link.style.color = '#3498db';
-  link.innerText = 'Şimdi İndir';
-  link.href = store.getState()?.Settings?.data?.data?.play_store_link
-  stickyNote.innerHTML = 'Sohbet ve Bildirim özellikleri bu tarayıcıda desteklenmiyor. Daha iyi bir kullanıcı deneyimi için lütfen mobil uygulamamızı kullanın. ';
+  const playStoreLink = store.getState()?.Settings?.data?.data?.play_store_link;
+  const appStoreLink = store.getState()?.Settings?.data?.data?.app_store_link;
+
+  const message = document.createElement('span');
+  message.innerText = 
+    'Chat and Notification features are not supported on this browser. For a better user experience, please use our mobile application. ';
+
+  const linkContainer = document.createElement('div'); // Changed to 'div' for better spacing
+  linkContainer.style.display = 'inline-block'; // Keeps links inline while allowing space
+
+  const linkStyle = "text-decoration: underline !important; color: #3498db";
+
+  if (playStoreLink) {
+    const playStoreAnchor = document.createElement('a');
+    playStoreAnchor.style.cssText = linkStyle;
+    playStoreAnchor.innerText = 'Google Play';
+    playStoreAnchor.href = playStoreLink;
+    playStoreAnchor.target = '_blank';
+    linkContainer.appendChild(playStoreAnchor);
+  }
+
+  if (appStoreLink) {
+    const appStoreAnchor = document.createElement('a');
+    appStoreAnchor.style.cssText = linkStyle;
+    appStoreAnchor.style.marginLeft = '5px'; // Space before this link
+    appStoreAnchor.innerText = 'App Store';
+    appStoreAnchor.href = appStoreLink;
+    appStoreAnchor.target = '_blank';
+    linkContainer.appendChild(appStoreAnchor);
+  }
+
   stickyNote.appendChild(closeButton);
-  stickyNote.appendChild(link);
+  stickyNote.appendChild(message);
+  stickyNote.appendChild(linkContainer);
 
   document.body.appendChild(stickyNote);
 };
+
 
 export const t = (label) => {
   const langData = store.getState().CurrentLanguage?.language?.file_name && store.getState().CurrentLanguage?.language?.file_name[label];
@@ -746,6 +773,8 @@ export const IsAdExpired = (SingleListing) => {
   if (!SingleListing?.expiry_date) {
     return false;
   }
+
+
   const expiryDate = new Date(SingleListing?.expiry_date);
   const currentDate = new Date();
   return expiryDate < currentDate;

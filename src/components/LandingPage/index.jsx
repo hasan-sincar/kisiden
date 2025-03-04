@@ -1,4 +1,3 @@
-import React from 'react'
 import AnythingYouWant from './AnythingYouWant'
 import WorkProcess from './WorkProcess'
 import OurBlogs from './OurBlogs'
@@ -10,8 +9,6 @@ const LandingPage = () => {
     <>
       <AnythingYouWant />
       <WorkProcess />
-      {/* <Subscription /> */}
-      {/* <ClassifiedPosting /> */}
       <OurBlogs />
       <QuickAnswers />
     </>

@@ -41,6 +41,13 @@ export const rootSignupData = createSelector(
     (UserSignup) => UserSignup
 )
 
+
+export const getIsLoggedIn = createSelector(
+    (state) => state.UserSignup,
+    (UserSignup) => UserSignup?.data?.token
+)
+
+
 export const userSignUpData = createSelector(
     (state) => state.UserSignup,
     (UserSignup) => UserSignup?.data?.data
