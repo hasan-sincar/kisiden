@@ -1,0 +1,38 @@
+[
+    {
+        "relation": [
+            "delegate_permission/common.handle_all_urls"
+        ],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.kisiden.app",
+            "sha256_cert_fingerprints": [
+                "01:2a:9c:70:16:bf:87:89:53:ad:0a:b2:9f:b9:b5:de:54:e2:2d:ac:43:21:01:71:c9:98:79:fc:58:f4:9d:61"
+            ]
+        }
+    },
+    {
+        "relation": [
+            "delegate_permission/common.handle_all_urls"
+        ],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.kisiden.app",
+            "sha256_cert_fingerprints": [
+                "2C:3C:7B:FB:FF:B5:25:CE:EA:61:6C:CD:DB:AD:8A:3A:B2:00:3E:FA:1B:26:BD:0D:5B:05:6C:24:1A:F2:33:F0"
+            ]
+        }
+    },
+    {
+        "relation": [
+            "delegate_permission/common.handle_all_urls"
+        ],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.kisiden.app",
+            "sha256_cert_fingerprints": [
+                "34:8E:6A:D8:34:9A:C2:BF:0F:1D:CA:77:DA:59:37:5A:A4:53:4D:D4:88:66:C7:61:84:27:B2:DE:8F:A5:50:5A"
+            ]
+        }
+    }
+]
