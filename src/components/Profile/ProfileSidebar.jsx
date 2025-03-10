@@ -39,7 +39,7 @@ const ProfileSidebar = () => {
                 // Perform the logout action
                 logoutSuccess();
                 signOut()
-                router.push('/')
+                // router.push('/')
 
                 toast.success(t('signOutSuccess'));
             } else {

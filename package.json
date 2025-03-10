@@ -6,7 +6,7 @@
     "dev": "next dev",
     "hostdev": "next dev --hostname 192.168.0.165",
     "build": "next build",
-    "start": "NODE_ENV=production NODE_PORT=8003 node server.js",
+    "start": "NODE_ENV=production NODE_PORT=8001 node server.js",
     "export": "next build",
     "lint": "next lint",
     "check-keys": "translation-key-purge start"
@@ -14,6 +14,7 @@
   "dependencies": {
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
+    "@google-cloud/translate": "^8.5.0",
     "@mui/icons-material": "^5.15.18",
     "@mui/material": "^5.15.18",
     "@react-google-maps/api": "^2.19.3",
@@ -49,7 +50,6 @@
     "react-share": "^5.1.0",
     "redux-persist": "^6.0.0",
     "sass": "^1.65.1",
-    "sharp": "^0.33.5",
     "sweetalert2": "^11.11.0",
     "swiper": "^10.3.0",
     "translation-key-purge": "^1.0.2"

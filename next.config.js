@@ -10,10 +10,7 @@ const nextConfig = {
     },
     trailingSlash: false,
     reactStrictMode: false,
-    webpack: (config, { isServer }) => {
-        if (isServer) {
-            require('./scripts/sitemap-generator')
-        }
+    webpack: (config) => {
         config.resolve.alias = {
             ...config.resolve.alias,
             apexcharts: path.resolve(__dirname, './node_modules/apexcharts-clevision')

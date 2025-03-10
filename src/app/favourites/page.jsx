@@ -1,6 +1,5 @@
 import Layout from "@/components/Layout/Layout"
 import Favourites from "@/components/PagesComponent/Favourites/Favourites"
-import SEO from "@/components/SEO/SEO"
 
 export const metadata = {
     title: process.env.NEXT_PUBLIC_META_TITLE,

@@ -5,6 +5,7 @@ import Head from "next/head";
 import { Toaster } from "react-hot-toast";
 import 'react-loading-skeleton/dist/skeleton.css'
 import axios from "axios";
+import Script from "next/script";
 // import Script from "next/script";
 
 export const generateMetadata = async () => {
@@ -47,7 +48,7 @@ export default async function RootLayout({ children }) {
 
         <Providers >
           <Toaster position="top-center" reverseOrder={false} />
-            {children}
+          {children}
         </Providers>
       </body>
     </html>

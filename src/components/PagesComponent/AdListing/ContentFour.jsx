@@ -25,8 +25,8 @@ const ContentFour = ({ uploadedImages, setUploadedImages, OtherImages, setOtherI
             'image/jpeg': ['.jpeg', '.jpg'],
             'image/png': ['.png'],
         },
-        maxSize: 3145728,
-        multiple: false
+        multiple: false,
+        
     });
 
 
