@@ -6,7 +6,7 @@
 
     RewriteRule ^_next/(.*) /.next/$1 [L]
      # Allow access to static files with specific extensions
-    RewriteCond %{REQUEST_URI} \.(js|css|svg|jpg|jpeg|png|gif|ico)$
+    RewriteCond %{REQUEST_URI} \.(js|css|svg|txt|jpg|jpeg|png|gif|ico)$
     RewriteRule ^ - [L]
     
     RewriteRule ^index.html http://127.0.0.1:8001/$1 [P]
