@@ -43,7 +43,7 @@ export default async function RootLayout({ children }) {
         <script async defer src={`https://maps.googleapis.com/maps/api/js?key=${placeApiKey}&libraries=places&loading=async`}></script>
       </Head>
       <body>
-        {/* <Script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-xxxxxxxxxxxx"
+        {/* <Script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2864672373009685"
           crossOrigin="anonymous" strategy="afterInteractive" /> */}
 
         <Providers >
