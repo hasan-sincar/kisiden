@@ -6,7 +6,6 @@ import { Toaster } from "react-hot-toast";
 import 'react-loading-skeleton/dist/skeleton.css'
 import axios from "axios";
 import Script from "next/script";
-// import Script from "next/script";
 
 export const generateMetadata = async () => {
   try {
@@ -43,9 +42,8 @@ export default async function RootLayout({ children }) {
         <script async defer src={`https://maps.googleapis.com/maps/api/js?key=${placeApiKey}&libraries=places&loading=async`}></script>
       </Head>
       <body>
-        {/* <Script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2864672373009685"
-          crossOrigin="anonymous" strategy="afterInteractive" /> */}
-
+        <Script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2864672373009685"
+          crossOrigin="anonymous" strategy="afterInteractive" />
         <Providers >
           <Toaster position="top-center" reverseOrder={false} />
           {children}
