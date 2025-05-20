@@ -30,6 +30,7 @@ const HomeAllItem = ({ cityData, allEmpty }) => {
     try {
       const params = {
         page,
+        limit: 12,
       };
       if (!isDemoMode) {
         if (KmRange > 0) {
@@ -104,7 +105,7 @@ const HomeAllItem = ({ cityData, allEmpty }) => {
         <>
           <div className={`row ${!allEmpty && "allItemTopSpace"}`}>
             <div className="col-12">
-              <h4 className="pop_cat_head">{t("allItems")}</h4>
+                <h4 className="pop_cat_head">{t("allAdvertisements")}</h4>
             </div>
           </div>
           <div className="row product_card_card_gap top_spacing">
@@ -132,7 +133,7 @@ const HomeAllItem = ({ cityData, allEmpty }) => {
           </div>
         </>
       ) : (
-        allEmpty && AllItemData.length === 0 && <NoData name={t("items")} />
+        allEmpty && AllItemData.length === 0 && <NoData name={t("ads")} />
       )}
 
       {isLoadMore ? (

@@ -7,14 +7,14 @@ import { FaRegEye, FaRegEyeSlash } from "react-icons/fa6";
 import { GoogleAuthProvider, RecaptchaVerifier, createUserWithEmailAndPassword, getAuth, sendEmailVerification, signInWithPhoneNumber, signInWithPopup } from "firebase/auth";
 import toast from "react-hot-toast";
 import { handleFirebaseAuthError, t } from "@/utils";
-import { userSignUpApi } from "@/utils/api";
+import { getOtpApi, userSignUpApi, verifyOtpApi } from "@/utils/api";
 import { useSelector } from "react-redux";
 import { Fcmtoken, settingsData } from "@/redux/reuducer/settingSlice";
 import { loadUpdateData } from "../../redux/reuducer/authSlice";
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 import { isValidPhoneNumber } from 'libphonenumber-js';
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 
 
@@ -22,7 +22,6 @@ const RegisterModal = ({ IsRegisterModalOpen, CloseRegisterModal, setIsLoginModa
 
 
     const router = useRouter()
-    const pathname = usePathname()
     const auth = getAuth();
     const emailInputRef = useRef(null);
     const usernameInputRef = useRef(null);
@@ -30,6 +29,7 @@ const RegisterModal = ({ IsRegisterModalOpen, CloseRegisterModal, setIsLoginModa
     const fetchFCM = useSelector(Fcmtoken);
     const systemSettingsData = useSelector(settingsData)
     const settings = systemSettingsData?.data
+    const otp_service_provider = settings?.otp_service_provider;
     const mobile_authentication = Number(settings?.mobile_authentication)
     const google_authentication = Number(settings?.google_authentication)
     const email_authentication = Number(settings?.email_authentication)
@@ -49,6 +49,7 @@ const RegisterModal = ({ IsRegisterModalOpen, CloseRegisterModal, setIsLoginModa
     const [resendOtpLoader, setResendOtpLoader] = useState(false)
     const [IsPasswordVisible, setIsPasswordVisible] = useState(false)
     const [username, setUsername] = useState('')
+    const [resendTimer, setResendTimer] = useState(0);
 
     const OnHide = async () => {
         setIsLoginScreen(true);
@@ -61,6 +62,7 @@ const RegisterModal = ({ IsRegisterModalOpen, CloseRegisterModal, setIsLoginModa
         setInputType("");
         setNumber("");
         setOtp("");
+        setResendTimer(0);
         CloseRegisterModal()
         await recaptchaClear()
     };
@@ -88,6 +90,20 @@ const RegisterModal = ({ IsRegisterModalOpen, CloseRegisterModal, setIsLoginModa
             });
         }
     }, [IsPasswordScreen, IsRegisterModalOpen, IsOTPScreen]);
+
+    // Timer countdown effect
+    useEffect(() => {
+        let intervalId;
+        if (resendTimer > 0) {
+            intervalId = setInterval(() => {
+                setResendTimer(prevTimer => prevTimer - 1);
+            }, 1000);
+        }
+
+        return () => {
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [resendTimer]);
 
     const handleInputChange = (value, data) => {
         const emailRegexPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -202,67 +218,118 @@ const RegisterModal = ({ IsRegisterModalOpen, CloseRegisterModal, setIsLoginModa
     const sendOTP = async () => {
         setShowLoader(true)
         const PhoneNumber = `${countryCode}${formattedNumber}`;
-        try {
-            const appVerifier = generateRecaptcha();
-            const confirmation = await signInWithPhoneNumber(auth, PhoneNumber, appVerifier);
-            setConfirmationResult(confirmation);
-            toast.success(t("otpSentSuccess"));
-            if (isDemoMode) {
-                setOtp("123456")
+        if (otp_service_provider === 'twilio') {
+            try {
+                const response = await getOtpApi.getOtp({ number: PhoneNumber });
+                if (response?.data?.error === false) {
+                    toast.success(t("otpSentSuccess"));
+                    setResendTimer(60); // Start the 60-second timer
+                } else {
+                    toast.error(t("failedToSendOtp"));
+                }
+            } catch (error) {
+                console.error('error', error)
+            } finally {
+                setShowLoader(false);
             }
-            if (resendOtpLoader) {
-                setResendOtpLoader(false)
-            }
-        } catch (error) {
-            console.log(error)
+        }
+        else {
+            try {
+                const appVerifier = generateRecaptcha();
+                const confirmation = await signInWithPhoneNumber(auth, PhoneNumber, appVerifier);
+                setConfirmationResult(confirmation);
+                toast.success(t("otpSentSuccess"));
+                setResendTimer(60); // Start the 60-second timer
+                if (isDemoMode) {
+                    setOtp("123456")
+                }
+            } catch (error) {
+                console.log(error)
+                const errorCode = error.code;
+                handleFirebaseAuthError(errorCode);
 
-            const errorCode = error.code;
-            handleFirebaseAuthError(errorCode);
-            if (resendOtpLoader) {
-                setResendOtpLoader(false)
-            }
-        } finally {
-            setShowLoader(false);
-            if (otpInputRef.current) {
-                otpInputRef.current.focus()
+            } finally {
+                setShowLoader(false);
+                if (otpInputRef.current) {
+                    otpInputRef.current.focus()
+                }
             }
         }
     };
 
     const resendOtp = async (e) => {
         e.preventDefault()
+        if (resendTimer > 0) return; // Prevent resend if timer is still active
+
         setResendOtpLoader(true)
         const PhoneNumber = `${countryCode}${formattedNumber}`;
-        try {
-            const appVerifier = generateRecaptcha();
-            const confirmation = await signInWithPhoneNumber(auth, PhoneNumber, appVerifier);
-            setConfirmationResult(confirmation);
-            toast.success(t("otpSentSuccess"));
-        } catch (error) {
-            console.log(error)
-            const errorCode = error.code;
-            handleFirebaseAuthError(errorCode);
-        } finally {
-            setResendOtpLoader(false)
-            if (otpInputRef.current) {
-                otpInputRef.current.focus()
+        if (otp_service_provider === 'twilio') {
+            try {
+                const response = await getOtpApi.getOtp({ number: PhoneNumber });
+                if (response?.data?.error === false) {
+                    toast.success(t("otpSentSuccess"));
+                    setResendTimer(60); // Restart the 60-second timer
+                } else {
+                    toast.error(t("failedToSendOtp"));
+                }
+            } catch (error) {
+                console.error('error', error)
+            } finally {
+                setResendOtpLoader(false);
+                otpInputRef?.current?.focus();
+            }
+        }
+        else {
+            try {
+                const appVerifier = generateRecaptcha();
+                const confirmation = await signInWithPhoneNumber(auth, PhoneNumber, appVerifier);
+                setConfirmationResult(confirmation);
+                toast.success(t("otpSentSuccess"));
+                setResendTimer(60); // Restart the 60-second timer
+            } catch (error) {
+                console.log(error)
+                const errorCode = error.code;
+                handleFirebaseAuthError(errorCode);
+            } finally {
+                setResendOtpLoader(false)
+                if (otpInputRef.current) {
+                    otpInputRef.current.focus()
+                }
             }
         }
     }
 
     const verifyOTP = async (e) => {
         e.preventDefault();
-        try {
-            if (otp === '') {
-                toast.error(t('otpmissing'))
-                return
-            }
-            setShowLoader(true)
-            const result = await confirmationResult.confirm(otp);
-            // Access user information from the result
-            const user = result.user;
-
+        if (otp === '') {
+            toast.error(t('otpmissing'))
+            return
+        }
+        setShowLoader(true)
+        if (otp_service_provider === 'twilio') {
+            const PhoneNumber = `${countryCode}${formattedNumber}`;
             try {
+                const response = await verifyOtpApi.verifyOtp({ number: PhoneNumber, otp: otp });
+                if (response?.data?.error === false) {
+                    loadUpdateData(response?.data);
+                    toast.success(response?.data?.message);
+                    if (response?.data?.data?.email === "" || response?.data?.data?.name === "") {
+                        router.push("/profile/edit-profile");
+                    }
+                    OnHide();
+                } else {
+                    toast.error(response?.data?.message);
+                }
+            } catch (error) {
+                console.error('error', error)
+            } finally {
+                setShowLoader(false);
+            }
+        }
+        else {
+            try {
+                const result = await confirmationResult.confirm(otp);
+                const user = result.user;
                 const response = await userSignUpApi.userSignup({
                     mobile: formattedNumber,
                     firebase_id: user.uid, // Accessing UID directly from the user object
@@ -270,26 +337,20 @@ const RegisterModal = ({ IsRegisterModalOpen, CloseRegisterModal, setIsLoginModa
                     country_code: countryCode,
                     type: "phone"
                 });
-
                 const data = response.data;
                 loadUpdateData(data)
                 toast.success(data.message);
-                if (pathname !== '/home') {
-                    if (data?.data?.email === "") {
-                        router.push('/profile/edit-profile')
-                    }
+                if (data?.data?.email === "" || response?.data?.name === "") {
+                    router.push('/profile/edit-profile')
                 }
-                setShowLoader(false)
                 OnHide();
             } catch (error) {
                 console.error("Error:", error);
+                const errorCode = error?.code;
+                handleFirebaseAuthError(errorCode);
+            } finally {
                 setShowLoader(false)
             }
-            // Perform necessary actions after OTP verification, like signing in
-        } catch (error) {
-            const errorCode = error.code;
-            handleFirebaseAuthError(errorCode);
-            setShowLoader(false)
         }
     };
 
@@ -376,7 +437,7 @@ const RegisterModal = ({ IsRegisterModalOpen, CloseRegisterModal, setIsLoginModa
                     toast.success(data.message);
                 }
                 OnHide();
-                
+
             } catch (error) {
                 console.error("Error:", error);
             }
@@ -630,14 +691,22 @@ const RegisterModal = ({ IsRegisterModalOpen, CloseRegisterModal, setIsLoginModa
 
 
 
-                                    <button type="submit" className="resend_otp_btn" onClick={resendOtp}>
+                                    <button
+                                        type="submit"
+                                        className="resend_otp_btn"
+                                        onClick={resendOtp}
+                                        disabled={resendTimer > 0}
+                                        style={{ opacity: resendTimer > 0 ? 0.7 : 1, cursor: resendTimer > 0 ? 'not-allowed' : 'pointer' }}
+                                    >
                                         {
                                             resendOtpLoader ?
                                                 <div className="loader-container-otp">
                                                     <div className="loader-otp"></div>
                                                 </div>
                                                 :
-                                                t('resendOtp')
+                                                resendTimer > 0 ?
+                                                    `${t('resendOtp')} (${resendTimer}s)` :
+                                                    t('resendOtp')
                                         }
                                     </button>
                                 </>

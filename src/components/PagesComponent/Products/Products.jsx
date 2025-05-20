@@ -56,7 +56,7 @@ const Products = () => {
     const getProducts = async (page) => {
         let data = "";
         try {
-            const params = { page };
+            const params = { page, limit: 12 };
 
             if (sortBy) params.sort_by = sortBy;
             if (MinMaxPrice?.min_price) params.min_price = MinMaxPrice?.min_price;
@@ -347,7 +347,7 @@ const Products = () => {
                                                         )
                                                     ))
                                                     :
-                                                    <NoData name={t('items')} />
+                                                    <NoData name={t('ads')} />
                                         }
 
                                     </div>

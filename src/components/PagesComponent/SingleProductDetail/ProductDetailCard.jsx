@@ -1,5 +1,6 @@
 "use client";
 import ReactShare from "@/components/SEO/ReactShare";
+import { toggleLoginModal } from "@/redux/reuducer/globalStateSlice";
 import { CurrentLanguageData } from "@/redux/reuducer/languageSlice";
 import { exactPrice, formatProdDate, isLogin, t } from "@/utils";
 import { manageFavouriteApi } from "@/utils/api";
@@ -8,7 +9,6 @@ import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import { FaHeart, FaRegCalendarCheck, FaRegHeart } from "react-icons/fa6";
 import { FiShare2 } from "react-icons/fi";
-import Swal from "sweetalert2";
 
 const ProductDetailCard = ({
   productData,
@@ -28,19 +28,9 @@ const ProductDetailCard = ({
     }
   };
 
-  const handleLikeItem = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleLikeItem = async () => {
     if (!isLogin()) {
-      Swal.fire({
-        icon: "error",
-        title: t("oops"),
-        text: t("loginToAddOrRemove"),
-        allowOutsideClick: false,
-        customClass: {
-          confirmButton: "Swal-confirm-buttons",
-        },
-      });
+      toggleLoginModal(true)
       return;
     }
     try {

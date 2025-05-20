@@ -39,7 +39,7 @@ const ContentTwo = ({ AdListingDetails, handleAdListingChange, handleDetailsSubm
 
                     <div className="col-12">
                         <label className='auth_label' htmlFor="number">{t('phoneNumber')}</label>
-                        <input type="number" placeholder={t('enterPhoneNumber')} pattern='[0-9]{10}' name='phonenumber' value={AdListingDetails.phonenumber} onChange={handleAdListingChange} className={`${AdListingDetails.phonenumber !== '' ? 'bg' : ''}`} required onKeyPress={(e) => inpNum(e)} />
+                        <input type="number" placeholder={t('enterPhoneNumber')} pattern='[0-9]{10}' min={0} name='phonenumber' value={AdListingDetails.phonenumber} onChange={handleAdListingChange} className={`${AdListingDetails.phonenumber !== '' ? 'bg' : ''}`} required onKeyPress={(e) => inpNum(e)} />
                     </div>
 
 

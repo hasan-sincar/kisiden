@@ -24,11 +24,13 @@ import NoDataFound from "../../../../public/assets/no_data_found_illustrator.svg
 import Image from "next/image";
 import SellerReviewCard from "@/components/Cards/SellerReviewCard";
 import { sellerSortBy, setSellerSortBy } from "@/redux/reuducer/filterSlice";
+import OpenInAppDrawer from "../SingleProductDetail/OpenInAppDrawer";
 
 
 const SellerProfile = ({ id }) => {
 
     const dispatch = useDispatch()
+    const systemSettingsData = useSelector((state) => state?.Settings);
     const view = useSelector(ViewCategory)
     const sortBy = useSelector(sellerSortBy)
     const CurrentLanguage = useSelector(CurrentLanguageData)
@@ -45,6 +47,15 @@ const SellerProfile = ({ id }) => {
     const [ReviewHasMore, setReviewHasMore] = useState(false)
     const [IsLoadMoreReview, setIsLoadMoreReview] = useState(false)
     const [IsNoUserFound, setIsNoUserFound] = useState(false)
+    const [IsOpenInApp, setIsOpenInApp] = useState(false);
+
+
+    useEffect(() => {
+        if (window.innerWidth <= 768) {
+            setIsOpenInApp(true);
+        }
+    }, []);
+
 
 
     const handleGridClick = (viewType) => {
@@ -108,7 +119,7 @@ const SellerProfile = ({ id }) => {
             if (page === 1) {
                 setIsSellerItemsLoading(true)
             }
-            const res = await allItemApi.getItems({ user_id: id, sort_by: sortBy, page })
+            const res = await allItemApi.getItems({ user_id: id, sort_by: sortBy, page, limit: 12 })
             if (page > 1) {
                 // Append new data to existing sellerItems
                 setSellerItems(prevItems => [...prevItems, ...res?.data?.data?.data]);
@@ -364,7 +375,7 @@ const SellerProfile = ({ id }) => {
                                                                 </div>
                                                             )
                                                     ))
-                                                ) : <NoData name={t('items')} />
+                                                ) : <NoData name={t('ads')} />
                                             )
                                         }
                                         {
@@ -381,6 +392,11 @@ const SellerProfile = ({ id }) => {
                     </div>
                 </div>
             </div >
+            <OpenInAppDrawer
+                IsOpenInApp={IsOpenInApp}
+                OnHide={() => setIsOpenInApp(false)}
+                systemSettingsData={systemSettingsData}
+            />
         </>
     )
 }

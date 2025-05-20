@@ -34,7 +34,7 @@ const AddLocation = ({ IsAddLocationModalOpen, OnHide, position, setPosition, se
 
     const getLocationWithMap = async (pos) => {
         try {
-            const response = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.lat},${pos.lng}&key=${settings?.place_api_key}`);
+            const response = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.lat},${pos.lng}&key=${settings?.place_api_key}&lang=en`);
             if (response.data.error_message) {
                 toast.error(response.data.error_message)
                 return

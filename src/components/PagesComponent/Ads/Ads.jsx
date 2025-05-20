@@ -38,6 +38,7 @@ const Ads = () => {
       const params = {
         page,
         sort_by: sortBy,
+        limit: 12,
       };
       if (Status !== "all") {
         params.status = Status;

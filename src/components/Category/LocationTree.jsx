@@ -145,8 +145,7 @@ const LocationTree = ({
         key: `${stateId}_${city.id}`,
         id: city.id,
         isCity: true,
-        // isLeaf: !city?.areas_count > 0,
-        isLeaf: true,
+        isLeaf: city.areas_count === 0,
       }));
 
       if (res?.data?.data?.current_page < res?.data?.data?.last_page) {

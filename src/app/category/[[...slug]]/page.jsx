@@ -2,6 +2,9 @@ import Layout from "@/components/Layout/Layout";
 import SingleCategory from "@/components/PagesComponent/SingleCategory/SingleCategory"
 import axios from "axios";
 
+export const revalidate = 3600;
+
+
 export const generateMetadata = async ({ params }) => {
     try {
 

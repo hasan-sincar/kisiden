@@ -12,6 +12,7 @@ import RazorpayPayment from "./RazorpayPayment";
 import PaystackPayment from "./PaystackPayment";
 import FlutterwavePayment from "./FlutterwavePayment";
 import PhonepePayment from "./PhonepePayment";
+import BankTransfer from "./BankTransfer";
 
 const PaymentModal = ({
   isPaymentModal,
@@ -30,6 +31,7 @@ const PaymentModal = ({
   const PhonepayActive = packageSettings?.PhonePe;
   const FlutterwaveActive = packageSettings?.flutterwave;
   const [showStripeForm, setShowStripeForm] = useState(false);
+  const isBankTransferActive = Number(packageSettings?.bankTransfer?.status);
 
   const PaymentModalClose = () => {
     OnHide();
@@ -153,6 +155,9 @@ const PaymentModal = ({
                   {FlutterwaveActive?.status === 1 && (
                     <FlutterwavePayment priceData={priceData} />
                   )}
+                  {
+                    isBankTransferActive === 1 && <BankTransfer closePaymentModal={PaymentModalClose} priceData={priceData} />
+                  }
                 </div>
               </div>
             </div>

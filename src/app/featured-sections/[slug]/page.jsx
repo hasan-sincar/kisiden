@@ -2,6 +2,8 @@ import Layout from '@/components/Layout/Layout';
 import FeaturedViewAll from '@/components/PagesComponent/FeaturedViewAll/FeaturedViewAll'
 import axios from 'axios';
 
+export const revalidate = 3600;
+
 export const generateMetadata = async ({ params }) => {
     try {
         const response = await axios.get(

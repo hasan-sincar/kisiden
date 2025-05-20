@@ -1,5 +1,6 @@
 'use client'
 import { userSignUpData } from "@/redux/reuducer/authSlice"
+import { toggleLoginModal } from "@/redux/reuducer/globalStateSlice"
 import { saveOfferData } from "@/redux/reuducer/offerSlice"
 import { extractYear, isLogin, placeholderImage, t } from "@/utils"
 import { itemOfferApi } from "@/utils/api"
@@ -35,15 +36,7 @@ const SellerCardInProdDet = ({ productData, systemSettingsData }) => {
 
     const handleChat = async () => {
         if (!isLogin()) {
-            Swal.fire({
-                icon: "error",
-                title: t('oops'),
-                text: t("loginToStartChat"),
-                allowOutsideClick: false,
-                customClass: {
-                    confirmButton: 'Swal-confirm-buttons',
-                },
-            })
+            toggleLoginModal(true)
             return;
         }
 

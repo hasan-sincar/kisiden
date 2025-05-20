@@ -21,6 +21,7 @@ import NoData from "@/components/NoDataFound/NoDataFound";
 import SubscriptionCardSkeleton from "@/components/Skeleton/SubscriptionCardSkeleton";
 import Skeleton from "react-loading-skeleton";
 import withRedirect from "@/components/Layout/withRedirect";
+import BankDetailsModal from "./BankDetailsModal";
 
 const ProfileSubscription = () => {
   const router = useRouter();
@@ -282,6 +283,8 @@ const ProfileSubscription = () => {
           setAdvertisementPackage={setAdvertisementPackage}
           IsPaymentModalOpening={IsPaymentModalOpening}
         />
+
+        <BankDetailsModal priceData={priceData} bankDetails={packageSettings?.bankTransfer} />
       </div>
     </>
   );

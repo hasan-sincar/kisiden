@@ -4,6 +4,8 @@ import { CurrentLanguageData } from "@/redux/reuducer/languageSlice"
 import { settingsData } from "@/redux/reuducer/settingSlice"
 import { t, validateForm } from "@/utils"
 import { contactUsApi } from "@/utils/api"
+import parse, { domToReact } from 'html-react-parser';
+import Link from "next/link"
 import { useState } from "react"
 import toast from "react-hot-toast"
 import { FaFacebook, FaInstagram, FaLinkedin, FaPinterest, FaSquareXTwitter } from "react-icons/fa6"
@@ -18,6 +20,22 @@ const ContactUs = () => {
     const systemSettingsData = useSelector(settingsData)
     const settings = systemSettingsData?.data
     const [IsLoading, setIsLoading] = useState(false)
+    const contactUs = settings?.contact_us
+    const options = {
+        replace: (domNode) => {
+            // Check if the node is an anchor tag <a>
+            if (domNode.name === 'a' && domNode.attribs && domNode.attribs.href) {
+                const { href, ...otherAttribs } = domNode.attribs;
+                return (
+                    <Link href={href} {...otherAttribs} className="blog_link">
+                        {domToReact(domNode.children)}
+                    </Link>
+                );
+            }
+        },
+    };
+
+
 
     const [formData, setFormData] = useState({
         name: '',
@@ -34,7 +52,7 @@ const ContactUs = () => {
         }))
     }
 
-    
+
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -139,6 +157,10 @@ const ContactUs = () => {
                             </form>
                             <div className="contact_info">
                                 <h5 className="contact_info_head">{t('contactInfo')}</h5>
+                                <div className="contact_html_content">
+                                    {parse(contactUs || '', options)}
+                                </div>
+
                                 <div className="contact_detail">
                                     {settings?.company_address &&
                                         <div className="contact_detail_item">

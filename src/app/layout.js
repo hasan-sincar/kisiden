@@ -5,8 +5,9 @@ import Head from "next/head";
 import { Toaster } from "react-hot-toast";
 import 'react-loading-skeleton/dist/skeleton.css'
 import axios from "axios";
-import Script from "next/script";
 // import Script from "next/script";
+
+export const revalidate = 3600;
 
 export const generateMetadata = async () => {
   try {

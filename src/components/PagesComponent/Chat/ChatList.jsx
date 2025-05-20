@@ -36,6 +36,7 @@ const ChatList = ({
   const [HasMoreSeller, setHasMoreSeller] = useState(false);
   const [IsLoading, setIsLoading] = useState(false);
 
+
   const fetchBuyerChatList = async (page = 1) => {
     if (page === 1) {
       setIsLoading(true);
@@ -45,7 +46,17 @@ const ChatList = ({
       const { data } = response?.data || {};
       const updatedData = data.data.map((chat) => ({ ...chat, tab: "buying" }));
 
+      // Check if there's a matching chat and update selectedTabData and saveOfferData
+      if (selectedTabData && selectedTabData?.tab === "buying") {
+        const matchingChat = updatedData.find(chat => chat.id === selectedTabData.id);
+        if (matchingChat) {
+          setSelectedTabData(matchingChat);
+          saveOfferData(matchingChat);
+        }
+      }
+
       if (page === 1) {
+
         if (
           selectedTabData &&
           selectedTabData?.tab === "buying" &&
@@ -86,6 +97,14 @@ const ChatList = ({
         ...chat,
         tab: "selling",
       }));
+
+      if (selectedTabData && selectedTabData?.tab === "selling") {
+        const matchingChat = updatedData.find(chat => chat.id === selectedTabData.id);
+        if (matchingChat) {
+          setSelectedTabData(matchingChat);
+          saveOfferData(matchingChat);
+        }
+      }
 
       if (page === 1) {
         if (
@@ -225,16 +244,14 @@ const ChatList = ({
       </div>
       <div className="chat_header">
         <span
-          className={`chat_tab ${
-            activeTab === "selling" ? "active_chat_tab" : ""
-          }`}
+          className={`chat_tab ${activeTab === "selling" ? "active_chat_tab" : ""
+            }`}
         >
           {t("selling")}
         </span>
         <span
-          className={`chat_tab ${
-            activeTab === "buying" ? "active_chat_tab" : ""
-          }`}
+          className={`chat_tab ${activeTab === "buying" ? "active_chat_tab" : ""
+            }`}
         >
           {t("buying")}
         </span>
@@ -263,17 +280,15 @@ const ChatList = ({
       </div>
       <div className="chat_header">
         <span
-          className={`chat_tab ${
-            activeTab === "selling" ? "active_chat_tab" : ""
-          }`}
+          className={`chat_tab ${activeTab === "selling" ? "active_chat_tab" : ""
+            }`}
           onClick={() => handleActiveTab("selling")}
         >
           {t("selling")}
         </span>
         <span
-          className={`chat_tab ${
-            activeTab === "buying" ? "active_chat_tab" : ""
-          }`}
+          className={`chat_tab ${activeTab === "buying" ? "active_chat_tab" : ""
+            }`}
           onClick={() => handleActiveTab("buying")}
         >
           {t("buying")}

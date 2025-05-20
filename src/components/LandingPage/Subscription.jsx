@@ -13,6 +13,7 @@ import SubscriptionCardSkeleton from "../Skeleton/SubscriptionCardSkeleton";
 import { isLogin, t } from "@/utils";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { toggleLoginModal } from "@/redux/reuducer/globalStateSlice";
 
 const Subscription = () => {
   const swiperRef = useRef();
@@ -40,7 +41,7 @@ const Subscription = () => {
   const handlePurchasePackage = (e) => {
     e.preventDefault();
     if (!isLogin) {
-      toast.error(t("loginFirst"));
+      toggleLoginModal(true);
     } else {
       router.push("/subscription");
     }

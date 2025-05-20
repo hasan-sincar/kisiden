@@ -16,14 +16,14 @@ import {
 } from "firebase/auth";
 import toast from "react-hot-toast";
 import { handleFirebaseAuthError, t } from "@/utils";
-import { userSignUpApi } from "@/utils/api";
+import { getOtpApi, userSignUpApi, verifyOtpApi } from "@/utils/api";
 import { useSelector } from "react-redux";
 import { Fcmtoken, settingsData } from "@/redux/reuducer/settingSlice";
 import { loadUpdateData } from "../../redux/reuducer/authSlice";
 import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { isValidPhoneNumber } from "libphonenumber-js";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 const LoginModal = ({
   IsLoginModalOpen,
@@ -32,7 +32,6 @@ const LoginModal = ({
   setIsMailSentOpen,
 }) => {
   const router = useRouter();
-  const pathname = usePathname();
   const auth = getAuth();
   const emailInputRef = useRef(null);
   const numberInputRef = useRef(null);
@@ -40,6 +39,7 @@ const LoginModal = ({
   const fetchFCM = useSelector(Fcmtoken);
   const systemSettingsData = useSelector(settingsData);
   const settings = systemSettingsData?.data;
+  const otp_service_provider = settings?.otp_service_provider;
   const mobile_authentication = Number(settings?.mobile_authentication);
   const google_authentication = Number(settings?.google_authentication);
   const email_authentication = Number(settings?.email_authentication);
@@ -58,6 +58,7 @@ const LoginModal = ({
   const [resendOtpLoader, setResendOtpLoader] = useState(false);
   const [IsPasswordVisible, setIsPasswordVisible] = useState(false);
   const [IsLoginWithEmail, setIsLoginWithEmail] = useState((mobile_authentication === 0 && email_authentication === 1) ? true : false);
+  const [resendTimer, setResendTimer] = useState(0);
 
   const OnHide = async () => {
     setIsLoginModalOpen(false);
@@ -69,6 +70,7 @@ const LoginModal = ({
     setInputType("");
     setNumber("");
     setOtp("");
+    setResendTimer(0);
     await recaptchaClear();
   };
 
@@ -85,12 +87,18 @@ const LoginModal = ({
 
   useEffect(() => {
     if (isDemoMode && IsLoginModalOpen) {
-      setInputType("number");
-      setInputValue("919876598765");
-      setNumber("919876598765");
-      setCountryCode("+91");
+      if (!IsLoginWithEmail) {
+        setInputType("number");
+        setInputValue("919876598765");
+        setNumber("919876598765");
+        setCountryCode("+91");
+      } else {
+        setInputType("email");
+        setInputValue("");
+        setNumber("");
+      }
     }
-  }, [isDemoMode, IsLoginModalOpen]);
+  }, [isDemoMode, IsLoginModalOpen, IsLoginWithEmail]);
 
   useEffect(() => {
     if (IsLoginModalOpen) {
@@ -106,6 +114,20 @@ const LoginModal = ({
       });
     }
   }, [IsLoginModalOpen, IsOTPScreen, IsLoginWithEmail]); // This will run whenever either IsLoginModalOpen or IsPasswordScreen changes
+
+  // Timer countdown effect
+  useEffect(() => {
+    let intervalId;
+    if (resendTimer > 0) {
+      intervalId = setInterval(() => {
+        setResendTimer(prevTimer => prevTimer - 1);
+      }, 1000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [resendTimer]);
 
   const signin = async (email, password) => {
     try {
@@ -251,69 +273,120 @@ const LoginModal = ({
   const sendOTP = async () => {
     setShowLoader(true);
     const PhoneNumber = `${countryCode}${formattedNumber}`;
-    try {
-      const appVerifier = generateRecaptcha();
-      const confirmation = await signInWithPhoneNumber(
-        auth,
-        PhoneNumber,
-        appVerifier
-      );
-      setConfirmationResult(confirmation);
-      toast.success(t("otpSentSuccess"));
-      if (isDemoMode) {
-        setOtp("123456");
+    if (otp_service_provider === 'twilio') {
+      try {
+        const response = await getOtpApi.getOtp({ number: PhoneNumber });
+        if (response?.data?.error === false) {
+          toast.success(t("otpSentSuccess"));
+          setResendTimer(60); // Start the 60-second timer
+        } else {
+          toast.error(t("failedToSendOtp"));
+        }
+      } catch (error) {
+        console.error('error', error)
+      } finally {
+        setShowLoader(false);
       }
-      if (resendOtpLoader) {
-        setResendOtpLoader(false);
+    }
+    else {
+      try {
+        const appVerifier = generateRecaptcha();
+        const confirmation = await signInWithPhoneNumber(
+          auth,
+          PhoneNumber,
+          appVerifier
+        );
+        setConfirmationResult(confirmation);
+        toast.success(t("otpSentSuccess"));
+        setResendTimer(60); // Start the 60-second timer
+        if (isDemoMode) {
+          setOtp("123456");
+        }
+      } catch (error) {
+        const errorCode = error.code;
+        handleFirebaseAuthError(errorCode);
+      } finally {
+        setShowLoader(false);
+        otpInputRef.current.focus();
       }
-    } catch (error) {
-      const errorCode = error.code;
-      handleFirebaseAuthError(errorCode);
-      if (resendOtpLoader) {
-        setResendOtpLoader(false);
-      }
-    } finally {
-      setShowLoader(false);
-      otpInputRef.current.focus();
     }
   };
 
   const resendOtp = async (e) => {
     e.preventDefault();
+    if (resendTimer > 0) return; // Prevent resend if timer is still active
+
     setResendOtpLoader(true);
     const PhoneNumber = `${countryCode}${formattedNumber}`;
-    try {
-      const appVerifier = generateRecaptcha();
-      const confirmation = await signInWithPhoneNumber(
-        auth,
-        PhoneNumber,
-        appVerifier
-      );
-      setConfirmationResult(confirmation);
-      toast.success(t("otpSentSuccess"));
-    } catch (error) {
-      const errorCode = error.code;
-      handleFirebaseAuthError(errorCode);
-    } finally {
-      setResendOtpLoader(false);
-      otpInputRef.current.focus();
+    if (otp_service_provider === 'twilio') {
+      try {
+        const response = await getOtpApi.getOtp({ number: PhoneNumber });
+        if (response?.data?.error === false) {
+          toast.success(t("otpSentSuccess"));
+          setResendTimer(60); // Restart the 60-second timer
+        } else {
+          toast.error(t("failedToSendOtp"));
+        }
+      } catch (error) {
+        console.error('error', error)
+      } finally {
+        setResendOtpLoader(false);
+        otpInputRef?.current?.focus();
+      }
+    }
+    else {
+      try {
+        const appVerifier = generateRecaptcha();
+        const confirmation = await signInWithPhoneNumber(
+          auth,
+          PhoneNumber,
+          appVerifier
+        );
+        setConfirmationResult(confirmation);
+        toast.success(t("otpSentSuccess"));
+        setResendTimer(60); // Restart the 60-second timer
+      } catch (error) {
+        const errorCode = error.code;
+        handleFirebaseAuthError(errorCode);
+      } finally {
+        setResendOtpLoader(false);
+        otpInputRef?.current?.focus();
+      }
     }
   };
 
   const verifyOTP = async (e) => {
     e.preventDefault();
-
-    try {
-      if (otp === "") {
-        toast.error(t("otpmissing"));
-        return;
-      }
-      setShowLoader(true);
-      const result = await confirmationResult.confirm(otp);
-      // Access user information from the result
-      const user = result.user;
-
+    if (otp === "") {
+      toast.error(t("otpmissing"));
+      return;
+    }
+    setShowLoader(true);
+    if (otp_service_provider === 'twilio') {
+      const PhoneNumber = `${countryCode}${formattedNumber}`;
       try {
+        const response = await verifyOtpApi.verifyOtp({ number: PhoneNumber, otp: otp });
+        if (response?.data?.error === false) {
+          loadUpdateData(response?.data);
+          toast.success(response?.data?.message);
+          if (response?.data?.data?.email === "" || response?.data?.data?.name === "") {
+            router.push("/profile/edit-profile");
+          }
+          OnHide();
+        } else {
+          toast.error(response?.data?.message);
+        }
+      } catch (error) {
+        console.error('error', error)
+      } finally {
+        setShowLoader(false);
+      }
+    }
+    else {
+      try {
+        const result = await confirmationResult.confirm(otp);
+        // Access user information from the result
+        const user = result.user;
         const response = await userSignUpApi.userSignup({
           mobile: formattedNumber,
           firebase_id: user.uid, // Accessing UID directly from the user object
@@ -321,28 +394,25 @@ const LoginModal = ({
           country_code: countryCode,
           type: "phone",
         });
-
         const data = response.data;
         loadUpdateData(data);
         toast.success(data.message);
-        if (pathname !== "/home") {
-          if (data?.data?.email === "") {
-            router.push("/profile/edit-profile");
-          }
+
+        if (data?.data?.email === "" || response?.data?.name === "") {
+          router.push("/profile/edit-profile");
         }
-        setShowLoader(false);
+
         OnHide();
       } catch (error) {
         console.error("Error:", error);
+        const errorCode = error?.code;
+        handleFirebaseAuthError(errorCode);
+      } finally {
         setShowLoader(false);
       }
-      // Perform necessary actions after OTP verification, like signing in
-    } catch (error) {
-      const errorCode = error.code;
-      handleFirebaseAuthError(errorCode);
-      setShowLoader(false);
     }
-  };
+  }
+
 
   const handleMobileSubmit = (e) => {
     e.preventDefault();
@@ -357,7 +427,7 @@ const LoginModal = ({
     }
   };
 
-  useEffect(() => {}, [
+  useEffect(() => { }, [
     inputValue,
     inputType,
     IsOTPScreen,
@@ -484,229 +554,229 @@ const LoginModal = ({
               email_authentication === 0 &&
               google_authentication === 1
             ) && (
-              <form
-                className="auth_form"
-                onSubmit={IsLoginWithEmail ? Signin : handleMobileSubmit}
-              >
-                <div className="auth_in_cont">
-                  {mobile_authentication === 1 &&
-                    email_authentication === 1 && (
-                      <>
-                        {IsLoginWithEmail ? (
-                          <div className="auth_form">
-                            <div className="auth_in_cont">
-                              <label htmlFor="email" className="auth_label">
-                                {t("email")}
-                              </label>
-                              <input
-                                type="text"
-                                className="auth_input"
-                                placeholder={t("enterEmail")}
-                                value={inputValue}
-                                onChange={(e) =>
-                                  handleInputChange(e.target.value, {})
-                                }
-                                required
-                                ref={emailInputRef}
-                              />
-                            </div>
-
-                            <div className="auth_in_cont">
-                              <label htmlFor="password" className="auth_label">
-                                {t("password")}
-                              </label>
-                              <div className="password_cont">
+                <form
+                  className="auth_form"
+                  onSubmit={IsLoginWithEmail ? Signin : handleMobileSubmit}
+                >
+                  <div className="auth_in_cont">
+                    {mobile_authentication === 1 &&
+                      email_authentication === 1 && (
+                        <>
+                          {IsLoginWithEmail ? (
+                            <div className="auth_form">
+                              <div className="auth_in_cont">
+                                <label htmlFor="email" className="auth_label">
+                                  {t("email")}
+                                </label>
                                 <input
-                                  type={IsPasswordVisible ? "text" : "password"}
+                                  type="text"
                                   className="auth_input"
-                                  placeholder={t("enterPassword")}
-                                  id="password"
-                                  name="password"
-                                  value={password}
-                                  onChange={(e) => setPassword(e.target.value)}
+                                  placeholder={t("enterEmail")}
+                                  value={inputValue}
+                                  onChange={(e) =>
+                                    handleInputChange(e.target.value, {})
+                                  }
+                                  required
+                                  ref={emailInputRef}
                                 />
-                                <div
-                                  className="pass_eye"
-                                  onClick={togglePasswordVisible}
-                                >
-                                  {IsPasswordVisible ? (
-                                    <FaRegEye size={20} />
-                                  ) : (
-                                    <FaRegEyeSlash size={20} />
-                                  )}
-                                </div>
                               </div>
-                              <p
-                                className="frgt_pass"
-                                onClick={handleForgotModal}
+
+                              <div className="auth_in_cont">
+                                <label htmlFor="password" className="auth_label">
+                                  {t("password")}
+                                </label>
+                                <div className="password_cont">
+                                  <input
+                                    type={IsPasswordVisible ? "text" : "password"}
+                                    className="auth_input"
+                                    placeholder={t("enterPassword")}
+                                    id="password"
+                                    name="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                  />
+                                  <div
+                                    className="pass_eye"
+                                    onClick={togglePasswordVisible}
+                                  >
+                                    {IsPasswordVisible ? (
+                                      <FaRegEye size={20} />
+                                    ) : (
+                                      <FaRegEyeSlash size={20} />
+                                    )}
+                                  </div>
+                                </div>
+                                <p
+                                  className="frgt_pass"
+                                  onClick={handleForgotModal}
+                                >
+                                  {t("forgtPassword")}
+                                </p>
+                              </div>
+
+                              <button
+                                type="submit"
+                                disabled={showLoader}
+                                className="verf_email_add_btn"
                               >
-                                {t("forgtPassword")}
-                              </p>
+                                {showLoader ? (
+                                  <div className="loader-container-otp">
+                                    <div className="loader-otp"></div>
+                                  </div>
+                                ) : (
+                                  t("signIn")
+                                )}
+                              </button>
                             </div>
+                          ) : (
+                            <div className="auth_form">
+                              <div className="auth_in_cont">
+                                <label htmlFor="email" className="auth_label">
+                                  {t("loginWithMobile")}
+                                </label>
+                                <PhoneInput
+                                  country={
+                                    process.env.NEXT_PUBLIC_DEFAULT_COUNTRY
+                                  }
+                                  value={number}
+                                  onChange={(phone, data) =>
+                                    handleInputChange(phone, data)
+                                  }
+                                  onCountryChange={(code) => setCountryCode(code)}
+                                  inputProps={{
+                                    name: "phone",
+                                    required: true,
+                                    autoFocus: true,
+                                    ref: numberInputRef,
+                                  }}
+                                  enableLongNumbers
+                                />
+                              </div>
 
-                            <button
-                              type="submit"
-                              disabled={showLoader}
-                              className="verf_email_add_btn"
-                            >
-                              {showLoader ? (
-                                <div className="loader-container-otp">
-                                  <div className="loader-otp"></div>
-                                </div>
-                              ) : (
-                                t("signIn")
-                              )}
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="auth_form">
-                            <div className="auth_in_cont">
-                              <label htmlFor="email" className="auth_label">
-                                {t("loginWithMobile")}
-                              </label>
-                              <PhoneInput
-                                country={
-                                  process.env.NEXT_PUBLIC_DEFAULT_COUNTRY
-                                }
-                                value={number}
-                                onChange={(phone, data) =>
-                                  handleInputChange(phone, data)
-                                }
-                                onCountryChange={(code) => setCountryCode(code)}
-                                inputProps={{
-                                  name: "phone",
-                                  required: true,
-                                  autoFocus: true,
-                                  ref: numberInputRef,
-                                }}
-                                enableLongNumbers
-                              />
+                              <button
+                                type="submit"
+                                disabled={showLoader}
+                                className="verf_email_add_btn"
+                              >
+                                {showLoader ? (
+                                  <div className="loader-container-otp">
+                                    <div className="loader-otp"></div>
+                                  </div>
+                                ) : (
+                                  t("continue")
+                                )}
+                              </button>
                             </div>
+                          )}
+                        </>
+                      )}
 
-                            <button
-                              type="submit"
-                              disabled={showLoader}
-                              className="verf_email_add_btn"
-                            >
-                              {showLoader ? (
-                                <div className="loader-container-otp">
-                                  <div className="loader-otp"></div>
-                                </div>
-                              ) : (
-                                t("continue")
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                  {email_authentication === 1 &&
-                    mobile_authentication === 0 && (
-                      <div className="auth_form">
-                        <div className="auth_in_cont">
-                          <label htmlFor="email" className="auth_label">
-                            {t("email")}
-                          </label>
-                          <input
-                            type="text"
-                            className="auth_input"
-                            placeholder={t("enterEmail")}
-                            value={inputValue}
-                            onChange={(e) =>
-                              handleInputChange(e.target.value, {})
-                            }
-                            required
-                            ref={emailInputRef}
-                          />
-                        </div>
-
-                        <div className="auth_in_cont">
-                          <label htmlFor="password" className="auth_label">
-                            {t("password")}
-                          </label>
-                          <div className="password_cont">
+                    {email_authentication === 1 &&
+                      mobile_authentication === 0 && (
+                        <div className="auth_form">
+                          <div className="auth_in_cont">
+                            <label htmlFor="email" className="auth_label">
+                              {t("email")}
+                            </label>
                             <input
-                              type={IsPasswordVisible ? "text" : "password"}
+                              type="text"
                               className="auth_input"
-                              placeholder={t("enterPassword")}
-                              id="password"
-                              name="password"
-                              value={password}
-                              onChange={(e) => setPassword(e.target.value)}
+                              placeholder={t("enterEmail")}
+                              value={inputValue}
+                              onChange={(e) =>
+                                handleInputChange(e.target.value, {})
+                              }
+                              required
+                              ref={emailInputRef}
                             />
-                            <div
-                              className="pass_eye"
-                              onClick={togglePasswordVisible}
-                            >
-                              {IsPasswordVisible ? (
-                                <FaRegEye size={20} />
-                              ) : (
-                                <FaRegEyeSlash size={20} />
-                              )}
-                            </div>
                           </div>
-                          <p className="frgt_pass" onClick={handleForgotModal}>
-                            {t("forgtPassword")}
-                          </p>
-                        </div>
 
-                        <button
-                          type="submit"
-                          disabled={showLoader}
-                          className="verf_email_add_btn"
-                        >
-                          {showLoader ? (
-                            <div className="loader-container-otp">
-                              <div className="loader-otp"></div>
+                          <div className="auth_in_cont">
+                            <label htmlFor="password" className="auth_label">
+                              {t("password")}
+                            </label>
+                            <div className="password_cont">
+                              <input
+                                type={IsPasswordVisible ? "text" : "password"}
+                                className="auth_input"
+                                placeholder={t("enterPassword")}
+                                id="password"
+                                name="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                              />
+                              <div
+                                className="pass_eye"
+                                onClick={togglePasswordVisible}
+                              >
+                                {IsPasswordVisible ? (
+                                  <FaRegEye size={20} />
+                                ) : (
+                                  <FaRegEyeSlash size={20} />
+                                )}
+                              </div>
                             </div>
-                          ) : (
-                            t("signIn")
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  {mobile_authentication === 1 &&
-                    email_authentication === 0 && (
-                      <div className="auth_form">
-                        <div className="auth_in_cont">
-                          <label htmlFor="email" className="auth_label">
-                            {t("loginWithMobile")}
-                          </label>
-                          <PhoneInput
-                            country={process.env.NEXT_PUBLIC_DEFAULT_COUNTRY}
-                            value={number}
-                            onChange={(phone, data) =>
-                              handleInputChange(phone, data)
-                            }
-                            onCountryChange={(code) => setCountryCode(code)}
-                            inputProps={{
-                              name: "phone",
-                              required: true,
-                              autoFocus: true,
-                              ref: numberInputRef,
-                            }}
-                            enableLongNumbers
-                          />
+                            <p className="frgt_pass" onClick={handleForgotModal}>
+                              {t("forgtPassword")}
+                            </p>
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={showLoader}
+                            className="verf_email_add_btn"
+                          >
+                            {showLoader ? (
+                              <div className="loader-container-otp">
+                                <div className="loader-otp"></div>
+                              </div>
+                            ) : (
+                              t("signIn")
+                            )}
+                          </button>
                         </div>
-                        <button
-                          type="submit"
-                          disabled={showLoader}
-                          className="verf_email_add_btn"
-                        >
-                          {showLoader ? (
-                            <div className="loader-container-otp">
-                              <div className="loader-otp"></div>
-                            </div>
-                          ) : (
-                            t("continue")
-                          )}
-                        </button>
-                      </div>
-                    )}
-                </div>
-              </form>
-            )}
+                      )}
+                    {mobile_authentication === 1 &&
+                      email_authentication === 0 && (
+                        <div className="auth_form">
+                          <div className="auth_in_cont">
+                            <label htmlFor="email" className="auth_label">
+                              {t("loginWithMobile")}
+                            </label>
+                            <PhoneInput
+                              country={process.env.NEXT_PUBLIC_DEFAULT_COUNTRY}
+                              value={number}
+                              onChange={(phone, data) =>
+                                handleInputChange(phone, data)
+                              }
+                              onCountryChange={(code) => setCountryCode(code)}
+                              inputProps={{
+                                name: "phone",
+                                required: true,
+                                autoFocus: true,
+                                ref: numberInputRef,
+                              }}
+                              enableLongNumbers
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={showLoader}
+                            className="verf_email_add_btn"
+                          >
+                            {showLoader ? (
+                              <div className="loader-container-otp">
+                                <div className="loader-otp"></div>
+                              </div>
+                            ) : (
+                              t("continue")
+                            )}
+                          </button>
+                        </div>
+                      )}
+                  </div>
+                </form>
+              )}
 
             {!(
               mobile_authentication === 0 &&
@@ -831,8 +901,13 @@ const LoginModal = ({
                       type="submit"
                       className="resend_otp_btn"
                       onClick={resendOtp}
+                      disabled={resendTimer > 0}
+                      style={{ opacity: resendTimer > 0 ? 0.7 : 1, cursor: resendTimer > 0 ? 'not-allowed' : 'pointer' }}
                     >
-                      {t("resendOtp")}
+                      {resendTimer > 0 ?
+                        `${t('resendOtp')} (${resendTimer}s)` :
+                        t("resendOtp")
+                      }
                     </button>
                   )}
                 </>

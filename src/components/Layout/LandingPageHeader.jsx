@@ -12,7 +12,6 @@ import { CurrentLanguageData, setCurrentLanguage } from '@/redux/reuducer/langua
 import LanguageDropdown from '../HeaderDropdowns/LanguageDropdown';
 import { MdClose } from 'react-icons/md';
 import toast from 'react-hot-toast';
-import { store } from '@/redux/store';
 
 const LandingPageHeader = () => {
 
@@ -36,11 +35,18 @@ const LandingPageHeader = () => {
                     setShow(false)
                 }
                 dispatch(setCurrentLanguage(res?.data?.data));
+
             }
         } catch (error) {
             console.log(error)
         }
     }
+
+    useEffect(() => {
+
+        document.documentElement.lang = CurrentLanguage?.code?.toLowerCase() || "en";
+
+    }, [CurrentLanguage]);
 
     // set default language if language not available in start
 

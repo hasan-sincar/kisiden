@@ -10,7 +10,6 @@ import { setNotifications } from '@/redux/reuducer/globalStateSlice';
 
 const PushNotificationLayout = ({ children, onNotificationReceived, setActiveTab, setChatMessages, setSelectedTabData, defaultSelected }) => {
 
-
   const dispatch = useDispatch()
   const [notification, setNotification] = useState('');
   const [fcmToken, setFcmToken] = useState('');

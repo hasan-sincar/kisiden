@@ -13,7 +13,7 @@ import { manageFavouriteApi } from "@/utils/api";
 import toast from "react-hot-toast";
 import { userSignUpData } from "../../redux/reuducer/authSlice";
 import { useSelector } from "react-redux";
-import Swal from "sweetalert2";
+import { toggleLoginModal } from "@/redux/reuducer/globalStateSlice";
 
 const ProductCard = ({ data, handleLike }) => {
   const userData = useSelector(userSignUpData);
@@ -23,15 +23,7 @@ const ProductCard = ({ data, handleLike }) => {
     e.stopPropagation();
     try {
       if (!userData) {
-        Swal.fire({
-          icon: "error",
-          title: t("oops"),
-          text: t("loginToAddOrRemove"),
-          allowOutsideClick: false,
-          customClass: {
-            confirmButton: "Swal-confirm-buttons",
-          },
-        });
+        toggleLoginModal(true)
         return;
       }
       const response = await manageFavouriteApi.manageFavouriteApi({
@@ -69,11 +61,7 @@ const ProductCard = ({ data, handleLike }) => {
 
         <div
           className="product_card_black_heart_cont"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleLikeItem(e);
-          }}
+          onClick={(e) => handleLikeItem(e)}
         >
           {data?.is_liked ? (
             <button className="isLiked">

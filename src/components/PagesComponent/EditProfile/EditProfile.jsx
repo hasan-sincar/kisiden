@@ -293,6 +293,7 @@ const EditProfile = () => {
                       <input
                         type="number"
                         id="phone"
+                        min={0}
                         className="auth_input personal_info_input"
                         value={formData.phone}
                         onChange={handleChange}

@@ -1,0 +1,41 @@
+.notification-text {
+    max-height: 40px;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.notification-text.expanded {
+    max-height: none;
+}
+
+.view-more-btn {
+    background: none;
+    border: none;
+    color: #1890ff;
+    cursor: pointer;
+    padding: 4px 0;
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+.view-more-btn:hover {
+    text-decoration: underline;
+}
+
+.noti_title_desc {
+    flex: 1;
+    margin-left: 12px;
+}
+
+.noti_title_desc h6 {
+    margin: 0 0 4px 0;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.noti_title_desc p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 20px;
+    color: #666;
+}

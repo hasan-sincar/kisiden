@@ -1,6 +1,8 @@
 import Layout from "@/components/Layout/Layout";
 import ContactUs from "@/components/PagesComponent/ContactUs/ContactUs"
 
+export const revalidate = 3600;
+
 export const generateMetadata = async () => {
   try {
     const title = 'Contact Us';

@@ -15,6 +15,7 @@ import axios from 'axios'
 import { CurrentLanguageData } from '@/redux/reuducer/languageSlice';
 import { settingsData } from '@/redux/reuducer/settingSlice'
 import withRedirect from '@/components/Layout/withRedirect'
+import { toggleLoginModal } from '@/redux/reuducer/globalStateSlice'
 
 const AdListing = () => {
 
@@ -279,7 +280,7 @@ const AdListing = () => {
 
   const getLocationWithMap = async (pos) => {
     try {
-      const response = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.lat},${pos.lng}&key=${settings?.place_api_key}`);
+      const response = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.lat},${pos.lng}&key=${settings?.place_api_key}&lang=en`);
 
       if (response.data.error_message) {
         toast.error(response.data.error_message)
@@ -333,7 +334,7 @@ const AdListing = () => {
               longitude: position.coords.longitude
             };
 
-            const response = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${locationData.latitude},${locationData.longitude}&key=${settings?.place_api_key}`);
+            const response = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${locationData.latitude},${locationData.longitude}&key=${settings?.place_api_key}&lang=en`);
 
 
             if (response.data.error_message) {
@@ -687,7 +688,7 @@ const AdListing = () => {
   const handleFullSubmission = () => {
 
     if (!isLogin()) {
-      toast.error(t('loginFirst'))
+      toggleLoginModal(true)
       return
     }
 

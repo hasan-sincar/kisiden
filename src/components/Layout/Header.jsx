@@ -46,7 +46,7 @@ import RegisterModal from "../Auth/RegisterModal";
 import ProfileDropdown from "../Profile/ProfileDropdown";
 import MailSentSucessfully from "../Auth/MailSentSucessfully";
 import LoginModal from "../Auth/LoginModal";
-import withRedirect from "./withRedirect";
+import { getIsLoginModalOpen, toggleLoginModal } from "@/redux/reuducer/globalStateSlice";
 
 
 const { Panel } = Collapse;
@@ -63,7 +63,13 @@ const Header = () => {
   const catLastPage = useSelector(LastPage);
   const { signOut } = FirebaseData();
   const [IsRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
-  const [IsLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  // const [IsLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+
+  const IsLoginModalOpen = useSelector(getIsLoginModalOpen);
+
+
+
   const [IsMailSentOpen, setIsMailSentOpen] = useState(false);
   const [IsLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [catId, setCatId] = useState("");
@@ -78,63 +84,13 @@ const Header = () => {
   const [isAdListingClicked, setIsAdListingClicked] = useState(false);
 
 
-  // this api call only in pop cate swiper
-  const getCategoriesData = async (page) => {
-    try {
-      const response = await categoryApi.getCategory({ page: `${page}` });
-      const { data } = response.data;
-
-      if (data && Array.isArray(data.data)) {
-        if (page > 1) {
-          dispatch(setCateData([...cateData, ...data.data]));
-        } else {
-          dispatch(setCateData(data.data));
-          dispatch(setTreeData([]));
-        }
-      }
-      dispatch(setCatLastPage(data?.last_page));
-      dispatch(setCatCurrentPage(data?.current_page));
-    } catch (error) {
-      console.error("Error:", error);
-    }
-  };
-
-  useEffect(() => {
-    if (pathname === "/" || cateData.length === 0) {
-      getCategoriesData(1);
-    }
-  }, []);
-
-  const translateCategories = (categories) => {
-    return categories.map((category) => {
-      const translation = category.translations?.find(
-        (trans) => trans.language_id === CurrentLanguage.id
-      );
-
-      return {
-        ...category,
-        translated_name: translation ? translation.name : category.name, // Update the category name directly
-        subcategories:
-          category.subcategories?.length > 0
-            ? translateCategories(category.subcategories) // Recursively translate subcategories
-            : [], // Default to empty array if no subcategories
-      };
-    });
-  };
-
-  useEffect(() => {
-    if (cateData.length > 0) {
-      const updatedCateData = translateCategories(cateData);
-      dispatch(setCateData(updatedCateData));
-    }
-  }, [CurrentLanguage]);
-
   const getLanguageData = async (language_code) => {
     try {
       const res = await getLanguageApi.getLanguage({
         language_code,
         type: "web",
       });
+
       if (res?.data?.error === true) {
         toast.error(res?.data?.message);
       } else {
@@ -171,6 +127,62 @@ const Header = () => {
     }
   }, []);
 
+
+  // this api call only in pop cate swiper
+  const getCategoriesData = async (page) => {
+    try {
+      const response = await categoryApi.getCategory({ page: `${page}` });
+      const { data } = response.data;
+
+      if (data && Array.isArray(data.data)) {
+        if (page > 1) {
+          dispatch(setCateData([...cateData, ...data.data]));
+        } else {
+          dispatch(setCateData(data.data));
+          dispatch(setTreeData([]));
+        }
+      }
+      dispatch(setCatLastPage(data?.last_page));
+      dispatch(setCatCurrentPage(data?.current_page));
+    } catch (error) {
+      console.error("Error:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (pathname === "/" || cateData.length === 0) {
+      getCategoriesData(1);
+    }
+  }, []);
+
+  const translateCategories = (categories) => {
+
+    return categories.map((category) => {
+      const translation = category.translations?.find(
+        (trans) => trans.language_id === CurrentLanguage.id
+      );
+
+      return {
+        ...category,
+        translated_name: translation ? translation.name : category.name, // Update the category name directly
+        subcategories:
+          category.subcategories?.length > 0
+            ? translateCategories(category.subcategories) // Recursively translate subcategories
+            : [], // Default to empty array if no subcategories
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (cateData.length > 0) {
+      const updatedCateData = translateCategories(cateData);
+      dispatch(setCateData(updatedCateData));
+    }
+    document.documentElement.lang = CurrentLanguage?.code?.toLowerCase() || "en";
+  }, [CurrentLanguage, cateData?.length]);
+
+
+
   useEffect(() => {
     const categoryPathRegex = /^\/category(\/|$)/;
     if (pathname != "/products" && !categoryPathRegex.test(pathname)) {
@@ -191,7 +203,7 @@ const Header = () => {
       setShow(false);
     }
     if (IsLoginModalOpen) {
-      setIsLoginModalOpen(false);
+      toggleLoginModal(false);
     }
     setIsRegisterModalOpen(true);
   };
@@ -202,7 +214,7 @@ const Header = () => {
     if (IsRegisterModalOpen) {
       setIsRegisterModalOpen(false);
     }
-    setIsLoginModalOpen(true);
+    toggleLoginModal(true);
   };
 
   const openLocationEditModal = () => {
@@ -379,7 +391,7 @@ const Header = () => {
                   <BiPlanet size={16} color="#595B6C" className="planet" />
                   <input
                     type="text"
-                    placeholder={t("searchItem")}
+                    placeholder={t("searchAd")}
                     onChange={(e) => handleSearch(e)}
                     value={searchQuery}
                   />
@@ -422,7 +434,7 @@ const Header = () => {
                 <BiPlanet size={16} color="#595B6C" className="planet" />
                 <input
                   type="text"
-                  placeholder={t("searchItem")}
+                  placeholder={t("searchAd")}
                   onChange={(e) => handleSearch(e)}
                   value={searchQuery}
                 />
@@ -611,7 +623,7 @@ const Header = () => {
 
       <LoginModal
         IsLoginModalOpen={IsLoginModalOpen}
-        setIsLoginModalOpen={setIsLoginModalOpen}
+        setIsLoginModalOpen={toggleLoginModal}
         setIsRegisterModalOpen={setIsRegisterModalOpen}
         IsMailSentOpen={IsMailSentOpen}
         setIsMailSentOpen={setIsMailSentOpen}
@@ -619,7 +631,7 @@ const Header = () => {
 
       <RegisterModal
         IsRegisterModalOpen={IsRegisterModalOpen}
-        setIsLoginModalOpen={setIsLoginModalOpen}
+        setIsLoginModalOpen={toggleLoginModal}
         CloseRegisterModal={() => setIsRegisterModalOpen(false)}
         setIsMailSentOpen={setIsMailSentOpen}
       />
@@ -627,7 +639,7 @@ const Header = () => {
       <MailSentSucessfully
         IsMailSentOpen={IsMailSentOpen}
         OnHide={() => setIsMailSentOpen(false)}
-        IsLoginModalOpen={() => setIsLoginModalOpen(true)}
+        IsLoginModalOpen={() => toggleLoginModal(true)}
       />
 
       <LocationModal

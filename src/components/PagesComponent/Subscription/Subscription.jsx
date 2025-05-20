@@ -21,6 +21,8 @@ import BreadcrumbComponent from "@/components/Breadcrumb/BreadcrumbComponent";
 import Swal from "sweetalert2";
 import { useSelector } from "react-redux";
 import { getIsLoggedIn } from "@/redux/reuducer/authSlice";
+import BankDetailsModal from "./BankDetailsModal";
+import { toggleLoginModal } from "@/redux/reuducer/globalStateSlice";
 
 const Subscription = () => {
   const AdListingRef = useRef();
@@ -129,15 +131,7 @@ const Subscription = () => {
   const handlePurchasePackage = (e, data) => {
     e.preventDefault();
     if (!isLogin()) {
-      Swal.fire({
-        icon: "error",
-        title: t("oops"),
-        text: t("loginFirst"),
-        allowOutsideClick: false,
-        customClass: {
-          confirmButton: "Swal-confirm-buttons",
-        },
-      });
+      toggleLoginModal(true)
       return;
     }
     if (data?.final_price === 0) {
@@ -244,6 +238,8 @@ const Subscription = () => {
         setItemPackages={setItemPackages}
         setAdvertisementPackage={setAdvertisementPackage}
       />
+
+      <BankDetailsModal priceData={priceData} bankDetails={packageSettings?.bankTransfer} />
     </section>
   );
 };

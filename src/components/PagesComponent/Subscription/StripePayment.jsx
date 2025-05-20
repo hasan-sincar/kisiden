@@ -34,21 +34,27 @@ const StripePayment = ({
   const handleStripePayment = useCallback(async () => {
     try {
       const res = await createPaymentIntentApi.createIntent({
-        package_id: priceData.id,
-        payment_method: packageSettings.Stripe.payment_method,
+        package_id: priceData?.id,
+        payment_method: packageSettings?.Stripe.payment_method,
       });
-      if (res.data.error) {
-        toast.error(res.data.message);
+
+      if (res.data.error === false) {
+        const paymentIntent = res.data.data.payment_intent?.payment_gateway_response;
+        const clientSecret = paymentIntent.client_secret;
+        setClientSecret(clientSecret);
+        setShowStripeForm(true);
+      }
+
+      if (res?.data?.error) {
+        toast.error(res?.data?.message);
+        setShowStripeForm(false);
         return;
       }
-      const paymentIntent =
-        res.data.data.payment_intent?.payment_gateway_response;
-      const clientSecret = paymentIntent.client_secret;
-      setClientSecret(clientSecret);
-      setShowStripeForm(true);
+
     } catch (error) {
       console.error("Error during Stripe payment", error);
       toast.error(t("errorOccurred"));
+      setShowStripeForm(false)
     } finally {
       setLoading(false);
     }

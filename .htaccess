@@ -9,7 +9,7 @@
     RewriteCond %{REQUEST_URI} \.(js|css|svg|jpg|jpeg|png|gif|ico)$
     RewriteRule ^ - [L]
     
-    RewriteRule ^index.html http://127.0.0.1:8001/$1 [P]
-    RewriteRule ^index.php http://127.0.0.1:8001/$1 [P]
-    RewriteRule ^/?(.*)$ http://127.0.0.1:8001/$1 [P]
+    RewriteRule ^index.html http://127.0.0.1:8004/$1 [P]
+    RewriteRule ^index.php http://127.0.0.1:8004/$1 [P]
+    RewriteRule ^/?(.*)$ http://127.0.0.1:8004/$1 [P]
 </IfModule>

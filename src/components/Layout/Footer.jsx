@@ -84,29 +84,29 @@ const Footer = () => {
                         </div>
                         <div className="social_media">
                             {settings?.facebook_link &&
-                                <a href={settings?.facebook_link}>
+                                <Link target='_blank' href={settings?.facebook_link}>
                                     <button><FaFacebook size={22} /></button>
-                                </a>
+                                </Link>
                             }
                             {settings?.instagram_link &&
-                                <a href={settings?.instagram_link}>
+                                <Link target='_blank' href={settings?.instagram_link}>
                                     <button><FaInstagram size={22} /></button>
-                                </a>
+                                </Link>
                             }
                             {settings?.x_link &&
-                                <a href={settings?.x_link}>
+                                <Link target='_blank' href={settings?.x_link}>
                                     <button><FaSquareXTwitter size={22} /></button>
-                                </a>
+                                </Link>
                             }
                             {settings?.linkedin_link &&
-                                <a href={settings?.linkedin_link}>
+                                <Link target='_blank' href={settings?.linkedin_link}>
                                     <button><FaLinkedin size={22} /></button>
-                                </a>
+                                </Link>
                             }
                             {settings?.pinterest_link &&
-                                <a href={settings?.pinterest_link}>
+                                <Link target='_blank' href={settings?.pinterest_link}>
                                     <button><FaPinterest size={22} /></button>
-                                </a>
+                                </Link>
                             }
                         </div>
                     </div>
@@ -166,9 +166,9 @@ const Footer = () => {
                                             <RiMailSendFill size={22} />
                                         </div>
                                         <div className="details_list">
-                                            <a href={`mailto:${settings?.company_email}`}>
+                                            <Link href={`mailto:${settings?.company_email}`}>
                                                 <span>{settings?.company_email}</span>
-                                            </a>
+                                            </Link>
                                         </div>
                                     </div>
                                 }
@@ -180,15 +180,15 @@ const Footer = () => {
                                         <div className="details_list">
                                             {
                                                 settings?.company_tel1 &&
-                                                <a href={`tel:${settings?.company_tel1}`}>
+                                                <Link href={`tel:${settings?.company_tel1}`}>
                                                     <span>{settings?.company_tel1}</span>
-                                                </a>
+                                                </Link>
                                             }
                                             {
                                                 settings?.company_tel2 &&
-                                                <a href={`tel:${settings?.company_tel2}`}>
+                                                <Link href={`tel:${settings?.company_tel2}`}>
                                                     <span>{settings?.company_tel2}</span>
-                                                </a>
+                                                </Link>
                                             }
                                         </div>
                                     </div>

@@ -1,4 +1,5 @@
 'use client'
+import { toggleLoginModal } from "@/redux/reuducer/globalStateSlice"
 import { isLogin, t } from "@/utils"
 import toast from "react-hot-toast"
 import { BsExclamationOctagon } from "react-icons/bs"
@@ -11,7 +12,7 @@ const ReportAdCard = ({ productData, setIsReportModal }) => {
     const handleReportAd = () => {
 
         if (!isLogin()) {
-            toast.error(t('loginFirst'))
+            toggleLoginModal(true)
             return
         }
 

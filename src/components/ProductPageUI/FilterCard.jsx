@@ -1,6 +1,6 @@
 'use client'
 import { Checkbox, Collapse, Radio, Slider } from 'antd';
-import React, { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { DownOutlined } from '@ant-design/icons';
 import FilterTree from '../Category/FilterTree';
 import LocationTree from '../Category/LocationTree';
@@ -8,6 +8,7 @@ import { t } from '@/utils';
 import { useSelector } from 'react-redux';
 import { CurrentLanguageData } from '@/redux/reuducer/languageSlice';
 import { FaAngleDown } from 'react-icons/fa6';
+import { settingsData } from '@/redux/reuducer/settingSlice';
 
 const { Panel } = Collapse;
 
@@ -18,6 +19,10 @@ const FilterCard = ({ slug, setMinMaxPrice, setIsFetchSingleCatItem, setCountry,
 
     const CurrentLanguage = useSelector(CurrentLanguageData)
     const [IsShowKmTooltip, setIsShowKmTooltip] = useState(false)
+    const systemSettingsData = useSelector(settingsData);
+    const settings = systemSettingsData?.data;
+    const min_range = Number(settings?.min_length);
+    const max_range = Number(settings?.max_length);
     const [tempRange, setTempRange] = useState(0)
     const [minPrice, setMinPrice] = useState('')
     const [maxPrice, setMaxPrice] = useState('')
@@ -181,7 +186,7 @@ const FilterCard = ({ slug, setMinMaxPrice, setIsFetchSingleCatItem, setCountry,
 
                     <Panel header={t("nearByKmRange")} key="5">
                         <div className='kmRange_cont'>
-                            <Slider className='kmRange_slider' value={tempRange} tooltip={{ formatter, ...(IsShowKmTooltip && tempRange !== 0 ? { open: true } : { open: false }) }} onChange={handleRange} />
+                            <Slider className='kmRange_slider' min={min_range} max={max_range} value={tempRange} tooltip={{ formatter, ...(IsShowKmTooltip && tempRange !== 0 ? { open: true } : { open: false }) }} onChange={handleRange} />
                             <div className="apply_budget">
                                 <button className={`${tempRange === 0 ? 'not_allowed' : 'apply_btn_transparent'}`} disabled={tempRange === 0} onClick={handleApplyRange}>{t('applyRange')}</button>
                             </div>
@@ -197,7 +202,7 @@ const FilterCard = ({ slug, setMinMaxPrice, setIsFetchSingleCatItem, setCountry,
                             <div className='extra_Det_wrapper'>
                                 {
                                     CustomFields.map((field, index) => (
-                                        <React.Fragment key={field.id}>
+                                        <Fragment key={field.id}>
                                             {field.type === 'checkbox' && (
 
                                                 <div className='auth_in_cont' key={field.id}>
@@ -248,7 +253,7 @@ const FilterCard = ({ slug, setMinMaxPrice, setIsFetchSingleCatItem, setCountry,
                                                     </div>
                                                 )
                                             }
-                                        </React.Fragment>
+                                        </Fragment>
                                     ))}
                                 <div className="apply_budget">
                                     <button onClick={applyExtraDetails} disabled={IsFilterApplyDisabled} className={`${IsFilterApplyDisabled ? 'not_allowed' : 'apply_btn_transparent'}`} >{t('apply')}</button>

@@ -1,6 +1,9 @@
 import Layout from "@/components/Layout/Layout";
 import SingleProductDetail from "@/components/PagesComponent/SingleProductDetail/SingleProductDetail";
 import axios from "axios";
+
+export const revalidate = 3600;
+
 export const generateMetadata = async ({ params }) => {
   try {
     const response = await axios.get(

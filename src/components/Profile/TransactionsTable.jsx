@@ -5,10 +5,20 @@ import { paymentTransactionApi } from '@/utils/api';
 import { Table, Skeleton } from 'antd';
 import React, { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux';
+import UploadReceiptModal from '../PagesComponent/Transactions/UploadReceiptModal';
 
 const TransactionsTable = () => {
 
     const CurrentLanguage = useSelector(CurrentLanguageData)
+    const [IsUploadRecipt, setIsUploadRecipt] = useState(false)
+    const [transactionId, setTransactionId] = useState('')
+
+
+    const handleUploadReceipt = (id) => {
+        setTransactionId(id)
+        setIsUploadRecipt(true)
+    }
+
 
     const columns = [
         {
@@ -65,12 +75,33 @@ const TransactionsTable = () => {
                     case 'pending':
                         statusClassName = 'pending_status';
                         break;
+                    case 'under review':
+                        statusClassName = 'under_review_status';
+                        break;
+                    case 'rejected':
+                        statusClassName = 'rejected_status';
+                        break;
                     default:
                         statusClassName = '';
                         break;
                 }
 
-                return <span className={statusClassName}>{text}</span>;
+                return (
+                    <div>
+
+                        {record.payment_gateway === 'BankTransfer' && text === 'pending' ? (
+                            <button
+                                className="upload_receipt_button"
+                                onClick={() => handleUploadReceipt(record.id)}
+                            >
+                                {t('uploadReceipt')}
+                            </button>
+                        )
+                            :
+                            <span className={statusClassName}>{text}</span>
+                        }
+                    </div>
+                );
             },
         },
     ];
@@ -130,6 +161,7 @@ const TransactionsTable = () => {
                     pagination={paginationOptions}
                 />
             )}
+            <UploadReceiptModal IsUploadRecipt={IsUploadRecipt} setIsUploadRecipt={setIsUploadRecipt} transactionId={transactionId} setData={setData} />
         </>
     );
 };

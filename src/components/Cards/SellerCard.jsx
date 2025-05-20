@@ -12,6 +12,7 @@ import { CiLink } from "react-icons/ci"
 import toast from "react-hot-toast"
 import { useSelector } from "react-redux"
 import { settingsData } from "@/redux/reuducer/settingSlice"
+import Link from "next/link"
 
 
 
@@ -134,24 +135,33 @@ const SellerCard = ({ seller, ratings }) => {
                 </div>
 
                 {
-                    seller?.show_personal_details === 1 &&
+                    seller?.show_personal_details === 1 && (seller?.email || seller?.mobile) &&
                     <div className="seller_details">
-                        <div className="seller_email">
-                            <div className="email_icon_cont">
-                                <RiMailSendLine size={16} />
+
+                        {
+                            seller?.email &&
+                            <div className="seller_email">
+                                <div className="email_icon_cont">
+                                    <RiMailSendLine size={16} />
+                                </div>
+                                <Link href={`mailto:${seller?.email}`}>
+                                    <span>{seller?.email}</span>
+                                </Link>
                             </div>
-                            <a href={`mailto:${seller?.email}`}>
-                                <span>{seller?.email}</span>
-                            </a>
-                        </div>
-                        <div className="seller_phone">
-                            <div className="email_icon_cont">
-                                <FiPhoneCall size={16} />
+                        }
+
+                        {
+                            seller?.mobile &&
+                            <div className="seller_phone">
+                                <div className="email_icon_cont">
+                                    <FiPhoneCall size={16} />
+                                </div>
+                                <Link href={`tel:${seller?.mobile}`}>
+                                    <span className="">{seller?.mobile}</span>
+                                </Link>
                             </div>
-                            <a href={`tel:${seller?.mobile}`}>
-                                <span className="">{seller?.mobile}</span>
-                            </a>
-                        </div>
+                        }
+
                     </div>
                 }
             </div>

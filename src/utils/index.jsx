@@ -6,7 +6,21 @@ import { CurrentLanguageData } from '@/redux/reuducer/languageSlice';
 import { useSelector } from 'react-redux';
 import { logoutSuccess } from '../redux/reuducer/authSlice';
 import { useJsApiLoader } from '@react-google-maps/api';
+import TimeAgo from 'javascript-time-ago';
 
+import en from 'javascript-time-ago/locale/en'
+TimeAgo.addDefaultLocale(en)
+
+export const t = (label) => {
+  const langData = store.getState().CurrentLanguage?.language?.file_name && store.getState().CurrentLanguage?.language?.file_name[label];
+
+  if (langData) {
+
+    return langData;
+  } else {
+    return enTranslation[label];
+  }
+};
 
 export const placeholderImage = (e) => {
   let settings = store.getState()?.Settings?.data?.data
@@ -61,27 +75,20 @@ export const getSlug = (pathname) => {
 
 // function for formate date or time 
 export const formatDate = (createdAt) => {
-  const date = new Date(createdAt);
-  const now = new Date();
+  // Check if createdAt is undefined or null
+  if (!createdAt) {
+    return ''; // Return empty string or any default value
+  }
 
-  const diff = now.getTime() - date.getTime();
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
+  const timeAgo = new TimeAgo('en-US')
+  const date = new Date(createdAt)
 
-  if (days === 0) {
-    return t("today");
-  } else if (days === 1) {
-    return t("yesterday");
-  } else if (days < 30) {
-    return `${days} ${t("daysAgo")}`;
-  } else if (days < 365) {
-    const months = Math.floor(days / 30);
-    return `${months} ${t('month')}${months > 1 ? t("s") : ''} ${t("ago")}`;
-  } else {
-    const years = Math.floor(days / 365);
-    return `${years} ${t("year")}${years > 1 ? t("s") : ''} ${t("ago")}`;
+  try {
+    // Use the built-in mini style which is designed for short labels
+    return timeAgo.format(date, 'mini-now')
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return ''; // Return empty string on error
   }
 };
 
@@ -409,8 +416,7 @@ export const createStickyNote = () => {
   const appStoreLink = store.getState()?.Settings?.data?.data?.app_store_link;
 
   const message = document.createElement('span');
-  message.innerText = 
-    'Chat and Notification features are not supported on this browser. For a better user experience, please use our mobile application. ';
+  message.innerText = t('chatAndNotificationNotSupported');
 
   const linkContainer = document.createElement('div'); // Changed to 'div' for better spacing
   linkContainer.style.display = 'inline-block'; // Keeps links inline while allowing space
@@ -420,7 +426,7 @@ export const createStickyNote = () => {
   if (playStoreLink) {
     const playStoreAnchor = document.createElement('a');
     playStoreAnchor.style.cssText = linkStyle;
-    playStoreAnchor.innerText = 'Google Play';
+    playStoreAnchor.innerText = t('playStore');
     playStoreAnchor.href = playStoreLink;
     playStoreAnchor.target = '_blank';
     linkContainer.appendChild(playStoreAnchor);
@@ -430,7 +436,7 @@ export const createStickyNote = () => {
     const appStoreAnchor = document.createElement('a');
     appStoreAnchor.style.cssText = linkStyle;
     appStoreAnchor.style.marginLeft = '5px'; // Space before this link
-    appStoreAnchor.innerText = 'App Store';
+    appStoreAnchor.innerText = t('appStore');
     appStoreAnchor.href = appStoreLink;
     appStoreAnchor.target = '_blank';
     linkContainer.appendChild(appStoreAnchor);
@@ -444,16 +450,7 @@ export const createStickyNote = () => {
 };
 
 
-export const t = (label) => {
-  const langData = store.getState().CurrentLanguage?.language?.file_name && store.getState().CurrentLanguage?.language?.file_name[label];
 
-  if (langData) {
-
-    return langData;
-  } else {
-    return enTranslation[label];
-  }
-};
 
 const ERROR_CODES = {
   'auth/user-not-found': t('userNotFound'),

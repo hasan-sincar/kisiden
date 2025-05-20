@@ -1,5 +1,5 @@
 'use client'
-import { logoutSuccess } from '../../redux/reuducer/authSlice';
+import { logoutSuccess, userSignUpData } from '../../redux/reuducer/authSlice';
 import { t } from '@/utils';
 import FirebaseData from '@/utils/Firebase';
 import { deleteUserApi } from '@/utils/api';
@@ -14,9 +14,14 @@ import { LiaAdSolid } from "react-icons/lia";
 import { LuHeart } from "react-icons/lu";
 import { MdOutlineRateReview } from 'react-icons/md';
 import { RiLogoutCircleLine } from 'react-icons/ri';
+import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
 
 const ProfileSidebar = () => {
+
+    const userData = useSelector(userSignUpData);
+    const firebase_id = userData?.firebase_id;
+
     const router = useRouter()
     const pathname = usePathname()
 
@@ -79,8 +84,10 @@ const ProfileSidebar = () => {
         }).then(async (result) => {
             if (result.isConfirmed) {
                 try {
-                    // Delete the user
-                    await deleteUser(user);
+                    // Delete from Firebase only if firebase_id exists
+                    if (firebase_id && user) {
+                        await deleteUser(user);
+                    }
 
                     // Call your API to delete user data
                     const response = await deleteUserApi.deleteUser();
@@ -132,7 +139,7 @@ const ProfileSidebar = () => {
                     <BiReceipt size={24} />
                     <span className='profile_sidebar_notif'>{t('transaction')}</span>
                 </Link>
-                
+
                 <Link href='/reviews' className={`profile_sidebar_tab ${pathname === '/reviews' && 'active_tab'}`}>
                     <MdOutlineRateReview size={24} />
                     <span className='profile_sidebar_notif'>{t('myReviews')}</span>

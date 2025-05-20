@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { formatDateMonth, isLogin, placeholderImage, t } from '@/utils';
 import { getNotificationList } from '@/utils/api';
 import toast from 'react-hot-toast';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { CurrentLanguageData } from '@/redux/reuducer/languageSlice';
 import { useSelector } from 'react-redux';
 
@@ -13,10 +13,10 @@ const NotificationTable = () => {
     const CurrentLanguage = useSelector(CurrentLanguageData)
     const [notifications, setNotifications] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(0);
     const [totalItems, setTotalItems] = useState(0);
     const [perPage, setPerPage] = useState(15);
     const [isLoading, setIsLoading] = useState(false);
+
 
 
     const fetchNotificationData = async (page) => {
@@ -26,7 +26,6 @@ const NotificationTable = () => {
             const { data } = response.data;
             if (data.error !== true) {
                 setNotifications(data.data);
-                setTotalPages(data.last_page);
                 setTotalItems(data.total);
                 setPerPage(data.per_page);
             } else {
@@ -56,20 +55,11 @@ const NotificationTable = () => {
             key: 'notification',
             width: '70%',
             render: (text, record) => (
-                <div className='notif_content_wrp'>
-                    <Image
-                        src={record.image || placeholderImage}
-                        alt="Notification"
-                        width={48}
-                        height={48}
-                        className='notificationImage'
-                        onErrorCapture={placeholderImage}
-                    />
-                    <div className='noti_title_desc'>
-                        <h6>{record.title}</h6>
-                        <p>{record.notification}</p>
-                    </div>
-                </div>
+                <NotificationContent
+                    text={record.notification}
+                    title={record.title}
+                    image={record.image}
+                />
             ),
         },
         {
@@ -147,3 +137,51 @@ const NotificationTable = () => {
 };
 
 export default NotificationTable;
+
+
+
+
+const NotificationContent = ({ text, title, image }) => {
+    const textRef = useRef(null);
+    const [isTextOverflowing, setIsTextOverflowing] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    useEffect(() => {
+        const checkTextOverflow = () => {
+            if (textRef.current) {
+                const element = textRef.current;
+                const isOverflowing = element.scrollHeight > element.clientHeight;
+                setIsTextOverflowing(isOverflowing);
+            }
+        };
+
+        checkTextOverflow();
+        window.addEventListener('resize', checkTextOverflow);
+
+        return () => window.removeEventListener('resize', checkTextOverflow);
+    }, []); // Add text as dependency to recheck when content changes
+
+    return (
+        <div className='notif_content_wrp'>
+            <Image
+                src={image || placeholderImage}
+                alt="Notification"
+                width={48}
+                height={48}
+                className='notificationImage'
+                onErrorCapture={placeholderImage}
+            />
+            <div className='noti_title_desc'>
+                <h6 className='m-0'>{title}</h6>
+
+                <p ref={textRef} className={`${!isExpanded ? 'notficationDesc' : ''} m-0`}>{text}</p>
+                {isTextOverflowing && (
+                    <button className='seeMoreLessBtn notificationSeeMoreLessBtn' onClick={() => setIsExpanded(!isExpanded)}>
+                        {isExpanded ? t('seeLess') : t('seeMore')}
+                    </button>
+                )}
+
+            </div>
+        </div>
+    );
+};

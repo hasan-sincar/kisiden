@@ -30,7 +30,7 @@ const Favourites = () => {
                 setIsLoading(true);
             }
 
-            const response = await getFavouriteApi.getFavouriteApi({ page });
+            const response = await getFavouriteApi.getFavouriteApi({ page, limit: 12 });
             const { data } = response?.data?.data;
             if (page === 1) {
                 setFavoriteData(data);

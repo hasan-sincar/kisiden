@@ -2,12 +2,14 @@ import HomePage from '@/components/Home';
 import Layout from '@/components/Layout/Layout';
 import axios from 'axios';
 
+export const revalidate = 3600;
+
 export const generateMetadata = async () => {
   try {
     const response = await axios.get(
       `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}seo-settings?page=home`
     );
-    const home = response?.data
+    const home = response?.data?.data[0]
     return {
       title: home?.title ? home?.title : process.env.NEXT_PUBLIC_META_TITLE,
       description: home?.description ? home?.description : process.env.NEXT_PUBLIC_META_DESCRIPTION,

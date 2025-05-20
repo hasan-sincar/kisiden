@@ -2,6 +2,7 @@ import Layout from '@/components/Layout/Layout';
 import TermsAndCondition from '@/components/PagesComponent/TermsAndCondition/TermsAndCondition'
 import axios from 'axios';
 
+export const revalidate = 3600;
 
 export const generateMetadata = async ({ params }) => {
     try {

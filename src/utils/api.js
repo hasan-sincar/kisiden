@@ -17,6 +17,7 @@ export const GET_CITIES = 'cities'
 export const GET_AREA = 'areas'
 export const GET_LANGUAGE = 'get-languages'
 export const GET_CUSTOM_FIELDS = 'get-customfields'
+export const GET_BANK_DETAILS = 'get-bank-details'
 export const MANAGE_FAVOURITE = 'manage-favourite'
 export const GET_FAVOURITE_ITEMS = 'get-favourite-item'
 export const GET_MY_ITEMS = 'my-items'
@@ -28,6 +29,7 @@ export const CONTACT_US = 'contact-us'
 export const UPDATE_LISTING = 'update-item'
 export const USER_SIGNUP = 'user-signup'
 export const UPDATE_PROFILE = 'update-profile'
+export const BANK_TRANSFER_UPDATE = 'bank-transfer-update'
 export const DELETE_USER = 'delete-user'
 export const GET_REPORT_REASONS = 'get-report-reasons'
 export const ADD_REPORT = 'add-reports'
@@ -55,6 +57,8 @@ export const MY_REVIEWS = 'my-review'
 export const RENEW_ITEM = 'renew-item'
 export const ADD_REPORT_REVIEW = 'add-review-report'
 export const SET_ITEM_TOTAL_CLICK = 'set-item-total-click'
+export const GET_OTP = 'get-otp'
+export const VERIFY_OTP = 'verify-otp'
 
 
 
@@ -85,9 +89,9 @@ export const categoryApi = {
 }
 // 3. MY ITEMS API
 export const getMyItemsApi = {
-    getMyItems: ({ sort_by, page, status, id, category_id, slug } = {}) => {
+    getMyItems: ({ sort_by, page, status, id, category_id, slug, limit } = {}) => {
         return Api.get(GET_MY_ITEMS, {
-            params: { page, sort_by, status, id, category_id, slug },
+            params: { page, sort_by, status, id, category_id, slug, limit },
         })
     },
 }
@@ -131,13 +135,13 @@ export const allItemApi = {
     getItems: ({
         id, custom_fields, category_id, min_price, max_price, sort_by,
         posted_since, featured_section_id, status, page, search,
-        country, state, city, slug, category_slug, featured_section_slug, area_id, latitude, longitude, radius, user_id
+        country, state, city, slug, category_slug, featured_section_slug, area_id, latitude, longitude, radius, user_id, limit
     } = {}) => {
         return Api.get(GET_ITEM, {
             params: {
                 id, custom_fields, category_id, min_price, max_price, sort_by,
                 posted_since, featured_section_id, status, page, search,
-                country, state, city, slug, category_slug, featured_section_slug, area_id, latitude, longitude, radius, user_id
+                country, state, city, slug, category_slug, featured_section_slug, area_id, latitude, longitude, radius, user_id, limit
             }
         })
     },
@@ -362,6 +366,19 @@ export const updateProfileApi = {
         });
     },
 }
+export const updateBankTransferApi = {
+    updateBankTransfer: ({ payment_transection_id, payment_receipt} = {}) => {
+        const formData = new FormData();
+        if (payment_transection_id) formData.append('payment_transection_id', payment_transection_id);
+        if (payment_receipt) formData.append('payment_receipt', payment_receipt);
+        
+        return Api.post(BANK_TRANSFER_UPDATE, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+    },
+}
 
 // GET NOTIFICATION API 
 
@@ -390,6 +407,29 @@ export const assigFreePackageApi = {
         });
     },
 }
+
+export const verifyOtpApi = {
+    verifyOtp: ({ number, otp } = {}) => {
+        return Api.get(VERIFY_OTP, {
+            params: {
+                number: number,
+                otp: otp
+            }
+        })
+    }
+}
+export const getOtpApi = {
+    getOtp: ({ number } = {}) => {
+        return Api.get(GET_OTP, {
+            params: {
+                number: number
+            }
+        })
+    }
+}
+
+
+
 export const setItemTotalClickApi = {
     setItemTotalClick: ({ item_id } = {}) => {
         const formData = new FormData();
@@ -542,6 +582,15 @@ export const getCustomFieldsApi = {
         })
     },
 }
+export const getBankDetailsApi = {
+    getBankDetails: () => {
+        return Api.get(GET_BANK_DETAILS, {
+            params: {
+                
+            }
+        })
+    },
+}
 
 export const tipsApi = {
     tips: ({ } = {}) => {
@@ -658,7 +707,7 @@ export const editItemApi = {
         if (price) formData.append('price', price);
         if (delete_item_image_id) formData.append('delete_item_image_id', delete_item_image_id)
         if (contact) formData.append('contact', contact);
-        if (video_link) formData.append('video_link', video_link);
+        formData.append('video_link', video_link);
         if (latitude) formData.append('latitude', latitude);
         if (longitude) formData.append('longitude', longitude);
         if (custom_fields) formData.append('custom_fields', JSON.stringify(custom_fields));
@@ -728,10 +777,11 @@ export const manageFavouriteApi = {
 }
 
 export const getFavouriteApi = {
-    getFavouriteApi: ({ page } = {}) => {
+    getFavouriteApi: ({ page, limit } = {}) => {
         return Api.get(GET_FAVOURITE_ITEMS, {
             params: {
-                page
+                page,
+                limit
             }
         })
     }

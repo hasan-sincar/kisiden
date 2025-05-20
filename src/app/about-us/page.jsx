@@ -2,8 +2,9 @@ import Layout from '@/components/Layout/Layout';
 import AboutUs from '@/components/PagesComponent/AboutUs/AboutUs'
 import axios from 'axios';
 
+export const revalidate = 3600;
 
-export const generateMetadata = async ({ params }) => {
+export const generateMetadata = async () => {
   try {
 
     const response = await axios.get(

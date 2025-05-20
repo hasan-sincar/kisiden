@@ -11,7 +11,11 @@ const OurBlogCard = ({ data }) => {
             <h5 className='ourblog_card_title'>
                 {data?.title}
             </h5>
-            <div className='ourblog_card_desc' dangerouslySetInnerHTML={{ __html: data?.description }} />
+            <p className='ourblog_card_desc'>
+                {data?.description && typeof data?.description === 'string'
+                    ? data?.description.replace(/<[^>]*>/g, '')
+                    : ''}
+            </p>
             <Link href={`/blogs/${data?.slug}`} className='read_article' >
                 <span>
                     {t('readArticle')}

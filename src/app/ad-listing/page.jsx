@@ -3,6 +3,9 @@ import AdListing from '@/components/PagesComponent/AdListing/AdListing';
 import axios from 'axios';
 
 
+export const revalidate = 3600;
+
+
 export const generateMetadata = async () => {
     try {
         const response = await axios.get(

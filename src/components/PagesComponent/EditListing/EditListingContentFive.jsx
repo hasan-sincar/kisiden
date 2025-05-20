@@ -51,7 +51,7 @@ const ContentFive = ({ getCurrentLocation, handleGoBack, Location, handleFullSub
             </div>
             <div className="col-12">
                 <div className='locAddAddresBtnCont'>
-                    <h5>{t('whatLocItemYouSelling')}</h5>
+                    <h5>{t('whatLocAdYouSelling')}</h5>
                     <button className='addAddressBtn' onClick={() => setIsManuallyAddress(true)}>
                         <GrLocation size={18} />
                         <span>{t('addLocation')}</span>

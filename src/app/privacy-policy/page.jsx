@@ -2,6 +2,8 @@ import Layout from '@/components/Layout/Layout';
 import PrivacyPolicy from '@/components/PagesComponent/PrivacyPolicy/PrivacyPolicy'
 import axios from 'axios';
 
+export const revalidate = 3600;
+
 export const generateMetadata = async () => {
   try {
 

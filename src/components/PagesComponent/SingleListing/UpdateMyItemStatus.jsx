@@ -17,9 +17,14 @@ const UpdateMyItemStatus = ({
     SingleListing?.status === "resubmitted";
   const IsDisabled = !(SingleListing?.status === "approved");
 
+
+  const isShowRejectedReason = SingleListing?.rejected_reason && (SingleListing?.status === "soft rejected" || SingleListing?.status === "permanent rejected")
+
   const handleStatusChange = (e) => {
+
     setStatus(e.target.value);
   };
+
 
   const updateItemStatus = async () => {
     if (SingleListing?.status === Status) {
@@ -102,7 +107,7 @@ const UpdateMyItemStatus = ({
             onChange={handleStatusChange}
             className="status_select"
           >
-            <option value="active">{t("active")}</option>
+            <option value="approved">{t("active")}</option>
             <option value="inactive">{t("deactivate")}</option>
             <option value="review" disabled>
               {t("review")}
@@ -119,9 +124,9 @@ const UpdateMyItemStatus = ({
             <MdKeyboardArrowDown size={20} className="down_select_arrow" />
           )}
         </div>
-        {SingleListing?.rejected_reason && (
+        {isShowRejectedReason && (
           <p className="rejectedReason">
-            <span className="rejReasonLabel">Rejected Reason:</span>{" "}
+            <span className="rejReasonLabel">{t('rejectedReason')}:</span>{" "}
             {SingleListing?.rejected_reason}
           </p>
         )}

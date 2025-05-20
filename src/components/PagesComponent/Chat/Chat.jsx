@@ -237,7 +237,7 @@ const Chat = ({ setActiveTab, activeTab, chatMessages, setChatMessages, selected
         if (!selectedTabData?.amount) {
             fetchTipsData()
         }
-    }, [])
+    }, [CurrentLanguage])
 
     useEffect(() => {
         if (selectedTabData?.user_blocked === true) {
@@ -590,7 +590,7 @@ const Chat = ({ setActiveTab, activeTab, chatMessages, setChatMessages, selected
 
                                             {makeUnableToChat ? (
                                                 <div className='itemStatus'>
-                                                    <p>{t("thisitem")} {selectedTabData?.item?.status}</p>
+                                                        <p>{t("thisAd")} {selectedTabData?.item?.status}</p>
                                                 </div>
                                             ) : (
                                                 <div className="chat_input_cont" style={{ padding: isBlocked ? "0px" : "16px" }}>

@@ -36,6 +36,7 @@ import ReportAdCard from "./ReportAdCard";
 import OpenInAppDrawer from "./OpenInAppDrawer";
 
 
+
 const SingleProductDetail = ({ slug }) => {
   const swiperRef = useRef();
   const isRtl = useIsRtl();

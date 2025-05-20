@@ -2,6 +2,8 @@ import Layout from '@/components/Layout/Layout';
 import FAQS from '@/components/PagesComponent/FAQS/FAQS'
 import axios from 'axios';
 
+export const revalidate = 3600;
+
 export const generateMetadata = async () => {
     try {
         const response = await axios.get(

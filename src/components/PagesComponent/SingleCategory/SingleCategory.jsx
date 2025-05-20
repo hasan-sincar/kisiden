@@ -65,7 +65,7 @@ const SingleCategory = ({ slug }) => {
     const getSingleCatItem = async (page) => {
         let data = "";
         try {
-            const params = {page};
+            const params = { page, limit: 12 };
             if(sortBy) params.sort_by = sortBy;
             if (MinMaxPrice?.min_price) params.min_price = MinMaxPrice?.min_price;
             if (MinMaxPrice?.max_price) params.max_price = MinMaxPrice?.max_price;
@@ -400,7 +400,7 @@ const SingleCategory = ({ slug }) => {
                                                         )
                                                     ))
                                                     :
-                                                    <NoData name={t('items')} />
+                                                    <NoData name={t('ads')} />
                                         }
 
                                     </div>

@@ -2,6 +2,7 @@ import Layout from '@/components/Layout/Layout';
 import Blogs from '@/components/PagesComponent/Blogs/Blogs'
 import axios from 'axios';
 
+export const revalidate = 3600;
 
 export const generateMetadata = async () => {
   try {

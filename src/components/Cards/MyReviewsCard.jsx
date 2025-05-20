@@ -96,7 +96,7 @@ const MyReviewsCard = ({ rating, setMyReviews }) => {
                 <p className={`reviewContent ${isExpanded ? 'expanded' : 'collapsed'}`} ref={contentRef}>{rating?.review}</p>
                 {isOverflowing && (  // Arbitrary length check to show 'See More' button if review is long
                     <button className="seeMoreLessBtn" onClick={toggleExpand}>
-                        {isExpanded ? 'See Less' : 'See More'}
+                        {isExpanded ? t('seeLess') : t('seeMore')}
                     </button>
                 )}
             </div>

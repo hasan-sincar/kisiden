@@ -15,19 +15,21 @@ import {
   setKilometerRange,
 } from "@/redux/reuducer/locationSlice";
 import { protectedRoutes } from "@/app/routes/routes";
-import Swal from "sweetalert2";
 import { IsLandingPageOn, getDefaultLatLong, getPlaceApiKey, t } from "@/utils";
 import Image from "next/image";
 import UnderMaitenance from "../../../public/assets/something_went_wrong.svg";
 import axios from "axios";
 import { getIsLoggedIn } from "@/redux/reuducer/authSlice";
 import PushNotificationLayout from "../firebaseNotification/PushNotificationLayout";
+import { CurrentLanguageData } from "@/redux/reuducer/languageSlice";
+
 
 const Layout = ({ children }) => {
   const pathname = usePathname();
   const dispatch = useDispatch();
   const cityData = useSelector((state) => state?.Location?.cityData);
   const data = useSelector(settingsData);
+  const lang = useSelector(CurrentLanguageData);
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const requiresAuth = protectedRoutes.some((route) => route.test(pathname));
@@ -45,17 +47,16 @@ const Layout = ({ children }) => {
   const handleRouteAccess = () => {
     if (requiresAuth && !IsLoggedIn) {
       router.push("/");
-      Swal.fire({
-        icon: "error",
-        title: t("oops"),
-        text: t("loginToAccess"),
-        allowOutsideClick: false,
-        customClass: {
-          confirmButton: "Swal-confirm-buttons",
-        },
-      });
     }
   };
+
+  useEffect(() => {
+    if (lang && lang.rtl === true) {
+      document.documentElement.dir = "rtl";
+    } else {
+      document.documentElement.dir = "ltr";
+    }
+  }, [lang]);
 
   useEffect(() => {
     const getSystemSettings = async () => {
@@ -194,9 +195,9 @@ const Layout = ({ children }) => {
             <PushNotificationLayout
               onNotificationReceived={handleNotificationReceived}
             >
-              <MainHeader />
-              {children}
-              <Footer />
+                <MainHeader />
+                {children}
+                <Footer />
             </PushNotificationLayout>
           )}
           <ScrollToTopButton />

@@ -64,6 +64,7 @@ const FeaturedViewAll = ({ slug }) => {
             const response = await allItemApi.getItems({
                 featured_section_slug: slug,
                 page: page,
+                limit: 12,
             });
             const responseData = response?.data;
             if (responseData) {
@@ -166,7 +167,7 @@ const FeaturedViewAll = ({ slug }) => {
                                                 ))
 
                                             : itemsData && itemsData.length === 0 ?
-                                                <NoData name={t('items')} />
+                                                <NoData name={t('ads')} />
                                                 : view === "list" ?
                                                     itemsData && itemsData.map((ele, index) => (
                                                         <div className="col-12" key={index}>
