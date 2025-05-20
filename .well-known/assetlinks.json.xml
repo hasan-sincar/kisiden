@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kisiden.app",
+      "sha256_cert_fingerprints": [
+        "2C:3C:7B:FB:FF:B5:25:CE:EA:61:6C:CD:DB:AD:8A:3A:B2:00:3E:FA:1B:26:BD:0D:5B:05:6C:24:1A:F2:33:F0"
+      ]
+    }
+  }
+]
