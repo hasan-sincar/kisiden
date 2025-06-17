@@ -40,7 +40,9 @@ const HomeAllItem = ({ cityData, allEmpty }) => {
           params.longitude = cityData.long;
         } else {
           // Add location hierarchy parameters for non-demo mode
-          if (cityData?.city) {
+          if (cityData?.areaId) {
+            params.area_id = cityData.areaId;
+          } else if (cityData?.city) {
             params.city = cityData.city;
           } else if (cityData?.state) {
             params.state = cityData.state;

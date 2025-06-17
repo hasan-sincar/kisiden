@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { IoIosAddCircleOutline } from "react-icons/io";
 import { GiHamburgerMenu } from "react-icons/gi";
@@ -25,7 +25,6 @@ import {
 import LanguageDropdown from "../HeaderDropdowns/LanguageDropdown";
 import { useRouter, usePathname } from "next/navigation";
 import { setSearch } from "@/redux/reuducer/searchSlice";
-import { isLogin } from "@/utils";
 import {
   CategoryData,
   CurrentPage,
@@ -63,13 +62,7 @@ const Header = () => {
   const catLastPage = useSelector(LastPage);
   const { signOut } = FirebaseData();
   const [IsRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
-  // const [IsLoginModalOpen, setIsLoginModalOpen] = useState(false);
-
-
   const IsLoginModalOpen = useSelector(getIsLoginModalOpen);
-
-
-
   const [IsMailSentOpen, setIsMailSentOpen] = useState(false);
   const [IsLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [catId, setCatId] = useState("");
@@ -156,12 +149,10 @@ const Header = () => {
   }, []);
 
   const translateCategories = (categories) => {
-
     return categories.map((category) => {
       const translation = category.translations?.find(
         (trans) => trans.language_id === CurrentLanguage.id
       );
-
       return {
         ...category,
         translated_name: translation ? translation.name : category.name, // Update the category name directly
@@ -238,6 +229,7 @@ const Header = () => {
         cancelButton: "Swal-cancel-buttons",
       },
       confirmButtonText: t("yes"),
+      cancelButtonText: t("cancel"),
     }).then((result) => {
       if (result.isConfirmed) {
         // // Clear the recaptchaVerifier by setting it to null
@@ -311,8 +303,13 @@ const Header = () => {
       setIsAdListingClicked(false);
     }
   };
-  const handleCheckLogin = async (e) => {
+  const handleAdListing = async (e) => {
     e.preventDefault();
+    if (!UserData) {
+      toggleLoginModal(true);
+      handleClose();
+      return;
+    }
     // Check if user profile is complete
     if (!UserData?.name || !UserData?.email) {
       return Swal.fire({
@@ -321,14 +318,13 @@ const Header = () => {
         icon: "warning",
         showCancelButton: false,
         customClass: { confirmButton: "Swal-confirm-buttons" },
-        confirmButtonText: "Ok",
+        confirmButtonText: t('ok'),
       }).then((result) => {
         if (result.isConfirmed) {
           router.push("/profile/edit-profile");
         }
       });
     }
-
     // Check for free ad listing setting and route accordingly
     if (Number(settings?.free_ad_listing) === 1) {
       return router.push("/ad-listing");
@@ -446,7 +442,7 @@ const Header = () => {
             </form>
           </div>
 
-          {cityData?.city || cityData?.state || cityData?.country ? (
+          {cityData?.area || cityData?.city || cityData?.state || cityData?.country ? (
             <div
               className="home_header_location"
               onClick={openLocationEditModal}
@@ -454,12 +450,12 @@ const Header = () => {
               <GrLocation size={16} />
               <p
                 className="header_location"
-                title={[cityData?.city, cityData?.state, cityData?.country]
+                title={[cityData?.area, cityData?.city, cityData?.state, cityData?.country]
                   .filter(Boolean)
                   .join(", ")}
               >
                 {truncate(
-                  [cityData?.city, cityData?.state, cityData?.country]
+                  [cityData?.area, cityData?.city, cityData?.state, cityData?.country]
                     .filter(Boolean)
                     .join(", "),
                   12
@@ -476,7 +472,7 @@ const Header = () => {
             </div>
           )}
           <div className="right_side">
-            {isLogin() ? (
+            {UserData ? (
               <ProfileDropdown
                 closeDrawer={closeDrawer}
                 settings={settings}
@@ -498,23 +494,21 @@ const Header = () => {
               </>
             )}
 
-            {isLogin() && (
-              <div className="item_add">
-                <button
-                  className="ad_listing"
-                  disabled={isAdListingClicked}
-                  onClick={handleCheckLogin}
-                >
-                  <IoIosAddCircleOutline
-                    size={18}
-                    className="ad_listing_icon"
-                  />
-                  <span className="adlist_btn" title={t("adListing")}>
-                    {truncate(t("adListing"), 12)}
-                  </span>
-                </button>
-              </div>
-            )}
+            <div className="item_add">
+              <button
+                className="ad_listing"
+                disabled={isAdListingClicked}
+                onClick={handleAdListing}
+              >
+                <IoIosAddCircleOutline
+                  size={18}
+                  className="ad_listing_icon"
+                />
+                <span className="adlist_btn" title={t("adListing")}>
+                  {truncate(t("adListing"), 12)}
+                </span>
+              </button>
+            </div>
             <LanguageDropdown
               getLanguageData={getLanguageData}
               settings={settings}
@@ -549,18 +543,26 @@ const Header = () => {
         closeIcon={CloseIcon}
       >
         <ul className="mobile_nav">
-          {cityData && (
+          {cityData?.area || cityData?.city || cityData?.state || cityData?.country ? (
             <li className="mob_header_location" onClick={openLocationEditModal}>
               <GrLocation size={16} />
               <p>
-                {[cityData?.city, cityData?.state, cityData?.country]
+                {[cityData?.area, cityData?.city, cityData?.state, cityData?.country]
                   .filter(Boolean)
                   .join(", ")}
               </p>
             </li>
+          ) : (
+            <li
+              className="mob_header_location"
+              onClick={openLocationEditModal}
+            >
+              <GrLocation size={16} />
+              <p className="header_location">{t("addLocation")}</p>
+            </li>
           )}
           <li className="mobile_nav_tab login_reg_nav_tab">
-            {isLogin() ? (
+            {UserData ? (
               <ProfileDropdown
                 closeDrawer={closeDrawer}
                 settings={settings}
@@ -569,16 +571,16 @@ const Header = () => {
               />
             ) : (
               <>
-                <li
+                <div
                   className="nav-item nav-link lg_in"
                   onClick={openLoginModal}
                 >
                   {t("login")}
-                </li>
+                </div>
                 <span className="vl"></span>
-                <li className="nav-item nav-link" onClick={openRegisterModal}>
+                <div className="nav-item nav-link" onClick={openRegisterModal}>
                   {t("register")}
-                </li>
+                </div>
               </>
             )}
           </li>
@@ -589,20 +591,20 @@ const Header = () => {
             />
           </li>
 
-          {isLogin() && (
-            <li className="mobile_nav_tab">
-              <Link href={"/ad-listing"}>
-                <button
-                  className="ad_listing"
-                  disabled={isAdListingClicked}
-                  onClick={handleCheckLogin}
-                >
-                  <IoIosAddCircleOutline size={18} />
-                  <span>{t("adListing")}</span>
-                </button>
-              </Link>
-            </li>
-          )}
+
+          <li className="mobile_nav_tab">
+            <Link href={"/ad-listing"}>
+              <button
+                className="ad_listing"
+                disabled={isAdListingClicked}
+                onClick={handleAdListing}
+              >
+                <IoIosAddCircleOutline size={18} />
+                <span>{t("adListing")}</span>
+              </button>
+            </Link>
+          </li>
+
 
           <div className="card-body">
             <Collapse
@@ -643,6 +645,7 @@ const Header = () => {
       />
 
       <LocationModal
+        key={IsLocationModalOpen}
         IsLocationModalOpen={IsLocationModalOpen}
         OnHide={() => setIsLocationModalOpen(false)}
       />

@@ -6,12 +6,19 @@ import { Table, Skeleton } from 'antd';
 import React, { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux';
 import UploadReceiptModal from '../PagesComponent/Transactions/UploadReceiptModal';
+import { getIsLoggedIn } from '@/redux/reuducer/authSlice';
 
 const TransactionsTable = () => {
 
     const CurrentLanguage = useSelector(CurrentLanguageData)
     const [IsUploadRecipt, setIsUploadRecipt] = useState(false)
     const [transactionId, setTransactionId] = useState('')
+    const [data, setData] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalItems, setTotalItems] = useState(0);
+    const [perPage, setPerPage] = useState(15);
+    const isLogin = useSelector(getIsLoggedIn);
 
 
     const handleUploadReceipt = (id) => {
@@ -113,37 +120,33 @@ const TransactionsTable = () => {
         ),
     }));
 
-    const [data, setData] = useState([]);
-    const [isLoading, setIsLoading] = useState(false);
-
-    const fetchTransactions = async () => {
+        const fetchTransactions = async (page) => {
         try {
             setIsLoading(true);
-            const res = await paymentTransactionApi.transaction({});
-            const { data } = res.data;
-            setData(data);
-            setIsLoading(false);
+            const res = await paymentTransactionApi.transaction({ page });
+            if (res?.data?.error === false) {
+                setData(res?.data?.data?.data);
+                setCurrentPage(res?.data?.data?.current_page);
+                setPerPage(res?.data?.data?.per_page);
+                setTotalItems(res?.data?.data?.total);
+            } else {
+                console.error(res?.data?.message);
+            }
         } catch (error) {
             console.log(error);
+            setIsLoading(false);
+        } finally {
             setIsLoading(false);
         }
     };
 
     useEffect(() => {
-        if (isLogin()) {
-            fetchTransactions()
+        if (isLogin) {
+            fetchTransactions(currentPage)
         }
-    }, []);
+    }, [currentPage, isLogin]);
 
-    const paginationOptions = {
-        pageSize: 10,
-        showTotal: (total, range) => {
-            const startEntry = range[0];
-            const endEntry = range[1] > total ? total : range[1];
-            return `Showing ${startEntry} to ${endEntry} of ${total} entries`;
-        },
-    };
-
+  
     return (
         <>
             {isLoading ? (
@@ -158,7 +161,19 @@ const TransactionsTable = () => {
                     columns={columns}
                     dataSource={data}
                     className="notif_table"
-                    pagination={paginationOptions}
+                    pagination={
+                        totalItems > perPage
+                            ? {
+                                current: currentPage,
+                                pageSize: perPage,
+                                total: totalItems,
+                                showTotal: (total, range) => `Showing ${range[0]}-${range[1]} of ${total}`,
+                                onChange: (page) => setCurrentPage(page),
+                                showSizeChanger: false,
+                                disabled: isLoading,
+                            }
+                            : false
+                    }
                 />
             )}
             <UploadReceiptModal IsUploadRecipt={IsUploadRecipt} setIsUploadRecipt={setIsUploadRecipt} transactionId={transactionId} setData={setData} />

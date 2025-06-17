@@ -40,7 +40,8 @@ import MyProdDetail from "./MyProdDetail";
 import UpdateMyItemStatus from "./UpdateMyItemStatus";
 import LocationCardInProdDet from "../SingleProductDetail/LocationCardInProdDet";
 import { useRouter } from "next/navigation";
-import withRedirect from "@/components/Layout/withRedirect";
+import AdEditedByAdmin from "./AdEditedByAdmin";
+
 
 const SingleListing = ({ slug }) => {
   const router = useRouter();
@@ -72,8 +73,9 @@ const SingleListing = ({ slug }) => {
   const [RenewId, setRenewId] = useState("");
   const [ItemPackages, setItemPackages] = useState([]);
   const isExpired = IsAdExpired(SingleListing);
+  const isEditedByAdmin = SingleListing?.is_edited_by_admin === 1;
 
- 
+
 
   const getSingleListingData = async () => {
     try {
@@ -138,7 +140,7 @@ const SingleListing = ({ slug }) => {
     }
   }, [isExpired]);
 
-  
+
   const getItemsPackageData = async () => {
     try {
       const res = await getPackageApi.getPackage({ type: "item_listing" });
@@ -326,11 +328,10 @@ const SingleListing = ({ slug }) => {
                     )}
                   </div>
                   <div
-                    className={`${
-                      images.length + (videoUrl ? 1 : 0) > 1
-                        ? "gallary_slider"
-                        : "hide_gallery_slider"
-                    }`}
+                    className={`${images.length + (videoUrl ? 1 : 0) > 1
+                      ? "gallary_slider"
+                      : "hide_gallery_slider"
+                      }`}
                   >
                     <Swiper
                       dir={isRtl ? "rtl" : "ltr"}
@@ -359,9 +360,8 @@ const SingleListing = ({ slug }) => {
                             }
                           >
                             <div
-                              className={`swiper_img_div ${
-                                index === activeIndex ? "selected" : ""
-                              }`}
+                              className={`swiper_img_div ${index === activeIndex ? "selected" : ""
+                                }`}
                             >
                               {index === images.length && videoUrl ? (
                                 <div className="video-thumbnail">
@@ -420,6 +420,7 @@ const SingleListing = ({ slug }) => {
                     </button>
                   </div>
                 </div>
+
                 {IsShowCreateFeaturedAd && (
                   <div className="feature_ad_section">
                     <div className="ad_content">
@@ -539,6 +540,10 @@ const SingleListing = ({ slug }) => {
                   setIsCallSingleListing={setIsCallSingleListing}
                 />
 
+                {isEditedByAdmin && (
+                  <AdEditedByAdmin admin_edit_reason={SingleListing?.admin_edit_reason} />
+                )}
+
                 {isExpired && (
                   <div className="change_status">
                     <p className="status">{t("renewAd")}</p>
@@ -597,15 +602,17 @@ const SingleListing = ({ slug }) => {
         handleSoldOut={handleSoldOut}
         selectedRadioValue={selectedRadioValue}
         setSelectedRadioValue={setSelectedRadioValue}
+        isJobCategory={SingleListing?.category?.is_job_category === 1}
       />
 
       <SoldOutConfirmModal
         isOpen={IsSoldOutConfirmModal}
         OnHide={() => setIsSoldOutConfirmModal(false)}
         makeItemSoldOut={makeItemSoldOut}
+        isJobCategory={SingleListing?.category?.is_job_category === 1}
       />
     </>
   );
 };
 
-export default withRedirect(SingleListing);
+export default SingleListing;

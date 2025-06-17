@@ -9,13 +9,12 @@ import ContentFive from './ContentFive'
 import AdSuccessfulModal from './AdSuccessfulModal'
 import { useSelector } from 'react-redux'
 import { generateSlug, isLogin, isValidURL, t } from '@/utils'
-import { addItemApi, categoryApi, getAreasApi, getCitiesApi, getCoutriesApi, getCustomFieldsApi, getStatesApi } from '@/utils/api'
+import { addItemApi, categoryApi, getAreasApi, getCitiesApi, getCoutriesApi, getCustomFieldsApi, getLocationApi, getStatesApi } from '@/utils/api'
 import toast from 'react-hot-toast'
-import axios from 'axios'
 import { CurrentLanguageData } from '@/redux/reuducer/languageSlice';
-import { settingsData } from '@/redux/reuducer/settingSlice'
-import withRedirect from '@/components/Layout/withRedirect'
+import { getIsPaidApi, settingsData } from '@/redux/reuducer/settingSlice'
 import { toggleLoginModal } from '@/redux/reuducer/globalStateSlice'
+import axios from 'axios'
 
 const AdListing = () => {
 
@@ -28,6 +27,10 @@ const AdListing = () => {
   const [IsAdSuccessfulModal, setIsAdSuccessfulModal] = useState(false)
   const [CurrenCategory, setCurrenCategory] = useState([])
   const [CurrentPath, setCurrentPath] = useState([])
+  const is_job_category = CurrentPath[CurrentPath.length - 1]?.is_job_category === 1
+  const isPriceOptional = CurrentPath[CurrentPath.length - 1]?.price_optional === 1;
+  const IsPaidApi = useSelector(getIsPaidApi);
+
   const [CustomFields, setCustomFields] = useState([])
   const [AdListingDetails, setAdListingDetails] = useState({
     title: '',
@@ -36,6 +39,8 @@ const AdListing = () => {
     price: '',
     phonenumber: '',
     link: '',
+    salaryMin: '',
+    salaryMax: '',
   })
   const [extraDetails, setExtraDetails] = useState({})
   const [uploadedImages, setUploadedImages] = useState([]);
@@ -280,47 +285,69 @@ const AdListing = () => {
 
   const getLocationWithMap = async (pos) => {
     try {
-      const response = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${pos.lat},${pos.lng}&key=${settings?.place_api_key}&lang=en`);
-
-      if (response.data.error_message) {
-        toast.error(response.data.error_message)
-        return
-      }
-
-      let city = '';
-      let state = '';
-      let country = '';
-      let address = '';
-
-      // Extract address components
-      // Loop through all results
-      response.data.results.forEach(result => {
-        const addressComponents = result.address_components;
-        const getAddressComponent = (type) => {
-          const component = addressComponents.find(comp => comp.types.includes(type));
-          return component ? component.long_name : '';
-        };
-
-        if (!city) city = getAddressComponent("locality");
-        if (!state) state = getAddressComponent("administrative_area_level_1");
-        if (!country) country = getAddressComponent("country");
-        if (!address) address = result.formatted_address;
+      const { lat, lng } = pos;
+      const response = await getLocationApi.getLocation({
+        lat,
+        lng,
+        lang: 'en',
       });
 
-      // Create location data object
-      const locationData = {
-        lat: pos.lat,
-        long: pos.lng,
-        city,
-        state,
-        country,
-        address
-      };
+      if (response?.data.error === false) {
 
-      // Set the location by map
-      setLocation(locationData);
+        if (IsPaidApi) {
+          let city = "";
+          let state = "";
+          let country = "";
+          let address = "";
+
+          const results = response?.data?.data?.results
+
+          results?.forEach((result) => {
+            const addressComponents = result.address_components;
+            const getAddressComponent = (type) => {
+              const component = addressComponents.find((comp) =>
+                comp.types.includes(type)
+              );
+              return component ? component.long_name : "";
+            };
+            if (!city) city = getAddressComponent("locality");
+            if (!state)
+              state = getAddressComponent("administrative_area_level_1");
+            if (!country) country = getAddressComponent("country");
+            if (!address) address = result?.formatted_address;
+          })
+
+          const locationData = {
+            lat,
+            long: lng,
+            city,
+            state,
+            country,
+            address,
+          };
+          setLocation(locationData);
+        } else {
+          const results = response?.data?.data;
+          const formattedAddress = [results?.area, results?.city, results?.state, results?.country].filter(Boolean).join(", ");
+          const cityData = {
+            lat: results?.latitude,
+            long: results?.longitude,
+            city: results?.city || "",
+            state: results?.state || "",
+            country: results?.country || "",
+            area: results?.area || "",
+            areaId: results?.area_id || "",
+            address: formattedAddress
+          };
+          setLocation(cityData);
+        }
+      }
+      else {
+        toast.error(t("errorOccurred"));
+      }
     } catch (error) {
       console.error('Error fetching location data:', error);
+      toast.error(t("errorOccurred"));
     }
   }
 
@@ -329,50 +356,76 @@ const AdListing = () => {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           try {
-            const locationData = {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude
-            };
+            const { latitude, longitude } = position.coords;
+            if (IsPaidApi) {
+              const response = await getLocationApi.getLocation({
+                lat: latitude,
+                lng: longitude,
+                lang: 'en',
+              });
+              if (response?.data.error === false) {
+                let city = "";
+                let state = "";
+                let country = "";
+                let address = "";
+                const results = response?.data?.data?.results
+                results?.forEach((result) => {
+                  const addressComponents = result.address_components;
+                  const getAddressComponent = (type) => {
+                    const component = addressComponents.find((comp) =>
+                      comp.types.includes(type)
+                    );
+                    return component ? component.long_name : "";
+                  };
+                  if (!city) city = getAddressComponent("locality");
+                  if (!state)
+                    state = getAddressComponent("administrative_area_level_1");
+                  if (!country) country = getAddressComponent("country");
+                  if (!address) address = result?.formatted_address;
+                })
 
-            const response = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${locationData.latitude},${locationData.longitude}&key=${settings?.place_api_key}&lang=en`);
-
-
-            if (response.data.error_message) {
-              toast.error(response.data.error_message)
-              return
+                const cityData = {
+                  lat: latitude,
+                  long: longitude,
+                  city,
+                  state,
+                  country,
+                  address,
+                };
+                setLocation(cityData);
+              } else {
+                toast.error(t("errorOccurred"));
+              }
             }
+            else {
+              const nominatimResponse = await axios.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                {
+                  params: {
+                    format: "json",
+                    lat: latitude,
+                    lon: longitude,
+                    "accept-language": "en",
+                    zoom: 10,
+                  },
+                }
+              );
+              const data = nominatimResponse?.data?.address;
 
-            // Loop through all results
-            let city = '';
-            let state = '';
-            let country = '';
-            let address = '';
-
-            response.data.results.forEach(result => {
-              const addressComponents = result.address_components;
-              const getAddressComponent = (type) => {
-                const component = addressComponents.find(comp => comp.types.includes(type));
-                return component ? component.long_name : '';
+              const address = [data?.city, data?.state, data?.country].filter(Boolean).join(", ");
+              const cityData = {
+                lat: latitude,
+                long: longitude,
+                city: data.city || "",
+                state: data.state || "",
+                country: data.country || "",
+                address
               };
-
-              if (!city) city = getAddressComponent("locality");
-              if (!state) state = getAddressComponent("administrative_area_level_1");
-              if (!country) country = getAddressComponent("country");
-              if (!address) address = result.formatted_address;
-            });
-
-            const cityData = {
-              lat: locationData.latitude,
-              long: locationData.longitude,
-              city,
-              state,
-              country,
-              address
-            };
-
-            setLocation(cityData);
+              setLocation(cityData);
+            }
           } catch (error) {
             console.error('Error fetching location data:', error);
+            toast.error(t("errorOccurred"));
           }
         },
         (error) => {
@@ -494,6 +547,8 @@ const AdListing = () => {
       price: '',
       phonenumber: '',
       link: '',
+      salaryMin: '',
+      salaryMax: '',
     })
     if (activeTab !== 1) {
       setActiveTab(1);
@@ -544,22 +599,39 @@ const AdListing = () => {
     else if (AdListingDetails.desc.trim() == "") {
       toast.error(t('descriptionRequired'))
       return;
-    } else if (AdListingDetails.price == "") {
+    }
+    if (is_job_category) {
+      // Validation for job listings (salary min/max) - optional but validate if provided
+      if (AdListingDetails.salaryMin && AdListingDetails.salaryMin < 0) {
+        toast.error(t('enterValidSalaryMin'));
+        return
+      }
+      else if (AdListingDetails.salaryMax && AdListingDetails.salaryMax < 0) {
+        toast.error(t('enterValidSalaryMax'));
+        return
+      } else if (AdListingDetails.salaryMin && AdListingDetails.salaryMax && Number(AdListingDetails.salaryMin) === Number(AdListingDetails.salaryMax)) {
+        toast.error(t('salaryMinCannotBeEqualMax'));
+        return
+      } else if (AdListingDetails.salaryMin && AdListingDetails.salaryMax &&
+        Number(AdListingDetails.salaryMin) > Number(AdListingDetails.salaryMax)) {
+        toast.error(t('salaryMinCannotBeGreaterThanMax'));
+        return
+      }
+    } else if (!isPriceOptional && !AdListingDetails.price) {
       toast.error(t('priceRequired'))
       return;
-    } else if (AdListingDetails?.price < 0) {
-      toast.error(t('enterValidPrice'));
-      return
+    } else if (AdListingDetails.price && AdListingDetails?.price < 0) {
+      toast.error(t("enterValidPrice"));
+      return;
     }
-    else if (AdListingDetails.phonenumber == "") {
+
+    if (!AdListingDetails.phonenumber) {
       toast.error(t('phoneRequired'))
       return;
     } else if (AdListingDetails.slug.trim() && !isValidSlug) {
       toast.error(t('addValidSlug'));
       return;
     }
-
-
     if (CustomFields?.length === 0) {
       setActiveTab(4)
     }
@@ -630,7 +702,7 @@ const AdListing = () => {
     return true;
   };
 
-  
+
   const postAd = async () => {
 
     const cat = CurrentPath[CurrentPath.length - 1];
@@ -668,6 +740,18 @@ const AdListing = () => {
       city: Location?.city,
       ...(AreaStore?.SelectedArea?.id ? { area_id: Number(AreaStore.SelectedArea.id) } : {})
     }
+
+    if (is_job_category) {
+      // Only add salary fields if they're provided
+      if (AdListingDetails.salaryMin) {
+        allData.min_salary = AdListingDetails.salaryMin;
+      }
+      if (AdListingDetails.salaryMax) {
+        allData.max_salary = AdListingDetails.salaryMax;
+      }
+    } else {
+      allData.price = AdListingDetails.price;
+    }
     try {
       setIsAdPlaced(true)
       const res = await addItemApi.addItem(allData)
@@ -692,7 +776,7 @@ const AdListing = () => {
       return
     }
 
-    const { title, desc, price, phonenumber, slug, link } = AdListingDetails;
+    const { title, desc, price, phonenumber, slug, link, salaryMin, salaryMax } = AdListingDetails;
 
     const isValidSlug = /^[a-z0-9-]+$/.test(slug.trim());
 
@@ -704,18 +788,50 @@ const AdListing = () => {
       return
     }
 
-    if (!title.trim() || !desc.trim() || !price || !phonenumber) {
+    if (!title.trim() || !desc.trim() || !phonenumber) {
       toast.error(t('completeDetails'));
       setActiveTab(2);
       return;
     }
 
+    // Validate based on category type
+    if (is_job_category) {
+      // Salary fields are optional, but validate if provided
+      if (salaryMin && salaryMin < 0) {
+        toast.error(t('enterValidSalaryMin'));
+        setActiveTab(2);
+        return;
+      }
 
-    // Additional validation logic (e.g., format checks) can be added here
-    if (price < 0) {
-      toast.error(t('enterValidPrice'));
-      setActiveTab(2);
-      return;
+      if (salaryMax && salaryMax < 0) {
+        toast.error(t('enterValidSalaryMax'));
+        setActiveTab(2);
+        return;
+      }
+
+      if (salaryMin && salaryMax && Number(salaryMin) === Number(salaryMax)) {
+        toast.error(t('salaryMinCannotBeEqualMax'));
+        setActiveTab(2);
+        return
+      }
+
+      if (salaryMin && salaryMax && Number(salaryMin) > Number(salaryMax)) {
+        toast.error(t('salaryMinCannotBeGreaterThanMax'));
+        setActiveTab(2);
+        return;
+      }
+    } else {
+      if (!isPriceOptional && !price) {
+        toast.error(t('completeDetails'));
+        setActiveTab(2);
+        return;
+      }
+
+      if (price && price < 0) {
+        toast.error(t("enterValidPrice"));
+        setActiveTab(2);
+        return;
+      }
     }
 
     if (slug.trim() && !isValidSlug) {
@@ -744,7 +860,6 @@ const AdListing = () => {
       toast.error(t('pleaseSelectCity'));
       return
     }
- 
     postAd()
   }
 
@@ -760,13 +875,11 @@ const AdListing = () => {
           setLastPage(data?.data?.last_page); // Update the current page
         } else {
           console.error("Error: Data is not an array", data);
-          // setIsLoading(false);
         }
       } else {
         return
       }
     } catch (error) {
-      // setIsLoading(false)
       console.error("Error:", error);
     } finally {
       setIsLoadMoreCat(false)
@@ -796,6 +909,8 @@ const AdListing = () => {
       price: '',
       phonenumber: '',
       link: '',
+      salaryMin: '',
+      salaryMax: '',
     })
     if (activeTab !== 1) {
       setActiveTab(1);
@@ -814,83 +929,164 @@ const AdListing = () => {
 
   return (
     <>
-      <BreadcrumbComponent title2={t('adListing')} />
-      <section className='adListingSect container'>
+      <BreadcrumbComponent title2={t("adListing")} />
+      <section className="adListingSect container">
         <div className="row">
           <div className="col-12">
-            <span className='heading'>{t('adListing')}</span>
+            <span className="heading">{t("adListing")}</span>
           </div>
         </div>
         <div className="row tabsWrapper">
-
           <div className="col-12">
             <div className="tabsHeader">
-              <span className={`tab ${activeTab === 1 ? 'activeTab' : ''}${DisabledTab.selectCategory ? 'PagArrowdisabled' : ''}`} onClick={() => handleTabClick(1)}>{t('selectedCategory')}</span>
-              <span className={`tab ${activeTab === 2 ? 'activeTab' : ''}${DisabledTab.details ? 'PagArrowdisabled' : ''}`} onClick={() => handleTabClick(2)}>{t('details')}</span>
+              <span
+                className={`tab ${activeTab === 1 ? "activeTab" : ""}${DisabledTab.selectCategory ? "PagArrowdisabled" : ""
+                  }`}
+                onClick={() => handleTabClick(1)}
+              >
+                {t("selectedCategory")}
+              </span>
+              <span
+                className={`tab ${activeTab === 2 ? "activeTab" : ""}${DisabledTab.details ? "PagArrowdisabled" : ""
+                  }`}
+                onClick={() => handleTabClick(2)}
+              >
+                {t("details")}
+              </span>
 
-              {
-                CustomFields.length !== 0 &&
-                <span className={`tab ${activeTab === 3 ? 'activeTab' : ''}${DisabledTab.extraDet ? 'PagArrowdisabled' : ''}`} onClick={() => handleTabClick(3)}>{t('extraDetails')}</span>
-              }
+              {CustomFields.length !== 0 && (
+                <span
+                  className={`tab ${activeTab === 3 ? "activeTab" : ""}${DisabledTab.extraDet ? "PagArrowdisabled" : ""
+                    }`}
+                  onClick={() => handleTabClick(3)}
+                >
+                  {t("extraDetails")}
+                </span>
+              )}
 
-
-              <span className={`tab ${activeTab === 4 ? 'activeTab' : ''}${DisabledTab.img ? 'PagArrowdisabled' : ''}`} onClick={() => handleTabClick(4)}>{t('images')}</span>
-              <span className={`tab ${activeTab === 5 ? 'activeTab' : ''}${DisabledTab.loc ? 'PagArrowdisabled' : ''}`} onClick={() => handleTabClick(5)}>{t('location')}</span>
+              <span
+                className={`tab ${activeTab === 4 ? "activeTab" : ""}${DisabledTab.img ? "PagArrowdisabled" : ""
+                  }`}
+                onClick={() => handleTabClick(4)}
+              >
+                {t("images")}
+              </span>
+              <span
+                className={`tab ${activeTab === 5 ? "activeTab" : ""}${DisabledTab.loc ? "PagArrowdisabled" : ""
+                  }`}
+                onClick={() => handleTabClick(5)}
+              >
+                {t("location")}
+              </span>
             </div>
           </div>
-          {
-            activeTab === 1 || activeTab === 2 ?
-              CurrentPath.length > 0 &&
+          {activeTab === 1 || activeTab === 2
+            ? CurrentPath.length > 0 && (
               <div className="col-12">
                 <div className="tabBreadcrumb">
-                  <span className='title1'>{t('selected')}</span>
-                  <div className='selected_wrapper'>
-                    {
-                      CurrentPath.map((item, index) => (
-
-                        <span className='title2' key={item.id} onClick={() => handleSelectedTabClick(item?.id)}>
-                          {item.name}
-                          {
-                            index !== CurrentPath.length - 1 && CurrentPath.length > 1 ? ',' : ''
-                          }
-                        </span>
-                      ))
-                    }
+                  <span className="title1">{t("selected")}</span>
+                  <div className="selected_wrapper">
+                    {CurrentPath.map((item, index) => (
+                      <span
+                        className="title2"
+                        key={item.id}
+                        onClick={() => handleSelectedTabClick(item?.id)}
+                      >
+                        {item.name}
+                        {index !== CurrentPath.length - 1 &&
+                          CurrentPath.length > 1
+                          ? ","
+                          : ""}
+                      </span>
+                    ))}
                   </div>
                 </div>
-              </div> : null
-          }
+              </div>
+            )
+            : null}
           <div className="col-12">
             <div className="contentWrapper">
-              <div className='row'>
-                {
-                  activeTab === 1 &&
-                  <ContentOne handleCategoryTabClick={handleCategoryTabClick} CurrenCategory={CurrenCategory} currentPage={currentPage} lastPage={lastPage} fetchMoreCategory={fetchMoreCategory} IsLoading={IsLoading} IsLoadMoreCat={IsLoadMoreCat} />
-                }
-                {
-                  activeTab === 2 &&
-                  <ContentTwo AdListingDetails={AdListingDetails} handleAdListingChange={handleAdListingChange} handleDetailsSubmit={handleDetailsSubmit} handleDeatilsBack={handleDeatilsBack} systemSettingsData={systemSettingsData} />
-                }
-                {
-                  activeTab === 3 && CustomFields.length !== 0 &&
-                  <ContentThree CustomFields={CustomFields} extraDetails={extraDetails} setExtraDetails={setExtraDetails} submitExtraDetails={submitExtraDetails} handleGoBack={handleGoBack} filePreviews={filePreviews} setFilePreviews={setFilePreviews} />
-                }
-                {
-                  activeTab === 4 &&
-                  <ContentFour setUploadedImages={setUploadedImages} uploadedImages={uploadedImages} OtherImages={OtherImages} setOtherImages={setOtherImages} handleImageSubmit={handleImageSubmit} handleGoBack={handleGoBack} />
-                }
-                {
-                  activeTab === 5 &&
-                  <ContentFive getCurrentLocation={getCurrentLocation} handleGoBack={handleGoBack} Location={Location} setLocation={setLocation} handleFullSubmission={handleFullSubmission} getLocationWithMap={getLocationWithMap} Address={Address} setAddress={setAddress} isAdPlaced={isAdPlaced} setCountryStore={setCountryStore} CountryStore={CountryStore} handleCountryScroll={handleCountryScroll} StateStore={StateStore} setStateStore={setStateStore} handleStateScroll={handleStateScroll} CityStore={CityStore} setCityStore={setCityStore} handleCityScroll={handleCityScroll} AreaStore={AreaStore} setAreaStore={setAreaStore} handleAreaScroll={handleAreaScroll} />
-                }
+              <div className="row">
+                {activeTab === 1 && (
+                  <ContentOne
+                    handleCategoryTabClick={handleCategoryTabClick}
+                    CurrenCategory={CurrenCategory}
+                    currentPage={currentPage}
+                    lastPage={lastPage}
+                    fetchMoreCategory={fetchMoreCategory}
+                    IsLoading={IsLoading}
+                    IsLoadMoreCat={IsLoadMoreCat}
+                  />
+                )}
+                {activeTab === 2 && (
+                  <ContentTwo
+                    AdListingDetails={AdListingDetails}
+                    handleAdListingChange={handleAdListingChange}
+                    handleDetailsSubmit={handleDetailsSubmit}
+                    handleDeatilsBack={handleDeatilsBack}
+                    systemSettingsData={systemSettingsData}
+                    is_job_category={is_job_category}
+                    isPriceOptional={isPriceOptional}
+                  />
+                )}
+                {activeTab === 3 && CustomFields.length !== 0 && (
+                  <ContentThree
+                    CustomFields={CustomFields}
+                    extraDetails={extraDetails}
+                    setExtraDetails={setExtraDetails}
+                    submitExtraDetails={submitExtraDetails}
+                    handleGoBack={handleGoBack}
+                    filePreviews={filePreviews}
+                    setFilePreviews={setFilePreviews}
+                  />
+                )}
+                {activeTab === 4 && (
+                  <ContentFour
+                    setUploadedImages={setUploadedImages}
+                    uploadedImages={uploadedImages}
+                    OtherImages={OtherImages}
+                    setOtherImages={setOtherImages}
+                    handleImageSubmit={handleImageSubmit}
+                    handleGoBack={handleGoBack}
+                  />
+                )}
+                {activeTab === 5 && (
+                  <ContentFive
+                    getCurrentLocation={getCurrentLocation}
+                    handleGoBack={handleGoBack}
+                    Location={Location}
+                    setLocation={setLocation}
+                    handleFullSubmission={handleFullSubmission}
+                    getLocationWithMap={getLocationWithMap}
+                    Address={Address}
+                    setAddress={setAddress}
+                    isAdPlaced={isAdPlaced}
+                    setCountryStore={setCountryStore}
+                    CountryStore={CountryStore}
+                    handleCountryScroll={handleCountryScroll}
+                    StateStore={StateStore}
+                    setStateStore={setStateStore}
+                    handleStateScroll={handleStateScroll}
+                    CityStore={CityStore}
+                    setCityStore={setCityStore}
+                    handleCityScroll={handleCityScroll}
+                    AreaStore={AreaStore}
+                    setAreaStore={setAreaStore}
+                    handleAreaScroll={handleAreaScroll}
+                  />
+                )}
               </div>
             </div>
           </div>
         </div>
       </section>
-      <AdSuccessfulModal IsAdSuccessfulModal={IsAdSuccessfulModal} OnHide={() => setIsAdSuccessfulModal(false)} CreatedAdSlug={CreatedAdSlug} />
+      <AdSuccessfulModal
+        IsAdSuccessfulModal={IsAdSuccessfulModal}
+        OnHide={() => setIsAdSuccessfulModal(false)}
+        CreatedAdSlug={CreatedAdSlug}
+      />
     </>
-  )
+  );
 }
 
-export default withRedirect(AdListing)
+export default AdListing

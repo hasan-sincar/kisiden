@@ -20,7 +20,6 @@ import BreadcrumbComponent from "@/components/Breadcrumb/BreadcrumbComponent";
 import NoData from "@/components/NoDataFound/NoDataFound";
 import SubscriptionCardSkeleton from "@/components/Skeleton/SubscriptionCardSkeleton";
 import Skeleton from "react-loading-skeleton";
-import withRedirect from "@/components/Layout/withRedirect";
 import BankDetailsModal from "./BankDetailsModal";
 
 const ProfileSubscription = () => {
@@ -290,4 +289,4 @@ const ProfileSubscription = () => {
   );
 };
 
-export default withRedirect(ProfileSubscription);
+export default ProfileSubscription;

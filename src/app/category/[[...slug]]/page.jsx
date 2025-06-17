@@ -1,24 +1,25 @@
 import Layout from "@/components/Layout/Layout";
 import SingleCategory from "@/components/PagesComponent/SingleCategory/SingleCategory"
-import axios from "axios";
-
-export const revalidate = 3600;
+import JsonLd from "@/components/SEO/JsonLd";
 
 
 export const generateMetadata = async ({ params }) => {
     try {
 
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-categories?slug=${params?.slug[0]}`
+        const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-categories?slug=${params?.slug[0]}`,
+            { next: { revalidate: 3600 } } // 1 hour
         );
 
+        const data = await response.json();
+            
         const stopWords = ['the', 'is', 'in', 'and', 'a', 'to', 'of', 'for', 'on', 'at', 'with', 'by', 'this', 'that', 'or', 'as', 'an', 'from', 'it', 'was', 'are', 'be', 'has', 'have', 'had', 'but', 'if', 'else'];
-
+        
         const generateKeywords = (description) => {
             if (!description) {
                 return process.env.NEXT_PUBLIC_META_kEYWORDS
-                    ? process.env.NEXT_PUBLIC_META_kEYWORDS.split(',').map(keyword => keyword.trim())
-                    : [];
+                ? process.env.NEXT_PUBLIC_META_kEYWORDS.split(',').map(keyword => keyword.trim())
+                : [];
             }
 
             // Convert description to lowercase, remove punctuation, and split into words
@@ -43,7 +44,7 @@ export const generateMetadata = async ({ params }) => {
             return sortedWords.slice(0, 10);
         }
 
-        const selfCategory = response.data?.self_category
+        const selfCategory = data?.self_category
         const title = selfCategory?.translated_name
         const description = selfCategory?.description
         const keywords = generateKeywords(selfCategory?.description)
@@ -66,16 +67,18 @@ export const generateMetadata = async ({ params }) => {
 
 const getCategoryItems = async (slug) => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item`,
-            { params: { page: 1, category_slug: slug } }
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item?page=1&category_slug=${slug}`,
+            { next: { revalidate: 86400 } } // 1 day
         );
-        return response?.data?.data?.data || [];
+
+        const data = await res.json();
+        return data?.data?.data || [];
     } catch (error) {
         console.error('Error fetching Product Items Data:', error);
         return [];
     }
-}
+};
 
 
 const SingleCategoryPage = async ({ params }) => {
@@ -99,11 +102,13 @@ const SingleCategoryPage = async ({ params }) => {
                     "@type": "Thing",
                     name: product?.category?.name,
                 },
-                offers: {
-                    "@type": "Offer",
-                    price: product?.price,
-                    priceCurrency: "USD",
-                },
+                ...(product?.price && {
+                    offers: {
+                        "@type": "Offer",
+                        price: product?.price,
+                        priceCurrency: "USD",
+                    },
+                }),
                 countryOfOrigin: product?.country,
             }
         }))
@@ -112,7 +117,7 @@ const SingleCategoryPage = async ({ params }) => {
 
     return (
         <>
-            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+            <JsonLd data={jsonLd} />
             <Layout>
                 <SingleCategory slug={params.slug} />
             </Layout>

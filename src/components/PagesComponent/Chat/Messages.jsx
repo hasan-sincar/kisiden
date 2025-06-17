@@ -3,7 +3,6 @@ import PushNotificationLayout from '@/components/firebaseNotification/PushNotifi
 import React, { useState } from 'react';
 import Chat from './Chat';
 import { useSelector } from 'react-redux';
-import withRedirect from '@/components/Layout/withRedirect';
 
 const Messages = () => {
 
@@ -25,4 +24,4 @@ const Messages = () => {
     );
 }
 
-export default withRedirect(Messages);
+export default Messages;

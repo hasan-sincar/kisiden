@@ -1,11 +1,12 @@
 "use client";
 import BreadcrumbComponent from "@/components/Breadcrumb/BreadcrumbComponent";
-import { store } from "@/redux/store";
+import { settingsData } from "@/redux/reuducer/settingSlice";
 import { t } from "@/utils";
+import { useSelector } from "react-redux";
 
 const AboutUs = () => {
-  const settingsData = store.getState().Settings?.data;
-  const aboutUs = settingsData?.data?.about_us;
+  const settings = useSelector(settingsData);
+  const aboutUs = settings?.data?.about_us;
 
   return (
     <section className="aboutus">

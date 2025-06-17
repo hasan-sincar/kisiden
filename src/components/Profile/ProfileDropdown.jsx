@@ -10,7 +10,7 @@ import { FiUser } from "react-icons/fi"
 import { IoMdNotificationsOutline } from "react-icons/io"
 import { LiaAdSolid } from "react-icons/lia"
 import { LuHeart } from "react-icons/lu"
-import { MdOutlineRateReview } from "react-icons/md"
+import { MdOutlineRateReview, MdWorkOutline } from "react-icons/md"
 import { RiLogoutCircleLine } from "react-icons/ri"
 import { useSelector } from "react-redux"
 
@@ -102,6 +102,16 @@ const ProfileDropdown = ({ closeDrawer, settings, handleLogout, isDrawer }) => {
         },
         {
             key: 9,
+            href: '/job-applications',
+            label: (
+                <div className="profDropIconCont">
+                    <span><MdWorkOutline size={16} /></span>
+                    <span>{t('jobApplications')}</span>
+                </div>
+            )
+        },
+        {
+            key: 10,
             label: (
                 <div className="profDropIconCont">
                     <span><RiLogoutCircleLine size={16} /></span>
@@ -113,7 +123,7 @@ const ProfileDropdown = ({ closeDrawer, settings, handleLogout, isDrawer }) => {
 
     const handleMenuClick = (props) => {
         closeDrawer()
-        if (Number(props.key) === 9) {
+        if (Number(props.key) === 10) {
             handleLogout()
             return
         }

@@ -1,7 +1,7 @@
 'use client'
 import Image from 'next/image'
 import { FaRegHeart } from 'react-icons/fa6'
-import { formatDate, formatPriceAbbreviated, placeholderImage, t } from '@/utils'
+import { formatDate, formatPriceAbbreviated, formatSalaryRange, placeholderImage, t } from '@/utils'
 import { BiBadgeCheck } from 'react-icons/bi'
 import { FaHeart } from "react-icons/fa6";
 import { manageFavouriteApi } from "@/utils/api";
@@ -11,10 +11,23 @@ import { useSelector } from "react-redux";
 import { toggleLoginModal } from '@/redux/reuducer/globalStateSlice'
 
 
-
 const ProdcutHorizontalCard = ({ data, handleLike }) => {
 
     const userData = useSelector(userSignUpData)
+    const isJobCategory = Number(data?.category?.is_job_category) === 1;
+    const isHidePrice = isJobCategory
+        ? [data?.min_salary, data?.max_salary].every(
+            val =>
+                val === null ||
+                val === undefined ||
+                (typeof val === "string" && val.trim() === "")
+        )
+        : data?.price === null ||
+        data?.price === undefined ||
+        (typeof data?.price === "string" && data?.price.trim() === "");
+
+
+
     const handleLikeItem = async (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -69,7 +82,9 @@ const ProdcutHorizontalCard = ({ data, handleLike }) => {
                         </div>
                     </div>
                     <div className="title_details">
-                        <span className='product_card_prod_price'>{formatPriceAbbreviated(data?.price)}</span>
+                        {!isHidePrice && <span className='product_card_prod_price'>{isJobCategory ?
+                            formatSalaryRange(data?.min_salary, data?.max_salary) : formatPriceAbbreviated(data?.price)}
+                        </span>}
                         <span className='title'>
                             {data?.name}
                         </span>
@@ -83,7 +98,6 @@ const ProdcutHorizontalCard = ({ data, handleLike }) => {
                     </div>
                 </div>
             </div>
-
         </>
     )
 }

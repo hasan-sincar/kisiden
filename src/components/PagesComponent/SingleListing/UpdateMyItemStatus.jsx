@@ -17,6 +17,7 @@ const UpdateMyItemStatus = ({
     SingleListing?.status === "resubmitted";
   const IsDisabled = !(SingleListing?.status === "approved");
 
+  const isJobCategory = SingleListing?.category?.is_job_category === 1;
 
   const isShowRejectedReason = SingleListing?.rejected_reason && (SingleListing?.status === "soft rejected" || SingleListing?.status === "permanent rejected")
 
@@ -77,7 +78,7 @@ const UpdateMyItemStatus = ({
 
         {SingleListing?.rejected_reason && (
           <p className="rejectedReason">
-            <span className="rejReasonLabel">Rejected Reason:</span>{" "}
+            <span className="rejReasonLabel">{t('rejectedReason')}:</span>{" "}
             {SingleListing?.rejected_reason}
           </p>
         )}
@@ -118,7 +119,7 @@ const UpdateMyItemStatus = ({
             <option value="expired" disabled>
               {t("expired")}
             </option>
-            <option value="sold out">{t("soldOut")}</option>
+            <option value="sold out">{isJobCategory ? t("jobClosed") : t("soldOut")}</option>
           </select>
           {!IsDisabled && (
             <MdKeyboardArrowDown size={20} className="down_select_arrow" />

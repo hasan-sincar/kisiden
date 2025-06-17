@@ -12,7 +12,7 @@ import { FiUser } from 'react-icons/fi';
 import { IoMdNotificationsOutline } from 'react-icons/io'
 import { LiaAdSolid } from "react-icons/lia";
 import { LuHeart } from "react-icons/lu";
-import { MdOutlineRateReview } from 'react-icons/md';
+import { MdOutlineRateReview, MdWorkOutline } from 'react-icons/md';
 import { RiLogoutCircleLine } from 'react-icons/ri';
 import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
@@ -38,6 +38,7 @@ const ProfileSidebar = () => {
                 cancelButton: "Swal-cancel-buttons"
             },
             confirmButtonText: t("yes"),
+            cancelButtonText: t("cancel"),
         }).then((result) => {
             if (result.isConfirmed) {
 
@@ -143,6 +144,10 @@ const ProfileSidebar = () => {
                 <Link href='/reviews' className={`profile_sidebar_tab ${pathname === '/reviews' && 'active_tab'}`}>
                     <MdOutlineRateReview size={24} />
                     <span className='profile_sidebar_notif'>{t('myReviews')}</span>
+                </Link>
+                <Link href='/job-applications' className={`profile_sidebar_tab ${pathname === '/job-applications' && 'active_tab'}`}>
+                    <MdWorkOutline size={24} />
+                    <span className='profile_sidebar_notif'>{t('jobApplications')}</span>
                 </Link>
                 <div className="profile_sidebar_tab" onClick={handleLogout}>
                     <RiLogoutCircleLine size={24} />

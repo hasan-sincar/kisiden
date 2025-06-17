@@ -1,15 +1,15 @@
 import Layout from '@/components/Layout/Layout';
 import FAQS from '@/components/PagesComponent/FAQS/FAQS'
-import axios from 'axios';
 
-export const revalidate = 3600;
 
 export const generateMetadata = async () => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}seo-settings?page=faqs`
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}seo-settings?page=faqs`,
+            { next: { revalidate: 3600 } } // Revalidate every 1 hour
         );
-        const faqs = response?.data?.data[0]
+        const data = await res.json();
+        const faqs = data?.data?.[0];
 
         return {
             title: faqs?.title ? faqs?.title : process.env.NEXT_PUBLIC_META_TITLE,

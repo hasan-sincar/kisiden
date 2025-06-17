@@ -1,8 +1,7 @@
 "use client";
 import ReactShare from "@/components/SEO/ReactShare";
 import { toggleLoginModal } from "@/redux/reuducer/globalStateSlice";
-import { CurrentLanguageData } from "@/redux/reuducer/languageSlice";
-import { exactPrice, formatProdDate, isLogin, t } from "@/utils";
+import { exactPrice, formatProdDate, formatSalaryRange, isLogin, t } from "@/utils";
 import { manageFavouriteApi } from "@/utils/api";
 import { Dropdown } from "antd";
 import { usePathname } from "next/navigation";
@@ -18,6 +17,21 @@ const ProductDetailCard = ({
   const path = usePathname();
   const CompanyName = systemSettingsData?.data?.data?.company_name;
   const currentUrl = `${process.env.NEXT_PUBLIC_WEB_URL}${path}`;
+
+  const isJobCategory = Number(productData?.category?.is_job_category) === 1;
+
+
+  // const isHidePrice = isJobCategory
+  //   ? [productData?.min_salary, productData?.max_salary].every(
+  //     val =>
+  //       val === null ||
+  //       val === undefined ||
+  //       (typeof val === "string" && val.trim() === "")
+  //   )
+  //   : productData?.price === null ||
+  //   productData?.price === undefined ||
+  //   (typeof productData?.price === "string" && productData?.price.trim() === "");
+
 
   const handleCopyUrl = async () => {
     try {
@@ -55,7 +69,7 @@ const ProductDetailCard = ({
         <div className="product_div">
           <div className="title_and_price">
             <span className="title">{productData?.name}</span>
-            <span className="price">{exactPrice(productData?.price)}</span>
+           <span className="price">{isJobCategory ? formatSalaryRange(productData?.min_salary, productData?.max_salary) : exactPrice(productData?.price)}</span>
           </div>
           <div className="like_share">
             {productData?.is_liked === true ? (

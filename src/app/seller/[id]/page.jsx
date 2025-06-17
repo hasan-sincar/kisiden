@@ -1,17 +1,20 @@
 import Layout from "@/components/Layout/Layout";
 import SellerProfile from "@/components/PagesComponent/SellerProfile/SellerProfile"
-import axios from "axios";
-
-export const revalidate = 3600;
+import JsonLd from "@/components/SEO/JsonLd";
 
 export const generateMetadata = async ({ params }) => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-seller?id=${params?.id}`
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-seller?id=${params?.id}`,
+            {
+                next: { revalidate: 3600 }, // Revalidate every 1 hour
+            }
         );
-        const seller = response?.data.data?.seller
-        const title = seller?.name
-        const image = seller?.profile
+
+        const data = await res.json();
+        const seller = data?.data?.seller;
+        const title = seller?.name;
+        const image = seller?.profile;
         return {
             title: title ? title : process.env.NEXT_PUBLIC_META_TITLE,
             description: process.env.NEXT_PUBLIC_META_DESCRIPTION,
@@ -25,13 +28,19 @@ export const generateMetadata = async ({ params }) => {
         return null;
     }
 };
+
+
 const getSellerItems = async (id) => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item`,
-            { params: { page: 1, user_id: id } }
+
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item?page=1&user_id=${id}`,
+            {
+                next: { revalidate: 86400 }, // Revalidate every 1 day
+            }
         );
-        return response?.data?.data?.data || [];
+        const data = await res.json();
+        return data?.data?.data || [];
     } catch (error) {
         console.error('Error fetching Product Items Data:', error);
         return [];
@@ -56,18 +65,20 @@ const SellerProfilePage = async ({ params }) => {
                     "@type": "Thing",
                     name: product?.category?.name,
                 },
-                offers: {
-                    "@type": "Offer",
-                    price: product?.price,
-                    priceCurrency: "USD",
-                },
+                ...(product?.price && {
+                    offers: {
+                        "@type": "Offer",
+                        price: product.price,
+                        priceCurrency: "USD",
+                    },
+                }),
                 countryOfOrigin: product?.country,
             }
         }))
     };
     return (
         <>
-            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+            <JsonLd data={jsonLd} />
             <Layout>
                 <SellerProfile id={params?.id} />
             </Layout>

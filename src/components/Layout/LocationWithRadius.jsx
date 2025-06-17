@@ -1,90 +1,98 @@
-import React, { useEffect } from 'react';
-import { GoogleMap, Marker, Circle } from '@react-google-maps/api';
-import { loadGoogleMaps } from '@/utils';
+'use client'
+import { MapContainer, TileLayer, Marker, useMapEvents, Circle } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import { settingsData } from '@/redux/reuducer/settingSlice';
 import { useSelector } from 'react-redux';
+import L from 'leaflet';
 import { getCityData } from '@/redux/reuducer/locationSlice';
+import { useEffect, useRef } from 'react';
 
-const LocationWithRadius = ({ setPosition, position, setKmRange, getLocationWithMap, KmRange, appliedKilometer }) => {
+// Fix Leaflet default marker icon issue
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
-    const systemSettingsData = useSelector(settingsData)
+// Map click handler component
+const MapClickHandler = ({ onMapClick }) => {
+    useMapEvents({
+        click: (e) => {
+            onMapClick(e.latlng);
+        },
+    });
+    return null;
+};
+
+
+
+const LocationWithRadius = ({ position, getLocationWithMap, KmRange }) => {
+    const systemSettingsData = useSelector(settingsData);
+    const settings = systemSettingsData?.data;
+    const latitude = Number(settings?.default_latitude);
+    const longitude = Number(settings?.default_longitude);
     const globalPos = useSelector(getCityData)
+    const mapRef = useRef();
 
     const placeHolderPos = {
         lat: globalPos?.lat,
         lng: globalPos?.long
     }
 
-    const settings = systemSettingsData?.data
-    const { isLoaded } = loadGoogleMaps();
+    const markerLatLong = position?.lat && position?.lng ? position : placeHolderPos
+
+
 
     useEffect(() => {
-        if (window.google && isLoaded) {
-            // Initialize any Google Maps API-dependent logic here
-
+        if (mapRef.current && markerLatLong.lat && markerLatLong.lng) {
+            mapRef.current.flyTo([markerLatLong.lat, markerLatLong.lng], mapRef.current.getZoom());
         }
-    }, [isLoaded]);
+    }, [markerLatLong?.lat, markerLatLong?.lng]);
+
     const containerStyle = {
-        marginTop: "30px",
+        marginTop: "16px",
+        marginBottom: "16px",
         width: '100%',
         height: '400px'
     };
 
-    const latitude = Number(settings?.default_latitude)
-    const longitude = Number(settings?.default_longitude)
-
-    const center = {
-        lat: position?.lat ? position.lat : latitude,
-        lng: position?.lng ? position?.lng : longitude
+    const handleMapClick = (latlng) => {
+        if (getLocationWithMap) {
+            getLocationWithMap({
+                lat: latlng.lat,
+                lng: latlng.lng
+            });
+        }
     };
-    const handleMapClick = (event) => {
-        const newPosition = {
-            lat: event.latLng.lat(),
-            lng: event.latLng.lng(),
-        };
-        setPosition(newPosition);
-        getLocationWithMap(newPosition);
-    };
-
-
-    useEffect(() => {
-        setKmRange(appliedKilometer)
-    }, [])
-
 
     return (
-        <>
-            {isLoaded &&
-                <GoogleMap
-                    mapContainerStyle={containerStyle}
-                    center={center}
-                    zoom={6}
-                    onClick={handleMapClick}
-                >
-                    {/* {(position?.lat || placeHolderPos.lat) && ( */}
-                    <>
-                        <Marker
-                            position={position?.lat ? position : placeHolderPos}
-                            options={{
-                                strokeColor: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim()
-                            }}
-                        />
-                        <Circle
-                            center={position?.lat ? position : placeHolderPos}
-                            radius={KmRange * 1000} // radius in meters (50km = 50000 meters)
-                            options={{
-                                strokeColor: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim(),
-                                strokeOpacity: 0.8,
-                                strokeWeight: 2,
-                                fillColor: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim(),
-                                fillOpacity: 0.35,
-                            }}
-                        />
-                    </>
-                    {/* )} */}
-                </GoogleMap>
-            }
-        </>
+        <MapContainer
+            style={containerStyle}
+            center={[markerLatLong?.lat || latitude, markerLatLong?.lng || longitude]}
+            zoom={6}
+            ref={mapRef}
+            whenCreated={(mapInstance) => {
+                mapRef.current = mapInstance;
+            }}
+        >
+            <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <MapClickHandler onMapClick={handleMapClick} />
+            <Marker position={[markerLatLong?.lat || latitude, markerLatLong?.lng || longitude]}>
+            </Marker>
+            <Circle
+                center={[markerLatLong?.lat || latitude, markerLatLong?.lng || longitude]}
+                radius={KmRange * 1000} // radius in meters
+                pathOptions={{
+                    color: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim(),
+                    fillColor: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim(),
+                    fillOpacity: 0.2
+                }}
+            />
+        </MapContainer>
     );
 };
 

@@ -3,6 +3,7 @@ import { t } from '@/utils';
 import { Button, Drawer, Space } from 'antd'
 import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
+import toast from 'react-hot-toast';
 
 
 const OpenInAppDrawer = ({ IsOpenInApp, OnHide, systemSettingsData }) => {
@@ -54,10 +55,7 @@ const OpenInAppDrawer = ({ IsOpenInApp, OnHide, systemSettingsData }) => {
                 systemSettingsData?.data?.data?.app_store_link;
         }
 
-        if (!applicationLink) {
-            toast.error(`${companyName} ${t('appStoreLinkNotAvailable')}`);
-            return;
-        }
+        
 
         // Attempt to open the app
         window.location.href = appScheme;
@@ -68,6 +66,12 @@ const OpenInAppDrawer = ({ IsOpenInApp, OnHide, systemSettingsData }) => {
             } else {
                 // App is not installed, ask user if they want to go to app store
                 if (confirm(`${companyName} ${t('appIsNotInstalled')} ${isIOS ? t('appStore') : t('playStore')}?`)) {
+
+                    if (!applicationLink) {
+                        toast.error(`${companyName} ${t('appStoreLinkNotAvailable')}`);
+                        return;
+                    }
+
                     window.location.href = applicationLink;
                 }
             }

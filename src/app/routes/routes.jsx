@@ -1,4 +1,3 @@
-
 export const protectedRoutes = [
     /^\/profile\/edit-profile$/,
     /^\/notifications$/,
@@ -11,5 +10,6 @@ export const protectedRoutes = [
     /^\/ad-listing$/,
     /^\/edit-listing\/.*$/,
     /^\/my-listing\/.*$/, // Regular expression to handle slugs
-    /^\/user-verification$/
+    /^\/user-verification$/,
+    /^\/job-applications$/
 ];

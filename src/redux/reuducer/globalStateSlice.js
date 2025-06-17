@@ -7,7 +7,8 @@ const initialState = {
     },
     notifications: {},
     IsShowBankDetails: false,
-    IsLoginModalOpen: false
+    IsLoginModalOpen: false,
+    IsVisitedLandingPage: false
 };
 
 export const globalStateSlice = createSlice({
@@ -26,11 +27,14 @@ export const globalStateSlice = createSlice({
         setIsLoginModalOpen: (state, action) => {
             state.IsLoginModalOpen = action.payload;
         },
+        setIsVisitedLandingPage: (location, action) => {
+            location.IsVisitedLandingPage = action.payload;
+        },
     },
 });
 
 export default globalStateSlice.reducer;
-export const { setChatAudio, setNotifications, setIsShowBankDetails, setIsLoginModalOpen } = globalStateSlice.actions;
+export const { setChatAudio, setNotifications, setIsShowBankDetails, setIsLoginModalOpen, setIsVisitedLandingPage } = globalStateSlice.actions;
 
 export const loadChatAudio = (data) => {
     store.dispatch(setChatAudio({ data }));
@@ -69,4 +73,9 @@ export const getGlobalNotifications = createSelector(
 export const getIsShowBankDetails = createSelector(
     (state) => state.GlobalState,
     (GlobalState) => GlobalState.IsShowBankDetails
+);
+
+export const getIsVisitedLandingPage = createSelector(
+    (state) => state.GlobalState,
+    (GlobalState) => GlobalState.IsVisitedLandingPage
 );

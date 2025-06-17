@@ -12,7 +12,7 @@ import PopularCategories from "./PopularCategories";
 import FeaturedSections from "./FeaturedSections";
 import HomeAllItem from "./HomeAllItem";
 import { getKilometerRange } from "@/redux/reuducer/locationSlice";
-import withRedirect from "../Layout/withRedirect";
+
 
 const HomePage = () => {
   const dispatch = useDispatch();
@@ -54,7 +54,9 @@ const HomePage = () => {
             params.latitude = cityData.lat;
             params.longitude = cityData.long;
           } else {
-            if (cityData?.city) {
+            if (cityData?.areaId) {
+              params.area_id = cityData.areaId;
+            } else if (cityData?.city) {
               params.city = cityData.city;
             } else if (cityData?.state) {
               params.state = cityData.state;
@@ -96,4 +98,4 @@ const HomePage = () => {
   );
 };
 
-export default withRedirect(HomePage);
+export default HomePage;

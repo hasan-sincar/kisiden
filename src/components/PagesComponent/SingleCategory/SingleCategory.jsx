@@ -22,7 +22,7 @@ import { CatItems, FullTreeData, SingleCurrentPage, SingleLastPage, ViewCategory
 import { getCityData } from "@/redux/reuducer/locationSlice"
 import { CurrentLanguageData } from "@/redux/reuducer/languageSlice"
 import { categorySortBy, setCategorySortBy } from "@/redux/reuducer/filterSlice"
-import withRedirect from "@/components/Layout/withRedirect"
+
 
 
 const SingleCategory = ({ slug }) => {
@@ -149,7 +149,7 @@ const SingleCategory = ({ slug }) => {
             setTitle(BreadcrumbPath[1]?.name)
         }
         else if (BreadcrumbPath?.length > 2) {
-            setTitle(`${BreadcrumbPath[BreadcrumbPath.length - 1]?.name} in ${BreadcrumbPath[BreadcrumbPath.length - 2]?.name}`)
+            setTitle(`${BreadcrumbPath[BreadcrumbPath.length - 1]?.name} ${t('in')} ${BreadcrumbPath[BreadcrumbPath.length - 2]?.name}`)
         }
     }, [BreadcrumbPath])
 
@@ -424,4 +424,4 @@ const SingleCategory = ({ slug }) => {
     )
 }
 
-export default withRedirect(SingleCategory)
+export default SingleCategory

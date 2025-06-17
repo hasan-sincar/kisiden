@@ -1,7 +1,6 @@
 'use client'
 import BreadcrumbComponent from "@/components/Breadcrumb/BreadcrumbComponent"
 import MyReviewsCard from "@/components/Cards/MyReviewsCard"
-import withRedirect from "@/components/Layout/withRedirect"
 import NoData from "@/components/NoDataFound/NoDataFound"
 import ProfileSidebar from "@/components/Profile/ProfileSidebar"
 import { calculateRatingPercentages, isLogin, t } from "@/utils"
@@ -165,4 +164,4 @@ const Reviews = () => {
     )
 }
 
-export default withRedirect(Reviews)
+export default Reviews

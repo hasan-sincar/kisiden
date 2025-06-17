@@ -48,16 +48,18 @@ const Chat = ({ setActiveTab, activeTab, chatMessages, setChatMessages, selected
     const [IsTipsOpen, setIsTipsOpen] = useState(false)
     const [tipsData, setTipsData] = useState([])
     const makeUnableToChat =
-      selectedTabData?.item?.status === "review" ||
-      selectedTabData?.item?.status === "permanent rejected" ||
-      selectedTabData?.item?.status === "soft rejected" ||
-      selectedTabData?.item?.status === "sold out" ||
-      selectedTabData?.item?.status === "resubmitted" ||
-      selectedTabData?.item?.status === "expired" ||
-      selectedTabData?.item?.status === "inactive";
+        selectedTabData?.item?.status === "review" ||
+        selectedTabData?.item?.status === "permanent rejected" ||
+        selectedTabData?.item?.status === "soft rejected" ||
+        selectedTabData?.item?.status === "sold out" ||
+        selectedTabData?.item?.status === "resubmitted" ||
+        selectedTabData?.item?.status === "expired" ||
+        selectedTabData?.item?.status === "sold out" ||
+        selectedTabData?.item?.status === "resubmitted" ||
+        selectedTabData?.item?.status === "inactive";
     const IsShowRating = activeTab === 'buying' && selectedTabData?.item?.status === "sold out"
-    const IsShowMakeOfferOnTop = IsTopMakeOffer && chatMessages?.length > 0 && !selectedTabData?.amount && !makeUnableToChat && activeTab === 'buying'
-    const IsShowInitialMakeOffer = chatMessages?.length === 0 && !selectedTabData?.amount && !IsMakeOfferInChat && activeTab === 'buying' && !makeUnableToChat
+    const IsShowMakeOfferOnTop = IsTopMakeOffer && chatMessages?.length > 0 && !selectedTabData?.amount && selectedTabData?.item?.category?.price_optional === 0 && selectedTabData?.item?.category?.is_job_category === 0 && !makeUnableToChat && activeTab === 'buying'
+    const IsShowInitialMakeOffer = chatMessages?.length === 0 && selectedTabData?.item?.category?.price_optional === 0 && selectedTabData?.item?.category?.is_job_category === 0 && !selectedTabData?.amount && !IsMakeOfferInChat && activeTab === 'buying' && !makeUnableToChat
     const IsShowOfferInput = IsMakeOfferInChat && activeTab === 'buying' && !selectedTabData?.amount && !makeUnableToChat
     const [IsSubmittingOffer, setIsSubmittingOffer] = useState(false)
     const [buyerChatList, setBuyerChatList] = useState([]);
@@ -290,7 +292,7 @@ const Chat = ({ setActiveTab, activeTab, chatMessages, setChatMessages, selected
             item_offer_id: selectedTabData?.id,
             message: messageInput ? messageInput : '',
             file: selectedFile ? selectedFile : '',
-            audio: audiofile ? audiofile : '' 
+            audio: audiofile ? audiofile : ''
         };
 
         try {
@@ -590,7 +592,7 @@ const Chat = ({ setActiveTab, activeTab, chatMessages, setChatMessages, selected
 
                                             {makeUnableToChat ? (
                                                 <div className='itemStatus'>
-                                                        <p>{t("thisAd")} {selectedTabData?.item?.status}</p>
+                                                    <p>{t("thisAd")} {selectedTabData?.item?.status}</p>
                                                 </div>
                                             ) : (
                                                 <div className="chat_input_cont" style={{ padding: isBlocked ? "0px" : "16px" }}>

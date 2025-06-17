@@ -4,6 +4,8 @@ import { store } from "../store";
 
 const initialState = {
     cityData: {
+        area: "",
+        areaId: "",
         city: "",
         state: "",
         country: "",
@@ -13,7 +15,7 @@ const initialState = {
     KilometerRange: 0,
     minLength: "",
     maxLength: "",
-    IsBrowserSupported: false
+    IsBrowserSupported: true,
 }
 export const locationSlice = createSlice({
     name: "Location",
@@ -47,6 +49,18 @@ export const saveCity = (data) => {
     store.dispatch(setCityData({ data }));
 }
 
+// Action to reset cityData to initial state
+export const resetCityData = () => {
+    const initialCityData = {
+        city: "",
+        state: "",
+        country: "",
+        lat: "",
+        long: ""
+    };
+    store.dispatch(setCityData({ data: initialCityData }));
+}
+
 export const getCityData = createSelector(
     (state) => state.Location,
     (Location) => Location.cityData
@@ -59,5 +73,6 @@ export const getIsBrowserSupported = createSelector(
     (state) => state.Location,
     (Location) => Location.IsBrowserSupported
 )
+
 
 

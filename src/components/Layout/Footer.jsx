@@ -1,7 +1,7 @@
 'use client'
 import Image from 'next/image'
 import Link from 'next/link'
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import bg from "../../../public/assets/NewBG.png"
 import { FaFacebook, FaLinkedin, FaPinterest } from "react-icons/fa";
 import { FaInstagram, FaSquareXTwitter } from "react-icons/fa6";
@@ -10,34 +10,30 @@ import { RiMailSendFill } from "react-icons/ri";
 import { BiPhoneCall } from "react-icons/bi";
 import googleDownload from '../../../public/assets/Google Download.svg'
 import appleDownload from '../../../public/assets/iOS Download.svg'
-import { usePathname } from 'next/navigation'
 import { placeholderImage, t } from '@/utils'
 import { settingsData } from '@/redux/reuducer/settingSlice'
 import { useSelector } from 'react-redux'
 
 
 const Footer = () => {
-    const pathname = usePathname()
-    const isLandingPage = pathname === "/home"
     const [showDownloadLinks, setShowDownloadLinks] = useState(false)
     const systemSettingsData = useSelector(settingsData)
     const settings = systemSettingsData?.data
     const currentYear = new Date().getFullYear();
-
     const showGetInTouchSection = settings?.company_address || settings?.company_email || settings?.company_tel1;
+
     useEffect(() => {
-        if (settings?.play_store_link && settings?.app_store_link && isLandingPage) {
+        if (settings?.play_store_link || settings?.app_store_link) {
             setShowDownloadLinks(true);
         } else {
             setShowDownloadLinks(false);
         }
-    }, [settings, isLandingPage]);
+    }, [settings]);
 
     return (
         <section className='main_footer' style={{ marginTop: showDownloadLinks ? "200px" : "60px" }}>
             <div className='container'>
                 {showDownloadLinks ? (
-
                     <div className="eClassifyApp" style={{
                         background: `url(${bg.src})`,
                         backgroundSize: 'cover'
@@ -47,11 +43,10 @@ const Footer = () => {
                                 <span>{t("experienceTheMagic")} {settings?.company_name} {t("app")}</span>
                             </div>
                             <div className="social_links">
-                                {settings?.app_store_link &&
+                                {settings?.play_store_link &&
                                     <Link href={settings?.play_store_link}>
                                         <Image src={googleDownload} alt='google' width={0} height={0} className='google' onErrorCapture={placeholderImage} />
                                     </Link>
-
                                 }
                                 {settings?.app_store_link &&
                                     <Link href={settings?.app_store_link}>
@@ -59,15 +54,14 @@ const Footer = () => {
                                     </Link>
                                 }
                             </div>
-                            {/* </div> */}
                         </div>
                     </div>
                 ) : null}
 
-                <div className="row" id="footer_deatils">
+                <div className="row" id="footer_deatils" style={{ marginTop: showDownloadLinks ? "-100px" : "0" }}>
                     <div className="col-12 col-md-6 col-lg-4 right_border">
                         <div id="footer_logo_section">
-                            <Link href={`${isLandingPage ? '/home' : '/'}`}>
+                            <Link href='/'>
                                 <Image
                                     loading="lazy"
                                     src={settings?.footer_logo}
@@ -144,7 +138,6 @@ const Footer = () => {
                         </div>
                     </div>
                     {showGetInTouchSection &&
-
                         <div className="col-12 col-md-6 col-lg-4">
                             <div className="get_in_touch_section">
                                 <div className="footer_headlines">
@@ -197,22 +190,19 @@ const Footer = () => {
                         </div>
                     }
                 </div>
-            </div>
-            <div className="copy_right_footer">
-                {/* <div className="container"> */}
-
-                <div className='copyright'>
-                    <span>{t('copyright')} © {settings?.company_name} {currentYear}. {t('allRightsReserved')}</span>
+                <div className="copy_right_footer">
+                    <div className='copyright'>
+                        <span>{t('copyright')} © {settings?.company_name} {currentYear}. {t('allRightsReserved')}</span>
+                    </div>
+                    <div className='privacyandcondtion'>
+                        <Link href={'/privacy-policy'}>
+                            <span className='privacy'>{t('privacyPolicy')}</span>
+                        </Link>
+                        <Link href={'/terms-and-condition'}>
+                            <span className='terms'>{t('termsConditions')}</span>
+                        </Link>
+                    </div>
                 </div>
-                <div className='privacyandcondtion'>
-                    <Link href={'/privacy-policy'}>
-                        <span className='privacy'>{t('privacyPolicy')}</span>
-                    </Link>
-                    <Link href={'/terms-and-condition'}>
-                        <span className='terms'>{t('termsConditions')}</span>
-                    </Link>
-                </div>
-                {/* </div> */}
             </div>
         </section>
     )

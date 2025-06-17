@@ -21,7 +21,7 @@ import { setBreadcrumbPath } from "@/redux/reuducer/breadCrumbSlice"
 import { ViewCategory, setCategoryView } from "@/redux/reuducer/categorySlice"
 import { getCityData } from "@/redux/reuducer/locationSlice"
 import { categorySortBy, setCategorySortBy } from "@/redux/reuducer/filterSlice"
-import withRedirect from "@/components/Layout/withRedirect"
+
 
 
 const Products = () => {
@@ -371,4 +371,4 @@ const Products = () => {
     )
 }
 
-export default withRedirect(Products)
+export default Products

@@ -27,7 +27,7 @@ export const settingsSlice = createSlice({
         getToken: (settings, action) => {
             settings.fcmToken = action.payload.data;
         },
-        
+
     },
 });
 
@@ -49,6 +49,14 @@ export const isFreeAdListing = createSelector(
     (state) => state.Settings,
     (settings) => settings?.data?.data?.free_ad_listing
 );
+export const getMinRange = createSelector(
+    (state) => state.Settings,
+    (settings) => Number(settings?.data?.data?.min_length)
+);
+export const getMaxRange = createSelector(
+    (state) => state.Settings,
+    (settings) => Number(settings?.data?.data?.max_length)
+);
 export const getIsLandingPage = createSelector(
     (state) => state.Settings,
     (settings) => Number(settings?.data?.data?.show_landing_page)
@@ -57,6 +65,11 @@ export const getIsLandingPage = createSelector(
 export const Fcmtoken = createSelector(
     state => state.Settings,
     settings => settings?.fcmToken
+);
+
+export const getIsPaidApi = createSelector(
+    state => state.Settings,
+    settings => settings?.data?.data?.map_provider === 'google_places'
 );
 
 

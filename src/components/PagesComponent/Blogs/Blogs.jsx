@@ -70,7 +70,6 @@ const Blogs = () => {
         getPopulerBlogsData()
     }, [])
 
-
     return (
         <section className='static_pages'>
             <BreadcrumbComponent title2={t("ourBlogs")} />

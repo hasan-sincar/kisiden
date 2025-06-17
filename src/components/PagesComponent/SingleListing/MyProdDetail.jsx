@@ -1,22 +1,26 @@
 "use client";
 import ReactShare from "@/components/SEO/ReactShare";
-import { exactPrice, formatMyListingDate } from "@/utils";
+import { exactPrice, formatMyListingDate, formatSalaryRange } from "@/utils";
 import { deleteItemApi } from "@/utils/api";
 import { Dropdown } from "antd";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import toast from "react-hot-toast";
-import { FaRegCalendarCheck } from "react-icons/fa6";
+import { FaBriefcase, FaRegCalendarCheck } from "react-icons/fa6";
 import { FiShare2 } from "react-icons/fi";
 import { LuHeart } from "react-icons/lu";
 import { RxEyeOpen } from "react-icons/rx";
 import { useSelector } from "react-redux";
 import Swal from "sweetalert2";
+import JobApplicationsModal from "./JobApplicationsModal";
 
 const MyProdDetail = ({ SingleListing, t, Status, slug }) => {
   const router = useRouter();
   const systemSettingsData = useSelector((state) => state?.Settings);
   const CompanyName = systemSettingsData?.data?.data?.company_name;
   const currentUrl = `${process.env.NEXT_PUBLIC_WEB_URL}/product-details/${slug}`;
+  const [IsShowJobApplications, setIsShowJobApplications] = useState(false);
+  const isJobCategory = SingleListing?.category?.is_job_category === 1;
 
   const handleCopyUrl = async () => {
     const headline = `🚀 Discover the perfect deal! Explore "${SingleListing?.name}" from ${CompanyName} and grab it before it's gone. Shop now at ${currentUrl}`;
@@ -84,7 +88,8 @@ const MyProdDetail = ({ SingleListing, t, Status, slug }) => {
         </div>
         <div className="price_ad">
           <div className="price">
-            <span>{exactPrice(SingleListing?.price)}</span>
+            <span>{isJobCategory ? formatSalaryRange(SingleListing?.min_salary, SingleListing?.max_salary)
+              : exactPrice(SingleListing?.price)}</span>
           </div>
           <span className="ad">
             {t("adId")} #{SingleListing?.id}
@@ -119,14 +124,34 @@ const MyProdDetail = ({ SingleListing, t, Status, slug }) => {
         </button>
 
         {(SingleListing?.status == "review" ||
-        SingleListing?.status == "soft rejected" ||
-        SingleListing?.status === "approved" ||
-        SingleListing?.status == "resubmitted") && (
-          <button className="cyna_btn" onClick={handleEditClick}>
-            {t("edit")}
-          </button>
-        )}
+          SingleListing?.status == "soft rejected" ||
+          SingleListing?.status === "approved" ||
+          SingleListing?.status == "resubmitted") && (
+            <button className="cyna_btn" onClick={handleEditClick}>
+              {t("edit")}
+            </button>
+          )}
       </div>
+
+      {SingleListing?.status === "approved" &&
+        isJobCategory && (
+          <div className="job_applications_btn">
+            <button
+              className="applications_btn"
+              onClick={() => setIsShowJobApplications(true)}
+            >
+              <FaBriefcase />
+              {t("jobApplications")}
+            </button>
+          </div>
+        )}
+
+      <JobApplicationsModal
+        isOpen={IsShowJobApplications}
+        onClose={() => setIsShowJobApplications(false)}
+        listingId={SingleListing?.id}
+        t={t}
+      />
     </div>
   );
 };

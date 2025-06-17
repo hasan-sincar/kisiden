@@ -1,6 +1,5 @@
 'use client'
 import BreadcrumbComponent from "@/components/Breadcrumb/BreadcrumbComponent"
-import withRedirect from "@/components/Layout/withRedirect"
 import NotificationTable from "@/components/Profile/NotificationTable"
 import ProfileSidebar from "@/components/Profile/ProfileSidebar"
 import { CurrentLanguageData } from "@/redux/reuducer/languageSlice"
@@ -30,4 +29,4 @@ const Notifications = () => {
   )
 }
 
-export default withRedirect(Notifications)
+export default Notifications

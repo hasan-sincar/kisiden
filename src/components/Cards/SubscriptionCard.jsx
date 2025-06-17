@@ -23,13 +23,9 @@ const SubscriptionCard = ({ data, handlePurchasePackage }) => {
         <div className="sub_details">
           <span className="name">{data?.name}</span>
           <div className="price">
-            {data?.final_price !== 0 ? (
-              <span className="price">
-                {formatPriceAbbreviated(data?.final_price)}
-              </span>
-            ) : (
-              t("Free")
-            )}
+            <span className="price">
+              {formatPriceAbbreviated(data?.final_price)}
+            </span>
             {data?.price > data?.final_price && (
               <span className="sale_price">
                 {formatPriceAbbreviated(data?.price)}
@@ -38,10 +34,10 @@ const SubscriptionCard = ({ data, handlePurchasePackage }) => {
           </div>
           {!data.is_active
             ? data?.discount_in_percentage !== 0 && (
-                <span className="sale_tag">
-                  {data?.discount_in_percentage}% {t("off")}
-                </span>
-              )
+              <span className="sale_tag">
+                {data?.discount_in_percentage}% {t("off")}
+              </span>
+            )
             : null}
         </div>
       </div>

@@ -2,7 +2,7 @@
 import MapComponent from '@/components/MyListing/MapComponent';
 import { getIsBrowserSupported } from '@/redux/reuducer/locationSlice';
 import { t } from '@/utils';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { BiMapPin } from 'react-icons/bi';
 import { GrLocation } from 'react-icons/gr';
 import { MdOutlineMyLocation } from 'react-icons/md';

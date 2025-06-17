@@ -67,7 +67,7 @@ const LocationTree = ({
         } else {
           // Create a new root node with the initial list of countries
           const rootNode = {
-            title: "All Countries",
+            title: t("allCountries"),
             key: "all_countries",
             id: "all_countries",
             isLeaf: false,

@@ -3,7 +3,7 @@ import { Modal } from "antd"
 import Link from "next/link"
 
 
-const SoldOutConfirmModal = ({ isOpen, OnHide, makeItemSoldOut }) => {
+const SoldOutConfirmModal = ({ isOpen, OnHide, makeItemSoldOut, isJobCategory }) => {
     return (
         <Modal
             centered
@@ -16,8 +16,8 @@ const SoldOutConfirmModal = ({ isOpen, OnHide, makeItemSoldOut }) => {
         >
             <div className='nopackage'>
                 <div className='nopackage_content'>
-                    <h2>{t('confirmSoldOut')}</h2>
-                    <p>{t('cantUndoChanges')}</p>
+                    <h2>{isJobCategory ? t('confirmHire') : t('confirmSoldOut')}</h2>
+                    <p>{isJobCategory ? t('markAsClosedDescription') : t('cantUndoChanges')}</p>
                 </div>
                 <div className='nopackage_btn_cont'>
                     <button className='cancel' onClick={OnHide}>{t('cancel')}</button>

@@ -1,14 +1,17 @@
 import Layout from '@/components/Layout/Layout';
 import FeaturedViewAll from '@/components/PagesComponent/FeaturedViewAll/FeaturedViewAll'
-import axios from 'axios';
-
-export const revalidate = 3600;
+import JsonLd from '@/components/SEO/JsonLd';
 
 export const generateMetadata = async ({ params }) => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-featured-section?slug=${params?.slug}`
+
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-featured-section?slug=${params?.slug}`,
+            { next: { revalidate: 3600 } } // 1 hour
         );
+
+        const data = await res.json();
+        const section = data?.data?.[0];
 
         const stopWords = ['the', 'is', 'in', 'and', 'a', 'to', 'of', 'for', 'on', 'at', 'with', 'by', 'this', 'that', 'or', 'as', 'an', 'from', 'it', 'was', 'are', 'be', 'has', 'have', 'had', 'but', 'if', 'else'];
 
@@ -41,10 +44,11 @@ export const generateMetadata = async ({ params }) => {
             return sortedWords.slice(0, 10);
         }
 
-        const title = response?.data?.data[0].title
-        const description = response?.data?.data[0].title
-        const keywords = generateKeywords(response?.data?.data[0].title)
-        const image = response?.data?.data[0]?.image
+
+        const title = section?.title;
+        const description = section?.description
+        const image = section?.image;
+        const keywords = generateKeywords(title);
 
         return {
             title: title ? title : process.env.NEXT_PUBLIC_META_TITLE,
@@ -60,13 +64,14 @@ export const generateMetadata = async ({ params }) => {
     }
 };
 
-const fetchProductItems = async (slug) => {
+export const fetchProductItems = async (slug) => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item`,
-            { params: { page: 1, featured_section_slug: slug } }
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item?page=1&featured_section_slug=${slug}`,
+            { next: { revalidate: 86400 } } // Revalidate after 1 day
         );
-        return response?.data?.data?.data || [];
+        const data = await res.json();
+        return data?.data?.data || [];
     } catch (error) {
         console.error('Error fetching Product Items Data:', error);
         return [];
@@ -74,7 +79,8 @@ const fetchProductItems = async (slug) => {
 };
 
 
-const page = async ({ params }) => {
+
+const SingleFeaturedSectionPage = async ({ params }) => {
 
     const ProductItems = await fetchProductItems(params?.slug)
 
@@ -95,11 +101,13 @@ const page = async ({ params }) => {
                     "@type": "Thing",
                     name: product?.category?.name,
                 },
-                offers: {
-                    "@type": "Offer",
-                    price: product?.price,
-                    priceCurrency: "USD",
-                },
+                ...(product?.price && {
+                    offers: {
+                        "@type": "Offer",
+                        price: product?.price,
+                        priceCurrency: "USD",
+                    },
+                }),
                 countryOfOrigin: product?.country,
             }
         }))
@@ -107,7 +115,7 @@ const page = async ({ params }) => {
 
     return (
         <>
-            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+            <JsonLd data={jsonLd} />
             <Layout>
                 <FeaturedViewAll slug={params?.slug} />
             </Layout>
@@ -115,4 +123,4 @@ const page = async ({ params }) => {
     )
 }
 
-export default page
+export default SingleFeaturedSectionPage

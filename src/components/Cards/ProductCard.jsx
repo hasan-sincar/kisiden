@@ -4,6 +4,7 @@ import { FaRegHeart } from "react-icons/fa";
 import {
   formatDate,
   formatPriceAbbreviated,
+  formatSalaryRange,
   placeholderImage,
   t,
 } from "@/utils";
@@ -17,6 +18,19 @@ import { toggleLoginModal } from "@/redux/reuducer/globalStateSlice";
 
 const ProductCard = ({ data, handleLike }) => {
   const userData = useSelector(userSignUpData);
+  const isJobCategory = Number(data?.category?.is_job_category) === 1;
+
+  const isHidePrice = isJobCategory
+    ? [data?.min_salary, data?.max_salary].every(
+      val =>
+        val === null ||
+        val === undefined ||
+        (typeof val === "string" && val.trim() === "")
+    )
+    : data?.price === null ||
+    data?.price === undefined ||
+    (typeof data?.price === "string" && data?.price.trim() === "");
+
 
   const handleLikeItem = async (e) => {
     e.preventDefault();
@@ -53,7 +67,7 @@ const ProductCard = ({ data, handleLike }) => {
           onErrorCapture={placeholderImage}
         />
         {data?.is_feature ? (
-          <div className="product_card_featured_cont">
+          <div className="ad_card_featured_cont">
             <BiBadgeCheck size={16} color="white" />
             <p className="product_card_featured">{t("featured")}</p>
           </div>
@@ -75,15 +89,25 @@ const ProductCard = ({ data, handleLike }) => {
         </div>
       </div>
       <div className="product_card_prod_price_cont">
-        <span className="product_card_prod_price">
-          {formatPriceAbbreviated(data?.price)}
-        </span>
+        {
+          isHidePrice ? <p className="product_card_prod_name">{data?.name}</p> :
+            <span className="product_card_prod_price">
+              {
+                isJobCategory
+                  ? formatSalaryRange(data?.min_salary, data?.max_salary) : formatPriceAbbreviated(data?.price)
+              }
+            </span>
+        }
         <p className="product_card_prod_date">
           {formatDate(data?.created_at)}&lrm;
         </p>
       </div>
-      <p className="product_card_prod_name">{data?.name}</p>
-      {/* <span className='decs'>{data?.description}</span> */}
+
+      {
+        !isHidePrice &&
+        <p className="product_card_prod_name">{data?.name}</p>
+      }
+
       <p className="product_card_prod_det">
         {data?.city}
         {data?.state ? "," : null}

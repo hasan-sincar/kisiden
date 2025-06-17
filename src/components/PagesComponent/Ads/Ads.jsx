@@ -19,7 +19,7 @@ import {
   setAdsSortBy,
   setAdsStatus,
 } from "@/redux/reuducer/filterSlice";
-import withRedirect from "@/components/Layout/withRedirect";
+
 
 const Ads = () => {
   const CurrentLanguage = useSelector(CurrentLanguageData);
@@ -213,13 +213,13 @@ const Ads = () => {
             <div className="row ad_card_wrapper">
               {IsLoading ? (
                 Array.from({ length: 12 }).map((_, index) => (
-                  <div key={index} className="col-xxl-3 col-lg-4 col-6">
+                  <div key={index} className="col-lg-4 col-6">
                     <AdsCardSkeleton />
                   </div>
                 ))
               ) : MyItems && MyItems?.length > 0 ? (
                 MyItems.map((item) => (
-                  <div key={item?.id} className="col-xxl-3 col-lg-4 col-6">
+                  <div key={item?.id} className="col-lg-4 col-6">
                     <AdsCard data={item} sortBy={sortBy} />
                   </div>
                 ))
@@ -245,4 +245,4 @@ const Ads = () => {
   );
 };
 
-export default withRedirect(Ads);
+export default Ads;

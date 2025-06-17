@@ -11,7 +11,7 @@ import Image from "next/image"
 import toast from "react-hot-toast"
 import BreadcrumbComponent from "@/components/Breadcrumb/BreadcrumbComponent"
 import { useRouter } from "next/navigation"
-import withRedirect from "@/components/Layout/withRedirect"
+
 
 
 const UserVerification = () => {
@@ -362,4 +362,4 @@ const UserVerification = () => {
   )
 }
 
-export default withRedirect(UserVerification)
+export default UserVerification

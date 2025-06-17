@@ -1,15 +1,17 @@
 import Layout from '@/components/Layout/Layout';
 import Blogs from '@/components/PagesComponent/Blogs/Blogs'
-import axios from 'axios';
-
-export const revalidate = 3600;
+import JsonLd from '@/components/SEO/JsonLd';
 
 export const generateMetadata = async () => {
   try {
-    const response = await axios.get(
-      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}seo-settings?page=blogs`
+
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}seo-settings?page=blogs`,
+      { next: { revalidate: 3600 } } // Optional: Add ISR if using in generateMetadata
     );
-    const blogs = response?.data?.data[0]
+
+    const data = await res.json();
+    const blogs = data?.data?.[0];
 
     return {
       title: blogs?.title ? blogs?.title : process.env.NEXT_PUBLIC_META_TITLE,
@@ -39,10 +41,12 @@ const formatDate = (dateString) => {
 
 const fetchBlogItems = async () => {
   try {
-    const response = await axios.get(
-      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}blogs`
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}blogs`,
+      { next: { revalidate: 86400 } } // 1 day in seconds
     );
-    return response?.data?.data?.data || [];
+    const data = await res.json();
+    return data?.data?.data || [];
   } catch (error) {
     console.error('Error fetching Blog Items Data:', error);
     return [];
@@ -50,10 +54,9 @@ const fetchBlogItems = async () => {
 };
 
 
-const page = async () => {
+const BlogsPage = async () => {
 
   const blogItems = await fetchBlogItems()
-
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "ItemList",
@@ -74,7 +77,7 @@ const page = async () => {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <JsonLd data={jsonLd} />
       <Layout>
         <Blogs />
       </Layout>
@@ -82,4 +85,4 @@ const page = async () => {
   )
 }
 
-export default page
+export default BlogsPage

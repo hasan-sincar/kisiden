@@ -34,12 +34,15 @@ import SellerCardInProdDet from "./SellerCardInProdDet";
 import LocationCardInProdDet from "./LocationCardInProdDet";
 import ReportAdCard from "./ReportAdCard";
 import OpenInAppDrawer from "./OpenInAppDrawer";
+import { useSearchParams } from "next/navigation";
 
 
 
 const SingleProductDetail = ({ slug }) => {
   const swiperRef = useRef();
   const isRtl = useIsRtl();
+  const searchParams = useSearchParams();
+  const isShare = searchParams.get('share') === 'true' ? true : false;
   const systemSettingsData = useSelector((state) => state?.Settings);
   const CurrentLanguage = useSelector(CurrentLanguageData);
   const [productData, setProductData] = useState({});
@@ -60,9 +63,8 @@ const SingleProductDetail = ({ slug }) => {
   );
   const [IsOpenInApp, setIsOpenInApp] = useState(false);
 
-
   useEffect(() => {
-    if (window.innerWidth <= 768) {
+    if (window.innerWidth <= 768 && isShare) {
       setIsOpenInApp(true);
     }
   }, []);
@@ -413,6 +415,7 @@ const SingleProductDetail = ({ slug }) => {
                   <SellerCardInProdDet
                     productData={productData}
                     systemSettingsData={systemSettingsData}
+                    setProductData={setProductData}
                   />
                   <LocationCardInProdDet productData={productData} />
                   {!productData?.is_already_reported && (

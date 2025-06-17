@@ -1,15 +1,19 @@
 import Layout from "@/components/Layout/Layout";
 import Products from "@/components/PagesComponent/Products/Products"
-import axios from "axios";
-
-export const revalidate = 3600;
+import JsonLd from "@/components/SEO/JsonLd";
 
 export const generateMetadata = async () => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}seo-settings?page=ad-listing`
+
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}seo-settings?page=ad-listing`,
+            {
+                next: { revalidate: 3600 }, // Revalidate every 1 hour
+            }
         );
-        const adListing = response?.data?.data[0]
+
+        const data = await res.json();
+        const adListing = data?.data?.[0];
 
         return {
             title: adListing?.title ? adListing?.title : process.env.NEXT_PUBLIC_META_TITLE,
@@ -27,11 +31,14 @@ export const generateMetadata = async () => {
 
 const getAllItems = async () => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item`,
-            { params: { page: 1 } }
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item?page=1`,
+            {
+                next: { revalidate: 86400 }, // Revalidate every 1 DAY
+            }
         );
-        return response?.data?.data?.data || [];
+        const data = await res.json();
+        return data?.data?.data || [];
     } catch (error) {
         console.error('Error fetching Product Items Data:', error);
         return [];
@@ -59,11 +66,13 @@ const ProductsPage = async () => {
                     "@type": "Thing",
                     name: product?.category?.name,
                 },
-                offers: {
-                    "@type": "Offer",
-                    price: product?.price,
-                    priceCurrency: "USD",
-                },
+                ...(product?.price && {
+                    offers: {
+                        "@type": "Offer",
+                        price: product.price,
+                        priceCurrency: "USD",
+                    },
+                }),
                 countryOfOrigin: product?.country,
             }
         }))
@@ -71,7 +80,7 @@ const ProductsPage = async () => {
 
     return (
         <>
-            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+            <JsonLd data={jsonLd} />
             <Layout>
                 <Products />
             </Layout>

@@ -127,7 +127,7 @@ const LandingPageHeader = () => {
                     </div>
                 </div>
             </nav>
-            <Drawer className='eclassify_drawer' maskClosable={false} title={<Image src={settings?.header_logo} width={195} height={92} alt="Close Icon" onErrorCapture={placeholderImage} />} onClose={handleClose} open={show} closeIcon={<div className="close_icon_cont"><MdClose size={24} color="black" /></div>} >
+            <Drawer className='eclassify_drawer' maskClosable={false} title={<Image src={settings?.header_logo} width={195} height={92} alt="Close Icon" className='header_logo' onErrorCapture={placeholderImage} />} onClose={handleClose} open={show} closeIcon={<div className="close_icon_cont"><MdClose size={24} color="black" /></div>} >
                 <ul className="mobile_nav">
                     <li className='mobile_nav_tab mob_nav_tab_active' >{t('home')}</li>
                     <li className='mobile_nav_tab' onClick={() => scrollToSection('work_process')}>{t('whyChooseUs')}</li>

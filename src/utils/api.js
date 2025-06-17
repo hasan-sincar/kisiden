@@ -59,7 +59,11 @@ export const ADD_REPORT_REVIEW = 'add-review-report'
 export const SET_ITEM_TOTAL_CLICK = 'set-item-total-click'
 export const GET_OTP = 'get-otp'
 export const VERIFY_OTP = 'verify-otp'
-
+export const JOB_APPLY = 'job-apply'
+export const MY_JOB_APPLICATIONS = 'my-job-applications'
+export const GET_JOB_APPLICATIONS = 'get-job-applications'
+export const UPDATE_JOB_STATUS = 'update-job-applications-status'
+export const GET_LOCATION = 'get-location'
 
 
 
@@ -68,6 +72,14 @@ export const settingsApi = {
     getSettings: ({ type } = {}) => {
         return Api.get(GET_SETTINGS, {
             params: { type }
+        })
+    },
+}
+// 1. SETTINGS API
+export const getLocationApi = {
+    getLocation: ({ lat, lng, lang, search, place_id } = {}) => {
+        return Api.get(GET_LOCATION, {
+            params: { lat, lng, lang, search, place_id }
         })
     },
 }
@@ -200,11 +212,11 @@ export const getMyReviewsApi = {
 // 5. GET_FEATURED_SECTION
 export const FeaturedSectionApi = {
     getFeaturedSections: ({
-        city, state, country, slug, latitude, longitude, radius
+        city, state, country, slug, latitude, longitude, radius, area_id
     } = {}) => {
         return Api.get(GET_FEATURED_SECTION, {
             params: {
-                city, state, country, slug, latitude, longitude, radius
+                city, state, country, slug, latitude, longitude, radius, area_id
             }
         })
     }
@@ -367,11 +379,11 @@ export const updateProfileApi = {
     },
 }
 export const updateBankTransferApi = {
-    updateBankTransfer: ({ payment_transection_id, payment_receipt} = {}) => {
+    updateBankTransfer: ({ payment_transection_id, payment_receipt } = {}) => {
         const formData = new FormData();
         if (payment_transection_id) formData.append('payment_transection_id', payment_transection_id);
         if (payment_receipt) formData.append('payment_receipt', payment_receipt);
-        
+
         return Api.post(BANK_TRANSFER_UPDATE, formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
@@ -390,6 +402,43 @@ export const getNotificationList = {
             }
         })
     }
+}
+
+export const getMyJobApplicationsList = {
+    getMyJobApplications: ({ page } = {}) => {
+        return Api.get(MY_JOB_APPLICATIONS, {
+            params: {
+                page: page
+            }
+        })
+    }
+}
+
+export const getAdJobApplicationsApi = {
+    getAdJobApplications: ({ page, item_id } = {}) => {
+        return Api.get(GET_JOB_APPLICATIONS, {
+            params: {
+                page: page,
+                item_id: item_id
+            }
+        })
+    }
+}
+
+export const updateJobStatusApi = {
+    updateJobStatus: ({ job_id, status } = {}) => {
+        const formData = new FormData();
+
+        // Append only if the value is defined and not an empty string
+        if (job_id) formData.append('job_id', job_id);
+        if (status) formData.append('status', status);
+
+        return Api.post(UPDATE_JOB_STATUS, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+    },
 }
 
 // ASSIGN FREE PACKAGE 
@@ -563,9 +612,10 @@ export const deleteUserApi = {
 }
 // paymentTransactionApi
 export const paymentTransactionApi = {
-    transaction: () => {
+    transaction: ({ page } = {}) => {
         return Api.get(PAYMENT_TRANSACTIONS, {
             params: {
+                page
             }
         })
     },
@@ -586,7 +636,7 @@ export const getBankDetailsApi = {
     getBankDetails: () => {
         return Api.get(GET_BANK_DETAILS, {
             params: {
-                
+
             }
         })
     },
@@ -644,7 +694,7 @@ export const getMessagesApi = {
 // add item api 
 
 export const addItemApi = {
-    addItem: ({ name, slug, description, category_id, all_category_ids, price, contact, video_link, custom_fields, image, gallery_images = [], address, latitude, longitude, custom_field_files = [], show_only_to_premium, country, state, city, area_id } = {}) => {
+    addItem: ({ name, slug, description, category_id, all_category_ids, price, contact, video_link, custom_fields, image, gallery_images = [], address, latitude, longitude, custom_field_files = [], show_only_to_premium, country, state, city, area_id, min_salary, max_salary } = {}) => {
         const formData = new FormData();
         // Append only if the value is defined and not an empty string
 
@@ -683,6 +733,8 @@ export const addItemApi = {
         if (state) formData.append('state', state);
         if (city) formData.append('city', city);
         if (area_id) formData.append('area_id', area_id);
+        if (min_salary) formData.append('min_salary', min_salary);
+        if (max_salary) formData.append('max_salary', max_salary);
 
         return Api.post(ADD_ITEM, formData, {
             headers: {
@@ -695,7 +747,7 @@ export const addItemApi = {
 
 // Edit item API
 export const editItemApi = {
-    editItem: ({ id, name, slug, description, category_id, all_category_ids, price, contact, video_link, custom_fields, image, gallery_images = [], address, latitude, longitude, custom_field_files = [], show_only_to_premium, country, state, city, area_id, delete_item_image_id } = {}) => {
+    editItem: ({ id, name, slug, description, category_id, all_category_ids, price, contact, video_link, custom_fields, image, gallery_images = [], address, latitude, longitude, custom_field_files = [], country, state, city, area_id, delete_item_image_id, min_salary, max_salary } = {}) => {
         const formData = new FormData();
         // Append only if the value is defined and not an empty string
         if (id) formData.append('id', id)
@@ -704,7 +756,6 @@ export const editItemApi = {
         if (description) formData.append('description', description);
         if (category_id) formData.append('category_id', category_id);
         if (all_category_ids) formData.append('all_category_ids', all_category_ids);
-        if (price) formData.append('price', price);
         if (delete_item_image_id) formData.append('delete_item_image_id', delete_item_image_id)
         if (contact) formData.append('contact', contact);
         formData.append('video_link', video_link);
@@ -716,7 +767,6 @@ export const editItemApi = {
         if (country) formData.append('country', country);
         if (state) formData.append('state', state);
         if (area_id) formData.append('area_id', area_id);
-        // if (custom_field_files) formData.append("custom_field_files", custom_field_files)
         if (city) formData.append('city', city);
         if (image != null) formData.append('image', image);
         if (gallery_images.length > 0) {
@@ -731,6 +781,13 @@ export const editItemApi = {
                 formData.append(`custom_field_files[${key}]`, files);
             }
         });
+
+
+        formData.append('price', price);
+        formData.append('min_salary', min_salary);
+        formData.append('max_salary', max_salary);
+
+
         return Api.post(UPDATE_LISTING, formData, {
             headers: {
                 'Content-Type': 'multipart/form-data'
@@ -884,6 +941,27 @@ export const contactUsApi = {
         });
     },
 }
+
+
+export const jobApplyApi = {
+    jobApply: ({ item_id, full_name, email, mobile, resume } = {}) => {
+        const formData = new FormData();
+
+        // Append only if the value is defined and not an empty string
+        if (item_id) formData.append('item_id', item_id);
+        if (full_name) formData.append('full_name', full_name);
+        if (email) formData.append('email', email);
+        if (mobile) formData.append('mobile', mobile);
+        if (resume) formData.append('resume', resume);
+
+        return Api.post(JOB_APPLY, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+    },
+}
+
 // get parent cate api
 export const getParentCategoriesApi = {
     getPaymentCategories: ({ child_category_id, tree, slug } = {}) => {

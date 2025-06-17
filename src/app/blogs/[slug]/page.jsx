@@ -1,15 +1,14 @@
 import Layout from '@/components/Layout/Layout';
 import SingleBlog from '@/components/PagesComponent/SingleBlog/SingleBlog'
-import axios from 'axios';
-
-export const revalidate = 3600;
-
+import JsonLd from '@/components/SEO/JsonLd';
 export const generateMetadata = async ({ params }) => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}blogs?slug=${params?.slug}`
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}blogs?slug=${params?.slug}`,
+            { next: { revalidate: 3600 } } // revalidate every 1 hour
         );
-        const data = response?.data?.data?.data[0]
+        const json = await res.json();
+        const data = json?.data?.data?.[0];
         const plainTextDescription = data?.description?.replace(/<\/?[^>]+(>|$)/g, "");
         return {
             title: data?.title ? data?.title : process.env.NEXT_PUBLIC_META_TITLE,
@@ -27,16 +26,18 @@ export const generateMetadata = async ({ params }) => {
 
 const fetchSingleBlogItem = async (slug) => {
     try {
-        const response = await axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}blogs`,
-            { params: { slug } }
+        const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}blogs?slug=${slug}`,
+            { next: { revalidate: 86400 } } // 1 day
         );
-        return response?.data?.data?.data[0] || [];
+        const data = await res.json();
+        return data?.data?.data?.[0] || [];
     } catch (error) {
-        console.error('Error fetching Blog Items Data:', error);
+        console.error('Error fetching Blog Item Data:', error);
         return [];
     }
 };
+
 
 const stripHtml = (html) => {
     return html.replace(/<[^>]*>/g, ''); // Regular expression to remove HTML tags
@@ -67,7 +68,7 @@ const SingleBlogPage = async ({ params }) => {
 
     return (
         <>
-            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+            <JsonLd data={jsonLd} />
             <Layout>
                 <SingleBlog />
             </Layout>

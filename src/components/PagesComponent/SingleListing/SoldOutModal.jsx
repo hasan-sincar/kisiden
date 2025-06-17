@@ -10,7 +10,7 @@ import NoDataFound from '../../../../public/assets/no_data_found_illustrator.svg
 
 
 
-const SoldOutModal = ({ SingleListing, IsSoldOutModalOpen, OnHide, handleSoldOut, selectedRadioValue, setSelectedRadioValue }) => {
+const SoldOutModal = ({ SingleListing, IsSoldOutModalOpen, OnHide, handleSoldOut, selectedRadioValue, setSelectedRadioValue, isJobCategory }) => {
 
     const CloseIcon = <div className="close_icon_cont"><MdClose size={24} color="black" /></div>
     const systemSettingsData = useSelector((state) => state?.Settings)
@@ -40,7 +40,7 @@ const SoldOutModal = ({ SingleListing, IsSoldOutModalOpen, OnHide, handleSoldOut
                 <div>
                     <Image loading="lazy" src={NoDataFound} alt="no_img" width={200} height={200} onError={placeholderImage} />
                 </div>
-                <h3>{t('noBuyersFound')}</h3>
+                <h3>{isJobCategory ? 'No applicants found' : t('noBuyersFound')}</h3>
             </div>
         )
     }
@@ -72,7 +72,7 @@ const SoldOutModal = ({ SingleListing, IsSoldOutModalOpen, OnHide, handleSoldOut
             maskClosable={false}
         >
             <div className='soldOutModal'>
-                <h5 className='whoMadePurchase'>{t('whoMadePurchase')}</h5>
+                <h5 className='whoMadePurchase'>{isJobCategory ? t('whoWasHired') : t('whoMadePurchase')}</h5>
                 <div className='adItemDet'>
                     <Image src={SingleListing?.image || placeholder_image} width={72} height={72} alt='Ad Item' className='adItemImg' onErrorCapture={placeholderImage} />
                     <div className='adItemContent'>
@@ -80,7 +80,7 @@ const SoldOutModal = ({ SingleListing, IsSoldOutModalOpen, OnHide, handleSoldOut
                         <span className='adItemPrice'>{formatPriceAbbreviated(SingleListing?.price)}</span>
                     </div>
                 </div>
-                <p className='selectBuyerFromList'>{t('selectBuyerFromList')}</p>
+                <p className='selectBuyerFromList'>{isJobCategory ? t('selectHiredApplicant') : t('selectBuyerFromList')}</p>
 
                 {Buyer?.length === 0 ? (
                     <NoBuyersFound />
@@ -101,7 +101,7 @@ const SoldOutModal = ({ SingleListing, IsSoldOutModalOpen, OnHide, handleSoldOut
                     <div className='noneOfAboveContainer'>
                         <Checkbox onChange={onCheckboxChange} disabled={isCheckboxDisabled} className='noneOfAbobeCheck'>{t('noneOfAbove')}</Checkbox>
                     </div>
-                    <button disabled={!isTransparent} onClick={handleSoldOut} className={`mrkAsSoldOut ${isTransparent && 'apply_btn_transparent'}`}>{t('soldOut')}</button>
+                    <button disabled={!isTransparent} onClick={handleSoldOut} className={`mrkAsSoldOut ${isTransparent && 'apply_btn_transparent'}`}>{isJobCategory ? t('jobClosed') : t('soldOut')}</button>
                 </div>
             </div>
         </Modal>

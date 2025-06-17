@@ -1,22 +1,23 @@
 import HomePage from '@/components/Home';
 import Layout from '@/components/Layout/Layout';
-import axios from 'axios';
-
-export const revalidate = 3600;
+import JsonLd from '@/components/SEO/JsonLd';
 
 export const generateMetadata = async () => {
   try {
-    const response = await axios.get(
-      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}seo-settings?page=home`
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}seo-settings?page=home`,
+      { next: { revalidate: 3600 } }
     );
-    const home = response?.data?.data[0]
+    const data = await res.json();
+    const home = data?.data?.[0];
+
     return {
-      title: home?.title ? home?.title : process.env.NEXT_PUBLIC_META_TITLE,
-      description: home?.description ? home?.description : process.env.NEXT_PUBLIC_META_DESCRIPTION,
+      title: home?.title || process.env.NEXT_PUBLIC_META_TITLE,
+      description: home?.description || process.env.NEXT_PUBLIC_META_DESCRIPTION,
       openGraph: {
         images: home?.image ? [home?.image] : [],
       },
-      keywords: home?.keywords ? home?.keywords : process.env.NEXT_PUBLIC_META_kEYWORDS
+      keywords: home?.keywords || process.env.NEXT_PUBLIC_META_kEYWORDS,
     };
   } catch (error) {
     console.error("Error fetching MetaData:", error);
@@ -24,47 +25,59 @@ export const generateMetadata = async () => {
   }
 };
 
+
 const fetchCategories = async () => {
   try {
-    const response = await axios.get(
-      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-categories`,
-      { params: { page: 1 } }
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-categories?page=1`,
+      { next: { revalidate: 86400 } } // 86400 seconds = 1 day
     );
-    return response?.data?.data?.data || [];
+    const data = await res.json();
+    return data?.data?.data || [];
   } catch (error) {
     console.error("Error fetching Categories Data:", error);
     return [];
   }
 };
+
+
 const fetchProductItems = async () => {
   try {
-    const response = await axios.get(
-      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item`,
-      { params: { page: 1 } }
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-item?page=1`,
+      { next: { revalidate: 86400 } } // 1 day = 86400 seconds
     );
-    return response?.data?.data?.data || [];
+    const data = await res.json();
+    return data?.data?.data || [];
   } catch (error) {
     console.error('Error fetching Product Items Data:', error);
     return [];
   }
 };
+
+
 const fetchFeaturedSections = async () => {
   try {
-    const response = await axios.get(
-      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-featured-section`
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}get-featured-section`,
+      { next: { revalidate: 86400 } } // 1 day = 86400 seconds
     );
-    return response?.data?.data || [];
+    const data = await res.json();
+    return data?.data || [];
   } catch (error) {
     console.error('Error fetching Featured sections Data:', error);
     return [];
   }
 };
 
-const index = async () => {
 
-  const categoriesData = await fetchCategories();
-  const productItemsData = await fetchProductItems();
-  const featuredSectionsData = await fetchFeaturedSections();
+const index = async () => {
+  
+  const [categoriesData, productItemsData, featuredSectionsData] = await Promise.all([
+    fetchCategories(),
+    fetchProductItems(),
+    fetchFeaturedSections()
+  ]);
 
   const existingSlugs = new Set(productItemsData.map(product => product.slug));
 
@@ -102,11 +115,13 @@ const index = async () => {
           image: product?.image,
           url: `${process.env.NEXT_PUBLIC_WEB_URL}/product-details/${product?.slug}`,
           category: product?.category?.name,
-          "offers": {
-            "@type": "Offer",
-            price: product?.price,
-            priceCurrency: "USD",
-          },
+          ...(product?.price && {
+            offers: {
+              "@type": "Offer",
+              price: product?.price,
+              priceCurrency: "USD",
+            },
+          }),
           countryOfOrigin: product?.country
         }
       })),
@@ -121,11 +136,13 @@ const index = async () => {
           image: item?.image,
           url: `${process.env.NEXT_PUBLIC_WEB_URL}/product-details/${item?.slug}`,
           category: item?.category?.name,
-          "offers": {
-            "@type": "Offer",
-            price: item?.price,
-            priceCurrency: "USD",
-          },
+          ...(item?.price && {
+            offers: {
+              "@type": "Offer",
+              price: item?.price,
+              priceCurrency: "USD",
+            },
+          }),
           countryOfOrigin: item?.country
         }
       }))
@@ -134,7 +151,7 @@ const index = async () => {
 
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <JsonLd data={jsonLd} />
       <Layout>
         <HomePage />
       </Layout>

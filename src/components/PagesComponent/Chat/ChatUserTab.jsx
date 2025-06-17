@@ -1,11 +1,8 @@
 'use client'
-import { formatPriceAbbreviated, placeholderImage, t } from "@/utils";
-import { blockUserApi, unBlockUserApi } from "@/utils/api";
+import { formatPriceAbbreviated, formatSalaryRange, placeholderImage, t } from "@/utils";
 import { Popover } from "antd";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
-import toast from "react-hot-toast";
 import { HiOutlineDotsVertical } from "react-icons/hi";
 
 
@@ -16,7 +13,7 @@ const ChatUserTab = ({ activeTab, selectedTabData, systemSettingsData, isBlocked
     const itemData = selectedTabData?.item;
     const profileImage = userData?.profile || systemSettingsData?.data?.data?.placeholder_image;
     const itemImage = itemData?.image || systemSettingsData?.data?.data?.placeholder_image;
-    
+    const isJobCategory = itemData?.category?.is_job_category === 1;
 
     const content = (userId) => (
         <div>
@@ -68,7 +65,13 @@ const ChatUserTab = ({ activeTab, selectedTabData, systemSettingsData, isBlocked
                         <HiOutlineDotsVertical size={22} />
                     </span>
                 </Popover>
-                <p className="user_chat_tab_time user_chat_money">{formatPriceAbbreviated(selectedTabData?.item?.price)}</p>
+                <p className="user_chat_tab_time user_chat_money">
+                    {/* {formatPriceAbbreviated(selectedTabData?.item?.price)} */}
+                    {isJobCategory
+                        ? formatSalaryRange(itemData?.min_salary, itemData?.max_salary)
+                            : formatPriceAbbreviated(itemData?.price)}
+
+                </p>
             </div>
         </div>
     )

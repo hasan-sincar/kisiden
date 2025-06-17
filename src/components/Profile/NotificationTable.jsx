@@ -1,12 +1,13 @@
 'use client'
 import { Table, Skeleton } from 'antd';
 import Image from 'next/image';
-import { formatDateMonth, isLogin, placeholderImage, t } from '@/utils';
+import { formatDateMonth, placeholderImage, t } from '@/utils';
 import { getNotificationList } from '@/utils/api';
 import toast from 'react-hot-toast';
 import { useEffect, useState, useRef } from 'react';
 import { CurrentLanguageData } from '@/redux/reuducer/languageSlice';
 import { useSelector } from 'react-redux';
+import { getIsLoggedIn } from '@/redux/reuducer/authSlice';
 
 const NotificationTable = () => {
 
@@ -16,8 +17,7 @@ const NotificationTable = () => {
     const [totalItems, setTotalItems] = useState(0);
     const [perPage, setPerPage] = useState(15);
     const [isLoading, setIsLoading] = useState(false);
-
-
+    const isLogin = useSelector(getIsLoggedIn);
 
     const fetchNotificationData = async (page) => {
         try {
@@ -39,14 +39,11 @@ const NotificationTable = () => {
     };
 
     useEffect(() => {
-        if (isLogin()) {
+        if (isLogin) {
             fetchNotificationData(currentPage);
         }
-    }, [currentPage]);
+    }, [currentPage, isLogin]);
 
-    const handleTableChange = (pagination) => {
-        setCurrentPage(pagination.current);
-    };
 
     const columns = [
         {
@@ -118,7 +115,7 @@ const NotificationTable = () => {
                     }))}
                     className="notif_table"
                     pagination={
-                        notifications.length >= 15 || currentPage !== 1
+                        totalItems > perPage
                             ? {
                                 current: currentPage,
                                 pageSize: perPage,
@@ -126,10 +123,10 @@ const NotificationTable = () => {
                                 showTotal: (total, range) => `Showing ${range[0]}-${range[1]} of ${total}`,
                                 onChange: (page) => setCurrentPage(page),
                                 showSizeChanger: false,
+                                disabled: isLoading,
                             }
                             : false
                     }
-                    onChange={handleTableChange}
                 />
             )}
         </>
@@ -139,8 +136,6 @@ const NotificationTable = () => {
 export default NotificationTable;
 
 
-
-
 const NotificationContent = ({ text, title, image }) => {
     const textRef = useRef(null);
     const [isTextOverflowing, setIsTextOverflowing] = useState(false);
@@ -148,7 +143,7 @@ const NotificationContent = ({ text, title, image }) => {
 
     useEffect(() => {
         const checkTextOverflow = () => {
-            if (textRef.current) {
+            if (textRef.current && !isExpanded) {
                 const element = textRef.current;
                 const isOverflowing = element.scrollHeight > element.clientHeight;
                 setIsTextOverflowing(isOverflowing);
@@ -159,7 +154,7 @@ const NotificationContent = ({ text, title, image }) => {
         window.addEventListener('resize', checkTextOverflow);
 
         return () => window.removeEventListener('resize', checkTextOverflow);
-    }, []); // Add text as dependency to recheck when content changes
+    }, [isExpanded, text]); // Add text as dependency to recheck when content changes
 
     return (
         <div className='notif_content_wrp'>
