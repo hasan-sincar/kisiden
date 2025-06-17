@@ -3,9 +3,9 @@
     "apps": [],
     "details": [
       {
-        "appID": "89C47N4UTZ.com.eclassify.wrteam",
+        "appID": "YOUR_TEAM_ID.YOUR_BUNDLE_ID",
         "paths": [
-          "*","/??","/product-details"
+          "*"
         ]
       }
     ]
