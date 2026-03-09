@@ -1,0 +1,1337 @@
+"use client";
+import { toast } from "sonner";
+import { store } from "../redux/store";
+import enTranslation from "./locale/en.json";
+import { generateKeywords } from "./generateKeywords";
+import { getCountryCallingCode } from "react-phone-number-input";
+
+export const t = (label) => {
+  if (typeof store.getState !== "function") {
+    return enTranslation[label] || label;
+  }
+
+  const langData =
+    store.getState().CurrentLanguage?.language?.file_name &&
+    store.getState().CurrentLanguage?.language?.file_name[label];
+  if (langData) {
+    return langData;
+  } else {
+    return enTranslation[label] || label;
+  }
+};
+
+// check user login
+// is login user check
+export const isLogin = () => {
+  // Use the selector to access user data
+  const userData = store.getState()?.UserSignup?.data;
+  // Check if the token exists
+  if (userData?.token) {
+    return true;
+  }
+
+  return false;
+};
+
+export const IsLandingPageOn = () => {
+  let settings = store.getState()?.Settings?.data?.data;
+  return Number(settings?.show_landing_page);
+};
+
+export const getDefaultLatLong = () => {
+  let settings = store.getState()?.Settings?.data?.data;
+  const default_latitude = Number(settings?.default_latitude);
+  const default_longitude = Number(settings?.default_longitude);
+
+  const defaultLetLong = {
+    latitude: default_latitude,
+    longitude: default_longitude,
+  };
+  return defaultLetLong;
+};
+
+export const getPlaceApiKey = () => {
+  let settings = store.getState()?.Settings?.data?.data;
+  return settings?.place_api_key;
+};
+
+export const getSlug = (pathname) => {
+  const segments = pathname.split("/");
+  return segments[segments.length - 1];
+};
+
+export const formatDate = (createdAt) => {
+  const date = new Date(createdAt);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days === 0) {
+    return t("today");
+  } else if (days === 1) {
+    return t("yesterday");
+  } else if (days < 30) {
+    return `${days} ${t("daysAgo")}`;
+  } else if (days < 365) {
+    const months = Math.floor(days / 30);
+    return `${months} ${months > 1 ? t("months") : t("month")} ${t("ago")}`;
+  } else {
+    const years = Math.floor(days / 365);
+    return `${years} ${years > 1 ? t("years") : t("year")} ${t("ago")}`;
+  }
+};
+
+export const languageLocaleMap = {
+  af: "af-ZA", // Afrikaans
+  am: "am-ET", // Amharic
+  ar: "ar-SA", // Arabic
+  az: "az-AZ", // Azerbaijani
+  be: "be-BY", // Belarusian
+  bg: "bg-BG", // Bulgarian
+  bn: "bn-BD", // Bengali
+  bs: "bs-BA", // Bosnian
+  ca: "ca-ES", // Catalan
+  cs: "cs-CZ", // Czech
+  cy: "cy-GB", // Welsh
+  da: "da-DK", // Danish
+  de: "de-DE", // German
+  dz: "dz-BT", // Dzongkha
+  el: "el-GR", // Greek
+  en: "en-US", // English
+  eo: "eo-001", // Esperanto
+  es: "es-ES", // Spanish
+  et: "et-EE", // Estonian
+  eu: "eu-ES", // Basque
+  fa: "fa-IR", // Persian
+  fi: "fi-FI", // Finnish
+  fr: "fr-FR", // French
+  ga: "ga-IE", // Irish
+  gl: "gl-ES", // Galician
+  gu: "gu-IN", // Gujarati
+  he: "he-IL", // Hebrew
+  hi: "hi-IN", // Hindi
+  hr: "hr-HR", // Croatian
+  hu: "hu-HU", // Hungarian
+  hy: "hy-AM", // Armenian
+  id: "id-ID", // Indonesian
+  is: "is-IS", // Icelandic
+  it: "it-IT", // Italian
+  ja: "ja-JP", // Japanese
+  jv: "jv-ID", // Javanese
+  ka: "ka-GE", // Georgian
+  kk: "kk-KZ", // Kazakh
+  km: "km-KH", // Khmer
+  kn: "kn-IN", // Kannada
+  ko: "ko-KR", // Korean
+  ky: "ky-KG", // Kyrgyz
+  lo: "lo-LA", // Lao
+  lt: "lt-LT", // Lithuanian
+  lv: "lv-LV", // Latvian
+  mk: "mk-MK", // Macedonian
+  ml: "ml-IN", // Malayalam
+  mn: "mn-MN", // Mongolian
+  mr: "mr-IN", // Marathi
+  ms: "ms-MY", // Malay
+  mt: "mt-MT", // Maltese
+  my: "my-MM", // Burmese
+  ne: "ne-NP", // Nepali
+  nl: "nl-NL", // Dutch
+  no: "no-NO", // Norwegian
+  or: "or-IN", // Odia
+  pa: "pa-IN", // Punjabi
+  pl: "pl-PL", // Polish
+  ps: "ps-AF", // Pashto
+  pt: "pt-PT", // Portuguese
+  ro: "ro-RO", // Romanian
+  ru: "ru-RU", // Russian
+  rw: "rw-RW", // Kinyarwanda
+  si: "si-LK", // Sinhala
+  sk: "sk-SK", // Slovak
+  sl: "sl-SI", // Slovenian
+  so: "so-SO", // Somali
+  sq: "sq-AL", // Albanian
+  sr: "sr-RS", // Serbian
+  sv: "sv-SE", // Swedish
+  sw: "sw-TZ", // Swahili
+  ta: "ta-IN", // Tamil
+  te: "te-IN", // Telugu
+  tg: "tg-TJ", // Tajik
+  th: "th-TH", // Thai
+  tk: "tk-TM", // Turkmen
+  tr: "tr-TR", // Turkish
+  uk: "uk-UA", // Ukrainian
+  ur: "ur-PK", // Urdu
+  uz: "uz-UZ", // Uzbek
+  vi: "vi-VN", // Vietnamese
+  xh: "xh-ZA", // Xhosa
+  yi: "yi-001", // Yiddish
+  yo: "yo-NG", // Yoruba
+  zh: "zh-CN", // Chinese (Simplified)
+  zu: "zu-ZA", // Zulu
+};
+
+export const countryLocaleMap = {
+  AF: "ps-AF", // Afghanistan
+  AL: "sq-AL", // Albania
+  DZ: "ar-DZ", // Algeria
+  AS: "en-AS", // American Samoa
+  AD: "ca-AD", // Andorra
+  AO: "pt-AO", // Angola
+  AI: "en-AI", // Anguilla
+  AG: "en-AG", // Antigua and Barbuda
+  AR: "es-AR", // Argentina
+  AM: "hy-AM", // Armenia
+  AU: "en-AU", // Australia
+  AT: "de-AT", // Austria
+  AZ: "az-AZ", // Azerbaijan
+  BS: "en-BS", // Bahamas
+  BH: "ar-BH", // Bahrain
+  BD: "bn-BD", // Bangladesh
+  BB: "en-BB", // Barbados
+  BY: "be-BY", // Belarus
+  BE: "nl-BE", // Belgium
+  BZ: "en-BZ", // Belize
+  BJ: "fr-BJ", // Benin
+  BM: "en-BM", // Bermuda
+  BT: "dz-BT", // Bhutan
+  BO: "es-BO", // Bolivia
+  BA: "bs-BA", // Bosnia and Herzegovina
+  BW: "en-BW", // Botswana
+  BR: "pt-BR", // Brazil
+  BN: "ms-BN", // Brunei
+  BG: "bg-BG", // Bulgaria
+  BF: "fr-BF", // Burkina Faso
+  BI: "fr-BI", // Burundi
+  KH: "km-KH", // Cambodia
+  CM: "fr-CM", // Cameroon
+  CA: "en-CA", // Canada
+  CV: "pt-CV", // Cape Verde
+  KY: "en-KY", // Cayman Islands
+  CF: "fr-CF", // Central African Republic
+  TD: "fr-TD", // Chad
+  CL: "es-CL", // Chile
+  CN: "zh-CN", // China
+  CO: "es-CO", // Colombia
+  KM: "ar-KM", // Comoros
+  CG: "fr-CG", // Congo
+  CR: "es-CR", // Costa Rica
+  HR: "hr-HR", // Croatia
+  CU: "es-CU", // Cuba
+  CY: "el-CY", // Cyprus
+  CZ: "cs-CZ", // Czech Republic
+  DK: "da-DK", // Denmark
+  DJ: "fr-DJ", // Djibouti
+  DM: "en-DM", // Dominica
+  DO: "es-DO", // Dominican Republic
+  EC: "es-EC", // Ecuador
+  EG: "ar-EG", // Egypt
+  SV: "es-SV", // El Salvador
+  GQ: "es-GQ", // Equatorial Guinea
+  ER: "ti-ER", // Eritrea
+  EE: "et-EE", // Estonia
+  SZ: "en-SZ", // Eswatini
+  ET: "am-ET", // Ethiopia
+  FJ: "en-FJ", // Fiji
+  FI: "fi-FI", // Finland
+  FR: "fr-FR", // France
+  GA: "fr-GA", // Gabon
+  GM: "en-GM", // Gambia
+  GE: "ka-GE", // Georgia
+  DE: "de-DE", // Germany
+  GH: "en-GH", // Ghana
+  GR: "el-GR", // Greece
+  GD: "en-GD", // Grenada
+  GU: "en-GU", // Guam
+  GT: "es-GT", // Guatemala
+  GN: "fr-GN", // Guinea
+  GW: "pt-GW", // Guinea-Bissau
+  GY: "en-GY", // Guyana
+  HT: "fr-HT", // Haiti
+  HN: "es-HN", // Honduras
+  HU: "hu-HU", // Hungary
+  IS: "is-IS", // Iceland
+  IN: "en-IN", // India
+  ID: "id-ID", // Indonesia
+  IR: "fa-IR", // Iran
+  IQ: "ar-IQ", // Iraq
+  IE: "en-IE", // Ireland
+  IL: "he-IL", // Israel
+  IT: "it-IT", // Italy
+  JM: "en-JM", // Jamaica
+  JP: "ja-JP", // Japan
+  JO: "ar-JO", // Jordan
+  KZ: "kk-KZ", // Kazakhstan
+  KE: "en-KE", // Kenya
+  KI: "en-KI", // Kiribati
+  KP: "ko-KP", // North Korea
+  KR: "ko-KR", // South Korea
+  KW: "ar-KW", // Kuwait
+  KG: "ky-KG", // Kyrgyzstan
+  LA: "lo-LA", // Laos
+  LV: "lv-LV", // Latvia
+  LB: "ar-LB", // Lebanon
+  LS: "en-LS", // Lesotho
+  LR: "en-LR", // Liberia
+  LY: "ar-LY", // Libya
+  LI: "de-LI", // Liechtenstein
+  LT: "lt-LT", // Lithuania
+  LU: "fr-LU", // Luxembourg
+  MG: "fr-MG", // Madagascar
+  MW: "en-MW", // Malawi
+  MY: "ms-MY", // Malaysia
+  MV: "dv-MV", // Maldives
+  ML: "fr-ML", // Mali
+  MT: "mt-MT", // Malta
+  MH: "en-MH", // Marshall Islands
+  MR: "ar-MR", // Mauritania
+  MU: "en-MU", // Mauritius
+  MX: "es-MX", // Mexico
+  FM: "en-FM", // Micronesia
+  MD: "ro-MD", // Moldova
+  MC: "fr-MC", // Monaco
+  MN: "mn-MN", // Mongolia
+  ME: "sr-ME", // Montenegro
+  MA: "ar-MA", // Morocco
+  MZ: "pt-MZ", // Mozambique
+  MM: "my-MM", // Myanmar
+  NA: "en-NA", // Namibia
+  NR: "en-NR", // Nauru
+  NP: "ne-NP", // Nepal
+  NL: "nl-NL", // Netherlands
+  NZ: "en-NZ", // New Zealand
+  NI: "es-NI", // Nicaragua
+  NE: "fr-NE", // Niger
+  NG: "en-NG", // Nigeria
+  NO: "no-NO", // Norway
+  OM: "ar-OM", // Oman
+  PK: "ur-PK", // Pakistan
+  PW: "en-PW", // Palau
+  PS: "ar-PS", // Palestine
+  PA: "es-PA", // Panama
+  PG: "en-PG", // Papua New Guinea
+  PY: "es-PY", // Paraguay
+  PE: "es-PE", // Peru
+  PH: "en-PH", // Philippines
+  PL: "pl-PL", // Poland
+  PT: "pt-PT", // Portugal
+  QA: "ar-QA", // Qatar
+  RO: "ro-RO", // Romania
+  RU: "ru-RU", // Russia
+  RW: "rw-RW", // Rwanda
+  KN: "en-KN", // Saint Kitts and Nevis
+  LC: "en-LC", // Saint Lucia
+  VC: "en-VC", // Saint Vincent and the Grenadines
+  WS: "en-WS", // Samoa
+  SM: "it-SM", // San Marino
+  ST: "pt-ST", // Sao Tome and Principe
+  SA: "ar-SA", // Saudi Arabia
+  SN: "fr-SN", // Senegal
+  RS: "sr-RS", // Serbia
+  SC: "en-SC", // Seychelles
+  SL: "en-SL", // Sierra Leone
+  SG: "en-SG", // Singapore
+  SK: "sk-SK", // Slovakia
+  SI: "sl-SI", // Slovenia
+  SB: "en-SB", // Solomon Islands
+  SO: "so-SO", // Somalia
+  ZA: "en-ZA", // South Africa
+  ES: "es-ES", // Spain
+  LK: "si-LK", // Sri Lanka
+  SD: "ar-SD", // Sudan
+  SR: "nl-SR", // Suriname
+  SE: "sv-SE", // Sweden
+  CH: "de-CH", // Switzerland
+  SY: "ar-SY", // Syria
+  TW: "zh-TW", // Taiwan
+  TJ: "tg-TJ", // Tajikistan
+  TZ: "sw-TZ", // Tanzania
+  TH: "th-TH", // Thailand
+  TG: "fr-TG", // Togo
+  TO: "en-TO", // Tonga
+  TT: "en-TT", // Trinidad and Tobago
+  TN: "ar-TN", // Tunisia
+  TR: "tr-TR", // Turkey
+  TM: "tk-TM", // Turkmenistan
+  UG: "en-UG", // Uganda
+  UA: "uk-UA", // Ukraine
+  AE: "ar-AE", // United Arab Emirates
+  GB: "en-GB", // United Kingdom
+  US: "en-US", // United States
+  UY: "es-UY", // Uruguay
+  UZ: "uz-UZ", // Uzbekistan
+  VU: "en-VU", // Vanuatu
+  VE: "es-VE", // Venezuela
+  VN: "vi-VN", // Vietnam
+  YE: "ar-YE", // Yemen
+  ZM: "en-ZM", // Zambia
+  ZW: "en-ZW", // Zimbabwe
+};
+
+// Function to format large numbers as strings with K, M, and B abbreviations
+export const formatPriceAbbreviated = (price) => {
+  if (
+    price === null ||
+    price === undefined ||
+    (typeof price === "string" && price.trim() === "")
+  ) {
+    return "";
+  }
+
+  if (Number(price) === 0) {
+    return t("Free");
+  }
+
+  const settingsData = store.getState()?.Settings?.data?.data;
+  const currencySymbol = settingsData?.currency_symbol;
+  const currencyPosition = settingsData.currency_symbol_position;
+  const countryCode =
+    process.env.NEXT_PUBLIC_DEFAULT_COUNTRY?.toUpperCase() || "US";
+  const locale = countryLocaleMap[countryCode] || "en-US";
+
+  const formattedNumber = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 2,
+    useGrouping: true,
+  }).format(Number(price));
+
+  return currencyPosition === "right"
+    ? `${formattedNumber} ${currencySymbol}`
+    : `${currencySymbol} ${formattedNumber}`;
+};
+
+export const formatSalaryRange = (minSalary, maxSalary) => {
+  const hasMin =
+    minSalary !== undefined && minSalary !== null && minSalary !== "";
+  const hasMax =
+    maxSalary !== undefined && maxSalary !== null && maxSalary !== "";
+
+  if (hasMin && hasMax) {
+    return `${formatPriceAbbreviated(minSalary)} – ${formatPriceAbbreviated(
+      maxSalary
+    )}`;
+  }
+
+  if (hasMin) {
+    return `${t("from")} ${formatPriceAbbreviated(minSalary)}`;
+  }
+
+  if (hasMax) {
+    return `${t("upTo")} ${formatPriceAbbreviated(maxSalary)}`;
+  }
+
+  return "";
+};
+
+// utils/stickyNote.js
+export const createStickyNote = () => {
+  // Check if sticky note already exists - prevent duplicates
+  if (document.getElementById("firebase-sticky-note")) {
+    return;
+  }
+
+  const stickyNote = document.createElement("div");
+  stickyNote.id = "firebase-sticky-note";
+  stickyNote.style.position = "fixed";
+  stickyNote.style.bottom = "0";
+  stickyNote.style.width = "100%";
+  stickyNote.style.backgroundColor = "#ffffff";
+  stickyNote.style.color = "#000000";
+  stickyNote.style.padding = "10px";
+  stickyNote.style.textAlign = "center";
+  stickyNote.style.fontSize = "14px";
+  stickyNote.style.zIndex = "99999";
+
+  const closeButton = document.createElement("span");
+  closeButton.setAttribute("data-sticky-close", "true"); // Add identifier
+  closeButton.style.cursor = "pointer";
+  closeButton.style.float = "right";
+  closeButton.innerHTML = "&times;";
+  closeButton.fontSize = "20px";
+
+  closeButton.onclick = function () {
+    document.body.removeChild(stickyNote);
+  };
+
+  const playStoreLink = store.getState()?.Settings?.data?.data?.play_store_link;
+  const appStoreLink = store.getState()?.Settings?.data?.data?.app_store_link;
+
+  const message = document.createElement("span");
+  message.setAttribute("data-sticky-message", "true");
+  message.innerText = t("chatAndNotificationNotSupported");
+
+  const linkContainer = document.createElement("div"); // Changed to 'div' for better spacing
+  linkContainer.style.display = "inline-block"; // Keeps links inline while allowing space
+
+  const linkStyle = "text-decoration: underline !important; color: #3498db";
+
+  if (playStoreLink) {
+    const playStoreAnchor = document.createElement("a");
+    playStoreAnchor.setAttribute("data-sticky-playstore", "true"); // Add identifier
+    playStoreAnchor.style.cssText = linkStyle;
+    playStoreAnchor.innerText = t("playStore");
+    playStoreAnchor.href = playStoreLink;
+    playStoreAnchor.target = "_blank";
+    linkContainer.appendChild(playStoreAnchor);
+  }
+
+  if (appStoreLink) {
+    const appStoreAnchor = document.createElement("a");
+    appStoreAnchor.setAttribute("data-sticky-appstore", "true"); // Add identifier
+    appStoreAnchor.style.cssText = linkStyle;
+    appStoreAnchor.style.marginLeft = "5px"; // Space before this link
+    appStoreAnchor.innerText = t("appStore");
+    appStoreAnchor.href = appStoreLink;
+    appStoreAnchor.target = "_blank";
+    linkContainer.appendChild(appStoreAnchor);
+  }
+
+  stickyNote.appendChild(closeButton);
+  stickyNote.appendChild(message);
+  stickyNote.appendChild(linkContainer);
+
+  document.body.appendChild(stickyNote);
+};
+
+// Simple function to update sticky note translations
+export const updateStickyNoteTranslations = () => {
+  const note = document.getElementById("firebase-sticky-note");
+  if (!note) return;
+
+  // Use data attributes to find the correct elements
+  const message = note.querySelector("[data-sticky-message]");
+  const playStoreLink = note.querySelector("[data-sticky-playstore]");
+  const appStoreLink = note.querySelector("[data-sticky-appstore]");
+
+  if (message) {
+    message.innerText = t("chatAndNotificationNotSupported");
+  }
+  if (playStoreLink) {
+    playStoreLink.innerText = t("playStore");
+  }
+  if (appStoreLink) {
+    appStoreLink.innerText = t("appStore");
+  }
+};
+
+const ERROR_CODES = {
+  "auth/user-not-found": t("userNotFound"),
+  "auth/wrong-password": t("invalidPassword"),
+  "auth/email-already-in-use": t("emailInUse"),
+  "auth/invalid-email": t("invalidEmail"),
+  "auth/user-disabled": t("userAccountDisabled"),
+  "auth/too-many-requests": t("tooManyRequests"),
+  "auth/operation-not-allowed": t("operationNotAllowed"),
+  "auth/internal-error": t("internalError"),
+  "auth/invalid-login-credentials": t("incorrectDetails"),
+  "auth/invalid-credential": t("incorrectDetails"),
+  "auth/admin-restricted-operation": t("adminOnlyOperation"),
+  "auth/already-initialized": t("alreadyInitialized"),
+  "auth/app-not-authorized": t("appNotAuthorized"),
+  "auth/app-not-installed": t("appNotInstalled"),
+  "auth/argument-error": t("argumentError"),
+  "auth/captcha-check-failed": t("captchaCheckFailed"),
+  "auth/code-expired": t("codeExpired"),
+  "auth/cordova-not-ready": t("cordovaNotReady"),
+  "auth/cors-unsupported": t("corsUnsupported"),
+  "auth/credential-already-in-use": t("credentialAlreadyInUse"),
+  "auth/custom-token-mismatch": t("customTokenMismatch"),
+  "auth/requires-recent-login": t("requiresRecentLogin"),
+  "auth/dependent-sdk-initialized-before-auth": t(
+    "dependentSdkInitializedBeforeAuth"
+  ),
+  "auth/dynamic-link-not-activated": t("dynamicLinkNotActivated"),
+  "auth/email-change-needs-verification": t("emailChangeNeedsVerification"),
+  "auth/emulator-config-failed": t("emulatorConfigFailed"),
+  "auth/expired-action-code": t("expiredActionCode"),
+  "auth/cancelled-popup-request": t("cancelledPopupRequest"),
+  "auth/invalid-api-key": t("invalidApiKey"),
+  "auth/invalid-app-credential": t("invalidAppCredential"),
+  "auth/invalid-app-id": t("invalidAppId"),
+  "auth/invalid-user-token": t("invalidUserToken"),
+  "auth/invalid-auth-event": t("invalidAuthEvent"),
+  "auth/invalid-cert-hash": t("invalidCertHash"),
+  "auth/invalid-verification-code": t("invalidVerificationCode"),
+  "auth/invalid-continue-uri": t("invalidContinueUri"),
+  "auth/invalid-cordova-configuration": t("invalidCordovaConfiguration"),
+  "auth/invalid-custom-token": t("invalidCustomToken"),
+  "auth/invalid-dynamic-link-domain": t("invalidDynamicLinkDomain"),
+  "auth/invalid-emulator-scheme": t("invalidEmulatorScheme"),
+  "auth/invalid-message-payload": t("invalidMessagePayload"),
+  "auth/invalid-multi-factor-session": t("invalidMultiFactorSession"),
+  "auth/invalid-oauth-client-id": t("invalidOauthClientId"),
+  "auth/invalid-oauth-provider": t("invalidOauthProvider"),
+  "auth/invalid-action-code": t("invalidActionCode"),
+  "auth/unauthorized-domain": t("unauthorizedDomain"),
+  "auth/invalid-persistence-type": t("invalidPersistenceType"),
+  "auth/invalid-phone-number": t("invalidPhoneNumber"),
+  "auth/invalid-provider-id": t("invalidProviderId"),
+  "auth/invalid-recaptcha-action": t("invalidRecaptchaAction"),
+  "auth/invalid-recaptcha-token": t("invalidRecaptchaToken"),
+  "auth/invalid-recaptcha-version": t("invalidRecaptchaVersion"),
+  "auth/invalid-recipient-email": t("invalidRecipientEmail"),
+  "auth/invalid-req-type": t("invalidReqType"),
+  "auth/invalid-sender": t("invalidSender"),
+  "auth/invalid-verification-id": t("invalidVerificationId"),
+  "auth/invalid-tenant-id": t("invalidTenantId"),
+  "auth/multi-factor-info-not-found": t("multiFactorInfoNotFound"),
+  "auth/multi-factor-auth-required": t("multiFactorAuthRequired"),
+  "auth/missing-android-pkg-name": t("missingAndroidPkgName"),
+  "auth/missing-app-credential": t("missingAppCredential"),
+  "auth/auth-domain-config-required": t("authDomainConfigRequired"),
+  "auth/missing-client-type": t("missingClientType"),
+  "auth/missing-verification-code": t("missingVerificationCode"),
+  "auth/missing-continue-uri": t("missingContinueUri"),
+  "auth/missing-iframe-start": t("missingIframeStart"),
+  "auth/missing-ios-bundle-id": t("missingIosBundleId"),
+  "auth/missing-multi-factor-info": t("missingMultiFactorInfo"),
+  "auth/missing-multi-factor-session": t("missingMultiFactorSession"),
+  "auth/missing-or-invalid-nonce": t("missingOrInvalidNonce"),
+  "auth/missing-phone-number": t("missingPhoneNumber"),
+  "auth/missing-recaptcha-token": t("missingRecaptchaToken"),
+  "auth/missing-recaptcha-version": t("missingRecaptchaVersion"),
+  "auth/missing-verification-id": t("missingVerificationId"),
+  "auth/app-deleted": t("appDeleted"),
+  "auth/account-exists-with-different-credential": t(
+    "accountExistsWithDifferentCredential"
+  ),
+  "auth/network-request-failed": t("networkRequestFailed"),
+  "auth/no-auth-event": t("noAuthEvent"),
+  "auth/no-such-provider": t("noSuchProvider"),
+  "auth/null-user": t("nullUser"),
+  "auth/operation-not-supported-in-this-environment": t(
+    "operationNotSupportedInThisEnvironment"
+  ),
+  "auth/popup-blocked": t("popupBlocked"),
+  "auth/popup-closed-by-user": t("popupClosedByUser"),
+  "auth/provider-already-linked": t("providerAlreadyLinked"),
+  "auth/quota-exceeded": t("quotaExceeded"),
+  "auth/recaptcha-not-enabled": t("recaptchaNotEnabled"),
+  "auth/redirect-cancelled-by-user": t("redirectCancelledByUser"),
+  "auth/redirect-operation-pending": t("redirectOperationPending"),
+  "auth/rejected-credential": t("rejectedCredential"),
+  "auth/second-factor-already-in-use": t("secondFactorAlreadyInUse"),
+  "auth/maximum-second-factor-count-exceeded": t(
+    "maximumSecondFactorCountExceeded"
+  ),
+  "auth/tenant-id-mismatch": t("tenantIdMismatch"),
+  "auth/timeout": t("timeout"),
+  "auth/user-token-expired": t("userTokenExpired"),
+  "auth/unauthorized-continue-uri": t("unauthorizedContinueUri"),
+  "auth/unsupported-first-factor": t("unsupportedFirstFactor"),
+  "auth/unsupported-persistence-type": t("unsupportedPersistenceType"),
+  "auth/unsupported-tenant-operation": t("unsupportedTenantOperation"),
+  "auth/unverified-email": t("unverifiedEmail"),
+  "auth/user-cancelled": t("userCancelled"),
+  "auth/user-mismatch": t("userMismatch"),
+  "auth/user-signed-out": t("userSignedOut"),
+  "auth/weak-password": t("weakPassword"),
+  "auth/web-storage-unsupported": t("webStorageUnsupported"),
+  "auth/missing-email": t("addEmail"),
+};
+
+// Error handling function
+export const handleFirebaseAuthError = (errorCode) => {
+  // Check if the error code exists in the global ERROR_CODES object
+  if (ERROR_CODES.hasOwnProperty(errorCode)) {
+    // If the error code exists, log the corresponding error message
+    toast.error(ERROR_CODES[errorCode]);
+  } else {
+    // If the error code is not found, log a generic error message
+    toast.error(`${t("errorOccurred")}:${errorCode}`);
+  }
+  // Optionally, you can add additional logic here to handle the error
+  // For example, display an error message to the user, redirect to an error page, etc.
+};
+
+export const truncate = (text, maxLength) => {
+  // Check if text is undefined or null
+  if (!text) {
+    return ""; // or handle the case as per your requirement
+  }
+
+  const stringText = String(text);
+
+  // If the text length is less than or equal to maxLength, return the original text
+  if (stringText.length <= maxLength) {
+    return text;
+  } else {
+    // Otherwise, truncate the text to maxLength characters and append ellipsis
+    return stringText?.slice(0, maxLength) + "...";
+  }
+};
+
+export const loadStripeApiKey = () => {
+  const STRIPEData = store.getState()?.Settings;
+  const StripeKey = STRIPEData?.data?.stripe_publishable_key;
+  if (StripeKey) {
+    ``;
+    return StripeKey;
+  }
+  return false;
+};
+
+export const generateSlug = (text) => {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "") // Remove all characters that are not lowercase letters, digits, spaces, or hyphens
+    .replace(/\s+/g, "-") // Replace spaces with hyphens
+    .replace(/-+/g, "-") // Replace multiple hyphens with a single hyphen
+    .replace(/^-+|-+$/g, ""); // Remove leading or trailing hyphens
+};
+
+export const isEmptyObject = (obj) => {
+  return Object.keys(obj).length === 0;
+};
+
+// Create a temporary element to measure the width of category names
+
+export const measureCategoryWidth = (categoryName) => {
+  const tempElement = document.createElement("span");
+  tempElement.style.display = "inline-block";
+  tempElement.style.visibility = "hidden";
+  tempElement.style.position = "absolute";
+  tempElement.innerText = categoryName;
+  document.body.appendChild(tempElement);
+  const width = tempElement.offsetWidth + 15; //icon width(12) + gap(3) between category and icon
+  document.body.removeChild(tempElement);
+  return width;
+};
+
+export const calculateRatingPercentages = (ratings) => {
+  // Initialize counters for each star rating
+  const ratingCount = {
+    5: 0,
+    4: 0,
+    3: 0,
+    2: 0,
+    1: 0,
+  };
+
+  // Count the number of each star rating
+  ratings?.forEach((rating) => {
+    const roundedRating = Math.round(rating?.ratings); // Round down to the nearest whole number
+    if (roundedRating >= 1 && roundedRating <= 5) {
+      ratingCount[roundedRating] += 1;
+    }
+  });
+
+  // Get the total number of ratings
+  const totalRatings = ratings.length;
+
+  // Calculate the percentage for each rating
+  const ratingPercentages = {
+    5: (ratingCount[5] / totalRatings) * 100,
+    4: (ratingCount[4] / totalRatings) * 100,
+    3: (ratingCount[3] / totalRatings) * 100,
+    2: (ratingCount[2] / totalRatings) * 100,
+    1: (ratingCount[1] / totalRatings) * 100,
+  };
+
+  return { ratingCount, ratingPercentages };
+};
+
+export const isPdf = (url) => url?.toLowerCase().endsWith(".pdf");
+
+export const extractYear = (dateString) => {
+  const date = new Date(dateString);
+  return date.getFullYear();
+};
+
+export const isValidURL = (url) => {
+  const pattern = /^(ftp|http|https):\/\/[^ "]+$/;
+  return pattern.test(url);
+};
+
+export const formatTime = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now - date) / 1000);
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  const diffInDays = Math.floor(diffInHours / 24);
+  const diffInWeeks = Math.floor(diffInDays / 7);
+  const diffInMonths = Math.floor(diffInDays / 30);
+  const diffInYears = Math.floor(diffInDays / 365);
+
+  if (diffInSeconds < 60) {
+    return t("now");
+  } else if (diffInMinutes < 60) {
+    return `${diffInMinutes}m`;
+  } else if (diffInHours < 24) {
+    return `${diffInHours}h`;
+  } else if (diffInDays === 1) {
+    return t("yesterday");
+  } else if (diffInDays < 7) {
+    return `${diffInDays}d`;
+  } else if (diffInWeeks < 4) {
+    return `${diffInWeeks}w`;
+  } else if (diffInMonths < 12) {
+    return `${diffInMonths}mo`;
+  } else {
+    return `${diffInYears}y`;
+  }
+};
+
+export const formatChatMessageTime = (dateString) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const langCode = store
+    .getState()
+    ?.CurrentLanguage?.language?.code?.toLowerCase();
+  const locale = languageLocaleMap?.[langCode] || "en-US";
+  return date.toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
+export const formatDateMonthYear = (dateString) => {
+  if (!dateString) return "";
+
+  const langCode = store
+    .getState()
+    ?.CurrentLanguage?.language?.code?.toLowerCase();
+  const locale = languageLocaleMap?.[langCode] || "en-US";
+  return new Date(dateString).toLocaleDateString(locale, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
+
+export const formatMessageDate = (dateString) => {
+  const messageDate = new Date(dateString);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (messageDate.toDateString() === today.toDateString()) {
+    return t("today");
+  } else if (messageDate.toDateString() === yesterday.toDateString()) {
+    return t("yesterday");
+  } else {
+    return formatDateMonthYear(dateString);
+  }
+};
+
+export const getYouTubeVideoId = (url) => {
+  const regExp =
+    /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url?.match(regExp);
+  if (match) {
+    return match && match[2].length === 11 ? match[2] : null;
+  } else {
+    return false;
+  }
+};
+
+export const validateExtraDetails = ({
+  languages,
+  defaultLangId,
+  extraDetails,
+  customFields,
+  filePreviews,
+}) => {
+  for (const lang of languages) {
+    const current = extraDetails?.[lang.id] || {};
+    const previews = filePreviews?.[lang.id] || {};
+    const isDefaultLang = lang.id === defaultLangId;
+    const langLabel = isDefaultLang ? "" : `${lang.name}: `;
+
+    for (const field of customFields) {
+      const { id, name, type, required, is_required, min_length } = field;
+
+      const requiredValue = required ?? is_required ?? 0;
+
+      // Skip non-textbox fields in non-default languages
+      if (!isDefaultLang && type !== "textbox") continue;
+
+      const value = current[id];
+
+      const isValueEmpty =
+        value === undefined ||
+        value === null ||
+        value === "" ||
+        (Array.isArray(value) && value.length === 0);
+
+      const isRequired = isDefaultLang && requiredValue === 1;
+      const shouldValidate = isRequired || (!isValueEmpty && !isDefaultLang);
+
+      if (!shouldValidate) continue;
+
+      const showError = (msg) => {
+        toast.error(`${langLabel}${msg}`);
+      };
+
+      // === Required Validation
+      const isMissing =
+        (["textbox", "number", "radio", "dropdown"].includes(type) &&
+          isValueEmpty) ||
+        (type === "checkbox" &&
+          (!Array.isArray(value) || value.length === 0)) ||
+        (type === "fileinput" && !value && !previews[id]);
+
+      if (isRequired && isMissing) {
+        const key = ["checkbox", "radio"].includes(type)
+          ? t("selectAtleastOne")
+          : t("fillDetails");
+        showError(`${key} ${name}.`);
+        return false;
+      }
+
+      // === Min Length Validation
+      if (value && min_length && ["textbox", "number"].includes(type)) {
+        const valStr = String(type === "textbox" ? value.trim() : value);
+        if (valStr.length < min_length) {
+          const lengthError =
+            type === "number"
+              ? `${t("mustBeAtleast")} ${min_length} ${t("digitLong")}`
+              : `${t("mustBeAtleast")} ${min_length} ${t("charactersLong")}`;
+          showError(`${name} ${lengthError}`);
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
+};
+
+const urlToFile = async (url, filename) => {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return new File([blob], filename, { type: blob.type });
+};
+
+export const prefillExtraDetails = ({
+  data,
+  languages,
+  defaultLangId,
+  extraFieldValue,
+  setFilePreviews,
+}) => {
+  const tempExtraDetails = {};
+
+  languages.forEach((lang) => {
+    const isDefault = lang.id === defaultLangId;
+    const perLang = {};
+    data.forEach(async (field) => {
+      const fieldId = field.id;
+
+      if (!isDefault && field.type !== "textbox") return;
+
+      const extraField = extraFieldValue.find(
+        (item) => item.language_id === lang.id && item.id === fieldId
+      );
+      const fieldValue = extraField?.value || null;
+
+      switch (field.type) {
+        case "checkbox":
+          perLang[fieldId] = fieldValue || [];
+          break;
+
+        case "radio":
+          perLang[fieldId] = fieldValue ? fieldValue[0] : "";
+          break;
+
+        case "fileinput":
+          if (isDefault && fieldValue?.length) {
+            const fileUrl = fieldValue[0];
+
+            // update preview immediately
+            setFilePreviews?.((prev) => ({
+              ...prev,
+              [fieldId]: {
+                url: fileUrl,
+                isPdf: isPdf(fileUrl),
+              },
+            }));
+
+            // convert URL → File (binary) for payload
+            const file = await urlToFile(fileUrl, `prefilled-${fieldId}`);
+            perLang[fieldId] = file;
+          } else {
+            perLang[fieldId] = "";
+          }
+          break;
+
+        default:
+          perLang[fieldId] = fieldValue ? fieldValue[0] : "";
+      }
+    });
+
+    tempExtraDetails[lang.id] = perLang;
+  });
+
+  return tempExtraDetails;
+};
+
+export const prefillVerificationDetails = ({
+  data,
+  languages,
+  defaultLangId,
+  extraFieldValue,
+  setFilePreviews,
+}) => {
+  const tempExtraDetails = {};
+
+  languages.forEach((lang) => {
+    const isDefault = lang.id === defaultLangId;
+    const perLang = {};
+    data.forEach((field) => {
+      const fieldId = field.id;
+
+      if (!isDefault && field.type !== "textbox") return;
+
+      const extraField = extraFieldValue.find(
+        (item) => item.language_id === lang.id && item.id === fieldId
+      );
+      const fieldValue = extraField?.value || null;
+      switch (field.type) {
+        case "checkbox":
+          perLang[fieldId] = fieldValue || [];
+          break;
+
+        case "radio":
+          perLang[fieldId] = fieldValue ? fieldValue[0] : "";
+          break;
+
+        case "fileinput":
+          if (isDefault && fieldValue?.length) {
+            setFilePreviews?.((prev) => ({
+              ...prev,
+              [fieldId]: {
+                url: fieldValue[0],
+                isPdf: isPdf(fieldValue[0]),
+              },
+            }));
+          }
+          perLang[fieldId] = "";
+          break;
+
+        default:
+          perLang[fieldId] = fieldValue ? fieldValue[0] : "";
+      }
+    });
+
+    tempExtraDetails[lang.id] = perLang;
+  });
+
+  return tempExtraDetails;
+};
+
+export const getMainDetailsTranslations = (
+  listingData,
+  languages,
+  defaultLangId,
+  currencies = []
+) => {
+  const translations = {};
+
+  // Fill translations for all languages
+  languages.forEach((lang) => {
+    const isDefault = lang.id === defaultLangId;
+
+    if (isDefault) {
+      const region = listingData?.region_code?.toUpperCase() || ""; // react-phone-number-input expects uppercase region code
+      const countryCodeFromRegion = region ? getCountryCallingCode(region) : "";
+
+      // Default language gets full data
+      translations[lang.id] = {
+        name: listingData?.name || "",
+        description: listingData?.description || "",
+        price: listingData?.price || "",
+        contact: listingData?.contact || "",
+        video_link: listingData?.video_link || "",
+        slug: listingData?.slug || "",
+        min_salary: listingData?.min_salary || "",
+        max_salary: listingData?.max_salary || "",
+        region_code: listingData?.region_code?.toLowerCase() || "",
+        country_code: countryCodeFromRegion,
+        ...(listingData?.currency_id && { currency_id: listingData?.currency_id }),
+      };
+
+      // Preselect first currency if currencies are available but currency_id is not set
+      // This handles the case when no currency was selected at ad listing
+      if (
+        !listingData?.currency_id &&
+        currencies?.length > 0 &&
+        !translations[lang.id].currency_id
+      ) {
+        // Find first currency (or selected one if available)
+        const defaultCurrency =
+          currencies.find((curr) => curr.selected == 1) || currencies[0];
+
+        if (defaultCurrency) {
+          translations[lang.id].currency_id = defaultCurrency?.id;
+        }
+      }
+
+
+    } else {
+      // Other languages: get translation if available
+      const translated = listingData?.translations?.find(
+        (tr) => tr.language_id === lang.id
+      );
+
+      translations[lang.id] = {
+        name: translated?.name || "",
+        description: translated?.description || "",
+      };
+    }
+  });
+
+  return translations;
+};
+
+export const filterNonDefaultTranslations = (translations, defaultLangId) => {
+  const result = {};
+
+  for (const langId in translations) {
+    if (Number(langId) === Number(defaultLangId)) continue;
+
+    const fields = translations[langId];
+    const filteredFields = {};
+
+    for (const key in fields) {
+      const value = fields[key];
+      if (
+        value !== undefined &&
+        value !== null &&
+        typeof value === "string" &&
+        value.trim() !== ""
+      ) {
+        filteredFields[key] = value.trim();
+      }
+    }
+
+    if (Object.keys(filteredFields).length > 0) {
+      result[langId] = filteredFields;
+    }
+  }
+
+  return JSON.stringify(result);
+};
+
+export const prepareCustomFieldTranslations = (extraDetails = {}) => {
+  const result = {};
+
+  for (const langId in extraDetails) {
+    const fields = extraDetails[langId];
+    const cleanedFields = {};
+
+    for (const fieldId in fields) {
+      const value = fields[fieldId];
+
+      if (
+        Array.isArray(value) &&
+        value.length > 0 &&
+        !(value[0] instanceof File)
+      ) {
+        cleanedFields[fieldId] = value;
+      } else if (
+        value !== undefined &&
+        value !== null &&
+        value !== "" &&
+        !(value instanceof File)
+      ) {
+        cleanedFields[fieldId] = [String(value)];
+      }
+    }
+
+    if (Object.keys(cleanedFields).length > 0) {
+      result[langId] = cleanedFields;
+    }
+  }
+
+  return JSON.stringify(result);
+};
+
+export const prepareCustomFieldFiles = (extraDetails, defaultLangId) => {
+  const customFieldFiles = [];
+  const defaultLangFields = extraDetails?.[defaultLangId] || {};
+
+  Object.entries(defaultLangFields).forEach(([fieldId, value]) => {
+    if (value instanceof File) {
+      customFieldFiles.push({ key: fieldId, files: [value] });
+    } else if (Array.isArray(value) && value[0] instanceof File) {
+      customFieldFiles.push({ key: fieldId, files: value });
+    }
+  });
+
+  return customFieldFiles;
+};
+
+export const handleKeyDown = (e, maxLength) => {
+  if (maxLength === null || maxLength === undefined) {
+    return;
+  }
+  const value = e.target.value;
+  // Allow control keys (Backspace, Delete, Arrow keys, etc.)
+  const controlKeys = [
+    "Backspace",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "Delete",
+    "Tab",
+  ];
+
+  if (value.length >= maxLength && !controlKeys.includes(e.key)) {
+    e.preventDefault();
+  }
+};
+
+export const inpNum = (e) => {
+  e = e || window.event;
+  var charCode = typeof e.which == "undefined" ? e.keyCode : e.which;
+  var charStr = String.fromCharCode(charCode);
+  if (!charStr.match(/^[0-9]+$/)) {
+    e.preventDefault();
+  }
+};
+
+export const getFilteredCustomFields = (
+  allTranslatedFields,
+  currentLanguageId
+) => {
+  const fields = Array.isArray(allTranslatedFields) ? allTranslatedFields : [];
+  const fieldMap = new Map();
+
+  for (const field of fields) {
+    const id = field.id;
+    const val =
+      field.type === "fileinput"
+        ? field.value
+        : field.translated_selected_values;
+
+    const isEmpty =
+      val === null ||
+      val === "" ||
+      (Array.isArray(val) &&
+        (val.length === 0 ||
+          (val.length === 1 && (val[0] === "" || val[0] === null))));
+
+    if (isEmpty) continue;
+
+    // Prefer current language or store the first available
+    if (!fieldMap.has(id) || field.language_id === currentLanguageId) {
+      fieldMap.set(id, field);
+    }
+  }
+
+  return Array.from(fieldMap.values());
+};
+
+export const getDefaultCountryCode = () => {
+  try {
+    const defaultCountry =
+      process.env.NEXT_PUBLIC_DEFAULT_COUNTRY?.toUpperCase();
+    if (defaultCountry) {
+      return getCountryCallingCode(defaultCountry);
+    }
+  } catch (error) {
+    console.log("Error getting country calling code:", error);
+  }
+  return "91"; // Fallback to "91" if env var is not set or invalid
+};
+
+export const formatPhoneNumber = (number = "", countryCode = "") => {
+  if (!number || !countryCode) return number;
+
+  // Remove non-digit characters from country code
+  const countryCodeDigitsOnly = countryCode.replace(/\D/g, "");
+
+  // Remove non-digit characters from number (optional but safer)
+  const digitsOnlyNumber = number.replace(/\D/g, "");
+
+  // Check if number starts with country code
+  if (digitsOnlyNumber.startsWith(countryCodeDigitsOnly)) {
+    return digitsOnlyNumber.substring(countryCodeDigitsOnly.length);
+  }
+
+  return digitsOnlyNumber;
+};
+
+
+export const seoData = ({
+  title,
+  description,
+  keywords,
+  image,
+  canonicalUrl,
+}) => {
+  const getMeta = (selector, attrs) => {
+    let tag = document.querySelector(selector);
+    if (!tag) {
+      tag = document.createElement("meta");
+      Object.keys(attrs).forEach((key) => (tag[key] = attrs[key]));
+      document.head.appendChild(tag);
+    }
+    return tag;
+  };
+
+  // Title
+  if (title) {
+    document.title = title;
+
+    getMeta('meta[property="og:title"]', { property: "og:title" }).setAttribute(
+      "content",
+      title
+    );
+
+    getMeta('meta[name="twitter:title"]', {
+      name: "twitter:title",
+    }).setAttribute("content", title);
+  }
+
+  // Description
+  if (description) {
+    getMeta('meta[name="description"]', { name: "description" }).setAttribute(
+      "content",
+      description
+    );
+
+    getMeta('meta[property="og:description"]', {
+      property: "og:description",
+    }).setAttribute("content", description);
+
+    getMeta('meta[name="twitter:description"]', {
+      name: "twitter:description",
+    }).setAttribute("content", description);
+  }
+
+  // Keywords
+  if (keywords) {
+    getMeta('meta[name="keywords"]', { name: "keywords" }).setAttribute(
+      "content",
+      keywords
+    );
+  }
+
+  // Image
+  if (image) {
+    getMeta('meta[property="og:image"]', { property: "og:image" }).setAttribute(
+      "content",
+      image
+    );
+
+    getMeta('meta[name="twitter:image"]', {
+      name: "twitter:image",
+    }).setAttribute("content", image);
+  }
+
+  if (canonicalUrl) {
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.appendChild(canonical);
+    }
+    canonical.href = canonicalUrl;
+  }
+};

@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@/components/*": [
+        "./components/*"
+      ],
+      "@/utils/*": [
+        "./utils/*"
+      ],
+      "@/redux/*": [
+        "./redux/*"
+      ],
+      "@/app/*": [
+        "./app/*"
+      ],
+      "@/lib/*": [
+        "./lib/*"
+      ],
+      "@/public/*": [
+        "./public/*"
+      ]
+    }
+  },
+  "include": [
+    "./**/*.js",
+    "./**/*.jsx",
+    "./**/*.ts",
+    "./**/*.tsx",
+    "components/Layout"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

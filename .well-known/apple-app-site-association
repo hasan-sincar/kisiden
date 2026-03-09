@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "QA5UX5B4B6.com.eclassify.wrteam",
+        "paths": [
+          "/ad-details/*",
+      "/seller/*"
+        ]
+      }
+    ]
+  }
+}
