@@ -8,9 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useSelector } from "react-redux";
 import { useEffect, useState } from "react";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import NoData from "@/components/EmptyStates/NoData";
 import { Badge } from "@/components/ui/badge";
 import JobApplicationSkeleton from "@/components/Skeletons/JobApplicationSkeleton";
@@ -18,9 +16,10 @@ import { toast } from "sonner";
 import Pagination from "@/components/Common/Pagination";
 import { getMyJobApplicationsList } from "@/utils/api";
 import CustomLink from "@/components/Common/CustomLink";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
 
 const JobApplications = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
+  const langCode = useLangFromSearchParams()
   const [jobApplication, setJobApplication] = useState({
     data: [],
     currentPage: 1,
@@ -32,7 +31,7 @@ const JobApplications = () => {
 
   useEffect(() => {
     fetchJobApplicationsData(1);
-  }, [jobApplication?.currentPage, CurrentLanguage.code]);
+  }, [jobApplication?.currentPage, langCode]);
 
   const fetchJobApplicationsData = async (page) => {
     try {

@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { setNotification } from "@/redux/reducer/globalStateSlice";
 import { useNavigate } from "../Common/useNavigate";
 import { getIsLoggedIn } from "@/redux/reducer/authSlice";
+import { getFaviconUrl } from "@/redux/reducer/settingSlice";
 
 const PushNotificationLayout = ({ children }) => {
   const dispatch = useDispatch();
@@ -14,6 +15,7 @@ const PushNotificationLayout = ({ children }) => {
   const { navigate } = useNavigate();
   const isLoggedIn = useSelector(getIsLoggedIn);
   const unsubscribeRef = useRef(null);
+  const faviconUrl = useSelector(getFaviconUrl);
 
   const handleFetchToken = async () => {
     await fetchToken(setFcmToken);
@@ -42,9 +44,20 @@ const PushNotificationLayout = ({ children }) => {
           if (payload && payload.data) {
             dispatch(setNotification(payload.data));
             if (Notification.permission === "granted") {
-              const notif = new Notification(payload.notification.title, {
-                body: payload.notification.body,
-              });
+
+              const options = {
+                body: payload?.notification?.body || "",
+              };
+
+              if (faviconUrl) {
+                options.icon = faviconUrl;
+              }
+
+              if (payload?.notification?.image) {
+                options.image = payload.notification.image;
+              }
+
+              const notif = new Notification(payload.notification.title, options);
               const tab =
                 payload.data?.user_type === "Seller" ? "buying" : "selling";
 
@@ -54,7 +67,7 @@ const PushNotificationLayout = ({ children }) => {
                   payload.data.type === "offer"
                 ) {
                   navigate(
-                    `/chat?activeTab=${tab}&chatid=${payload.data?.item_offer_id}`
+                    `/chat?activeTab=${tab}&chatid=${payload.data?.item_offer_id}&chat_ad_id=${payload.data?.item_id}`
                   );
                 }
               };

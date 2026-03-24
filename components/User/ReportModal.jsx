@@ -21,7 +21,9 @@ const ReportModal = ({
   const [IsSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchReportData();
+    if (isReportModalOpen) {
+      fetchReportData();
+    }
   }, []);
 
   const fetchReportData = async () => {
@@ -90,11 +92,10 @@ const ReportModal = ({
             <button
               key={reason.id}
               onClick={() => setSelectedReason(reason.id)}
-              className={`w-full text-base ltr:text-left rtl:text-right p-3 rounded-lg border transition-colors ${
-                selectedReason === reason.id
+              className={`w-full text-base ltr:text-left rtl:text-right p-3 rounded-lg border transition-colors ${selectedReason === reason.id
                   ? "bg-primary text-white"
                   : "hover:bg-gray-50 text-gray-700"
-              }`}
+                }`}
             >
               {reason.translated_reason || reason.reason}
             </button>
@@ -104,11 +105,10 @@ const ReportModal = ({
           <div className="flex flex-col gap-2">
             <button
               onClick={() => setSelectedReason("other")}
-              className={`w-full border ltr:text-left rtl:text-right p-3 rounded-lg transition-colors ${
-                selectedReason === "other"
+              className={`w-full border ltr:text-left rtl:text-right p-3 rounded-lg transition-colors ${selectedReason === "other"
                   ? "bg-primary text-white"
                   : "hover:bg-gray-50 text-gray-700"
-              }`}
+                }`}
             >
               {t("other")}
             </button>

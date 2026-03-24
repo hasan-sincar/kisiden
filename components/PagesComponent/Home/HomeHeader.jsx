@@ -1,6 +1,5 @@
 "use client";
 import LanguageDropdown from "@/components/Common/LanguageDropdown";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import {
   getIsFreAdListing,
   getOtpServiceProvider,
@@ -10,7 +9,6 @@ import { t, truncate } from "@/utils";
 import CustomLink from "@/components/Common/CustomLink";
 import { useSelector } from "react-redux";
 import { GrLocation } from "react-icons/gr";
-import { getCityData } from "@/redux/reducer/locationSlice";
 import HomeMobileMenu from "./HomeMobileMenu.jsx";
 import MailSentSuccessModal from "@/components/Auth/MailSentSuccessModal.jsx";
 import { useEffect, useState } from "react";
@@ -41,6 +39,9 @@ import HeaderCategories from "./HeaderCategories.jsx";
 import { deleteUser, getAuth } from "firebase/auth";
 import DeleteAccountVerifyOtpModal from "@/components/Auth/DeleteAccountVerifyOtpModal.jsx";
 import useGetCategories from "@/components/Layout/useGetCategories.jsx";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams.jsx";
+import PackageRequiredModal from "./PackageRequiredModal.jsx";
+import { getCityData } from "@/redux/reducer/locationSlice.js";
 
 const Search = dynamic(() => import("./Search.jsx"), {
   ssr: false,
@@ -96,7 +97,7 @@ const HomeHeader = () => {
   const cityData = useSelector(getCityData);
 
   // Language & Settings
-  const CurrentLanguage = useSelector(CurrentLanguageData);
+  const langCode = useLangFromSearchParams();
   const settings = useSelector(settingsData);
 
   // 🎛️ Local UI State (via useState)
@@ -115,6 +116,7 @@ const HomeHeader = () => {
 
   // Ad Listing
   const [IsAdListingClicked, setIsAdListingClicked] = useState(false);
+  const [IsPackageRequired, setIsPackageRequired] = useState(false);
 
   // Email Status
   const [IsMailSentSuccess, setIsMailSentSuccess] = useState(false);
@@ -131,7 +133,7 @@ const HomeHeader = () => {
 
   useEffect(() => {
     getCategories(1);
-  }, [CurrentLanguage.id]);
+  }, [langCode]);
 
 
   const handleLogout = async () => {
@@ -181,8 +183,7 @@ const HomeHeader = () => {
       if (res?.data?.error === false) {
         navigate("/ad-listing");
       } else {
-        toast.error(t("purchasePlan"));
-        navigate("/subscription");
+        setIsPackageRequired(true);
       }
     } catch (error) {
       console.log(error);
@@ -198,6 +199,8 @@ const HomeHeader = () => {
 
   const locationText =
     cityData?.address_translated || cityData?.formattedAddress;
+
+
 
   const handleDeleteAcc = async () => {
     try {
@@ -224,7 +227,7 @@ const HomeHeader = () => {
     } catch (error) {
       console.error("Error deleting user:", error.message);
       const isMobileLogin = userData?.type === "phone";
-      if (error.code === "auth/requires-recent-login") {
+      if (error.code === "auth/requires-recent-login" || error.message?.includes("CREDENTIAL_TOO_OLD_LOGIN_AGAIN")) {
         if (isMobileLogin) {
           setManageDeleteAccount((prev) => ({
             ...prev,
@@ -421,6 +424,10 @@ const HomeHeader = () => {
         setIsLocationModalOpen={setIsLocationModalOpen}
       />
       <UnauthorizedModal />
+      <PackageRequiredModal
+        open={IsPackageRequired}
+        onClose={() => setIsPackageRequired(false)}
+      />
       <DeleteAccountVerifyOtpModal
         isOpen={IsVerifyOtpBeforeDelete}
         setIsOpen={setIsVerifyOtpBeforeDelete}

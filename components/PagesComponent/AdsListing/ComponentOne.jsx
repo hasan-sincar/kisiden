@@ -37,7 +37,7 @@ const ComponentOne = ({
                       width={48}
                       className="h-12 w-12 rounded-full"
                     />
-                    <span className="break-all">
+                    <span className="ltr:text-left rtl:text-right break-normal">
                       {category?.translated_name || category?.name}
                     </span>
                   </div>
@@ -51,7 +51,7 @@ const ComponentOne = ({
         )}
       </div>
 
-      {lastPage > currentPage && (
+      {!categoriesLoading && lastPage > currentPage && (
         <div className="text-center mt-6">
           <Button
             variant="outline"

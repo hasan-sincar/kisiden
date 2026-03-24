@@ -14,7 +14,7 @@ import {
 import { userSignUpApi } from "@/utils/api";
 import useAutoFocus from "../Common/useAutoFocus";
 
-const RegisterWithEmailForm = ({ OnHide, setIsMailSentSuccess }) => {
+const RegisterWithEmailForm = ({ OnHide, setIsMailSentSuccess, showLoader, setShowLoader }) => {
   const auth = getAuth();
   const emailRef = useAutoFocus();
 
@@ -24,10 +24,9 @@ const RegisterWithEmailForm = ({ OnHide, setIsMailSentSuccess }) => {
     username: "",
     password: "",
     IsPasswordVisible: false,
-    showLoader: false,
   });
 
-  const { email, username, password, IsPasswordVisible, showLoader } = formData;
+  const { email, username, password, IsPasswordVisible } = formData;
 
   // Handle input changes
   const handleInputChange = (field, value) => {
@@ -45,6 +44,7 @@ const RegisterWithEmailForm = ({ OnHide, setIsMailSentSuccess }) => {
   // Handle form submission
   const handleSignup = async (e) => {
     e.preventDefault();
+
 
     // Validate email
     if (!email) {
@@ -71,7 +71,7 @@ const RegisterWithEmailForm = ({ OnHide, setIsMailSentSuccess }) => {
     }
 
     try {
-      setFormData((prev) => ({ ...prev, showLoader: true }));
+      setShowLoader(true)
 
       // Create user with email and password
       const userCredential = await createUserWithEmailAndPassword(
@@ -106,7 +106,7 @@ const RegisterWithEmailForm = ({ OnHide, setIsMailSentSuccess }) => {
       console.log(error);
       handleFirebaseAuthError(errorCode);
     } finally {
-      setFormData((prev) => ({ ...prev, showLoader: false }));
+      setShowLoader(false)
     }
   };
 
@@ -171,7 +171,7 @@ const RegisterWithEmailForm = ({ OnHide, setIsMailSentSuccess }) => {
         size="big"
       >
         {showLoader ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Loader2 className="!size-6 animate-spin" />
         ) : (
           t("verifyEmail")
         )}

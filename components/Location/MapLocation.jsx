@@ -18,10 +18,10 @@ import { Slider } from "../ui/slider";
 import dynamic from "next/dynamic";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
-import { usePathname } from "next/navigation";
-import { CurrentLanguageData, getIsRtl } from "@/redux/reducer/languageSlice";
-import { useNavigate } from "../Common/useNavigate";
+import { getIsRtl } from "@/redux/reducer/languageSlice";
 import useGetLocation from "../Layout/useGetLocation";
+import { useUpdateLocationInUrl } from "../Common/useUpdateLocationInUrl";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const GetLocationWithMap = dynamic(() => import("./GetLocationWithMap"), {
   ssr: false,
@@ -34,19 +34,33 @@ const MapLocation = ({
   setSelectedCity,
   setIsMapLocation,
   IsPaidApi,
+  shouldSaveToRedux = true,
 }) => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const dispatch = useDispatch();
-  const { navigate } = useNavigate();
-  const pathname = usePathname();
-  const radius = useSelector(getKilometerRange);
-  const [KmRange, setKmRange] = useState(radius || 0);
-  const [IsFetchingLocation, setIsFetchingLocation] = useState(false);
+  const searchParams = useSearchParams();
+  const globalRadius = useSelector(getKilometerRange);
   const min_range = useSelector(getMinRange);
   const max_range = useSelector(getMaxRange);
   const IsBrowserSupported = useSelector(getIsBrowserSupported);
+
+
+  // 2. Get local URL value (for Ads page)
+  const urlRadius = Number(searchParams.get("km_range")) || 0;
+  const initialRadius = shouldSaveToRedux ? globalRadius : urlRadius;
+  const [KmRange, setKmRange] = useState(() => {
+    // If we have a pre-filled range (initialRadius > 0), use it. 
+    // Otherwise, default to min_range.
+    const startValue = initialRadius > 0 ? initialRadius : min_range;
+
+    // Clamp it purely to ensure it never breaks the slider bounds
+    return Math.min(Math.max(startValue, min_range), max_range);
+  });
+  const [IsFetchingLocation, setIsFetchingLocation] = useState(false);
+
   const isRTL = useSelector(getIsRtl);
   const { fetchLocationData } = useGetLocation();
+  const { updateLocationInUrl } = useUpdateLocationInUrl();
+  const router = useRouter();
 
   const getCurrentLocation = async () => {
     if (navigator.geolocation) {
@@ -85,31 +99,38 @@ const MapLocation = ({
   };
 
   const handleSave = () => {
-    const isInvalidLocation = !selectedCity?.lat || !selectedCity?.long;
+    const isInvalidLocation = !selectedCity?.areaId && !selectedCity?.city && !selectedCity?.state && !selectedCity?.country;
+    const isInvalidRange = Number(KmRange) > 0 && (!selectedCity?.areaId && !selectedCity?.city)
+
     if (isInvalidLocation) {
       toast.error(t("pleaseSelectLocation"));
       return;
     }
-    dispatch(setKilometerRange(KmRange));
-    saveCity(selectedCity);
+    if (isInvalidRange) {
+      toast.error(t("pleaseSelectCityToApplyRange"));
+      return;
+    }
+    const dataWithRange = { ...selectedCity, km_range: KmRange };
+    if (shouldSaveToRedux) {
+      dispatch(setKilometerRange(KmRange));
+      saveCity(selectedCity);
+      router.push('/');
+    } else {
+      updateLocationInUrl(dataWithRange);
+    }
     toast.success(t("locationSaved"));
     OnHide();
-    // avoid redirect if already on home page otherwise router.push triggering server side api calls
-    if (pathname !== "/") {
-      navigate("/");
-    }
   };
 
   const handleReset = () => {
-    resetCityData();
-    min_range > 0
-      ? dispatch(setKilometerRange(min_range))
-      : dispatch(setKilometerRange(0));
-    OnHide();
-    // avoid redirect if already on home page otherwise router.push triggering server side api calls
-    if (pathname !== "/") {
-      navigate("/");
+    if (shouldSaveToRedux) {
+      resetCityData();
+      dispatch(setKilometerRange(min_range));
+      router.push('/');
+    } else {
+      updateLocationInUrl({});
     }
+    OnHide();
   };
 
   return (
@@ -123,7 +144,7 @@ const MapLocation = ({
           )}
 
           {selectedCity?.address_translated ||
-          selectedCity?.formattedAddress ? (
+            selectedCity?.formattedAddress ? (
             <p>
               {selectedCity?.address_translated ||
                 selectedCity?.formattedAddress}

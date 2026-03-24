@@ -17,7 +17,7 @@ import { useSelector } from "react-redux";
 import { getIsRtl } from "@/redux/reducer/languageSlice";
 import CustomImage from "@/components/Common/CustomImage";
 
-const BlockedUsersMenu = ({ setSelectedChatDetails }) => {
+const BlockedUsersMenu = ({ setSelectedChatDetails, setChatListData }) => {
   const [blockedUsersList, setBlockedUsersList] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -56,10 +56,27 @@ const BlockedUsersMenu = ({ setSelectedChatDetails }) => {
         setBlockedUsersList((prevList) =>
           prevList.filter((user) => user.id !== userId)
         );
-        setSelectedChatDetails((prev) => ({
-          ...prev,
-          user_blocked: false,
-        }));
+        // Safely update the active chat window if it matches the unblocked user
+        if (setSelectedChatDetails) {
+            setSelectedChatDetails((prev) => {
+                if (prev?.buyer_id === userId || prev?.seller_id === userId) {
+                    return { ...prev, user_blocked: false };
+                }
+                return prev;
+            });
+        }
+
+        // Update the sidebar list immediately
+        if (setChatListData) {
+            setChatListData((prev) => ({
+                ...prev,
+                list: prev.list.map((item) =>
+                    item.buyer_id === userId || item.seller_id === userId 
+                        ? { ...item, user_blocked: false } 
+                        : item
+                ),
+            }));
+        }
         toast.success(response?.data?.message);
       }
     } catch (error) {
@@ -115,11 +132,10 @@ const BlockedUsersMenu = ({ setSelectedChatDetails }) => {
                   <button
                     onClick={(e) => handleUnblock(user?.id, e)}
                     disabled={unblockingId === user?.id}
-                    className={`px-3 py-1 text-sm ${
-                      unblockingId === user?.id
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-primary hover:bg-primary/80"
-                    } text-white rounded-md flex-shrink-0 ml-2`}
+                    className={`px-3 py-1 text-sm ${unblockingId === user?.id
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-primary hover:bg-primary/80"
+                      } text-white rounded-md flex-shrink-0 ml-2`}
                   >
                     {t("unblock")}
                   </button>

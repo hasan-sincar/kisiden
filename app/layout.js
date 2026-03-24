@@ -2,7 +2,7 @@ import { Manrope } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/redux/store/providers";
 import { Toaster } from "@/components/ui/sonner";
-// import Script from "next/script";
+import { cookies } from "next/headers";
 
 const manrope = Manrope({
   weight: ["200", "300", "400", "500", "600", "700", "800"],
@@ -23,17 +23,16 @@ export const generateMetadata = () => {
   };
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const cookieStore = await cookies();
+  const lang = cookieStore.get("lang")?.value || "bg";
+
   return (
     <html
-      lang="en"
+      lang={lang}
       web-version={process.env.NEXT_PUBLIC_WEB_VERSION}
       className="scroll-smooth"
     >
-      <head>
-        {/* <Script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-xxxxxxxxxxxx"
-          crossOrigin="anonymous" strategy="afterInteractive" /> */}
-      </head>
       <body className={`${manrope.className} !pointer-events-auto`}>
         <Providers>
           {children}

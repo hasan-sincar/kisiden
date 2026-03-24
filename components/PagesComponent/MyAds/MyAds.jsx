@@ -12,28 +12,25 @@ import {
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import AdsCard from "./MyAdsCard.jsx";
-import { deleteItemApi, getMyItemsApi, renewItemApi } from "@/utils/api";
+import { deleteItemApi, getMyItemsApi } from "@/utils/api";
 import { useSelector } from "react-redux";
 import ProductCardSkeleton from "@/components/Common/ProductCardSkeleton.jsx";
 import NoData from "@/components/EmptyStates/NoData";
 import { Button } from "@/components/ui/button";
 import {
-  CurrentLanguageData,
   getIsRtl,
 } from "@/redux/reducer/languageSlice.js";
 import { Checkbox } from "@/components/ui/checkbox";
 import ReusableAlertDialog from "@/components/Common/ReusableAlertDialog.jsx";
 import { toast } from "sonner";
-import ChoosePackageModal from "./ChoosePackageModal.jsx";
-import { getIsFreAdListing } from "@/redux/reducer/settingSlice.js";
 
 const MyAds = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const searchParams = useSearchParams();
   const isRTL = useSelector(getIsRtl);
 
   const sortValue = searchParams.get("sort") || "new-to-old";
   const status = searchParams.get("status") || "all";
+  const langCode = searchParams.get("lang")
 
   const [totalAdsCount, setTotalAdsCount] = useState(0);
   const [MyItems, setMyItems] = useState([]);
@@ -42,17 +39,9 @@ const MyAds = () => {
   const [IsLoading, setIsLoading] = useState(true);
   const [IsLoadMore, setIsLoadMore] = useState(false);
 
-  const isFreeAdListing = useSelector(getIsFreAdListing);
-  const [ItemPackages, setItemPackages] = useState([]);
-  const [renewIds, setRenewIds] = useState([]);
-
   const [selectedIds, setSelectedIds] = useState([]);
   const [IsDeleting, setIsDeleting] = useState(false);
   const [IsDeleteDialog, setIsDeleteDialog] = useState(false);
-
-  const [IsChoosePackage, setIsChoosePackage] = useState(false);
-  const [selectedPackageId, setSelectedPackageId] = useState("");
-  const [isRenewingAd, setIsRenewingAd] = useState(false);
 
   // Filter expired ads and check if selection is allowed
   const expiredAds = MyItems.filter((item) => item.status === "expired");
@@ -97,7 +86,7 @@ const MyAds = () => {
 
   useEffect(() => {
     getMyItemsData(1);
-  }, [sortValue, status, CurrentLanguage?.id]);
+  }, [sortValue, status, langCode]);
 
   const updateURLParams = (key, value) => {
     const params = new URLSearchParams(searchParams);
@@ -117,7 +106,7 @@ const MyAds = () => {
     const ad = MyItems.find((item) => item.id === adId);
     if (ad?.status !== "expired") return;
 
-    setRenewIds((prev) => {
+    setSelectedIds((prev) => {
       if (prev.includes(adId)) {
         return prev.filter((id) => id !== adId);
       } else {
@@ -139,7 +128,6 @@ const MyAds = () => {
         toast.success(res?.data?.message);
         setIsDeleteDialog(false);
         setSelectedIds([]);
-        setRenewIds([]);
         await getMyItemsData(1);
       } else {
         toast.error(res?.data?.message);
@@ -151,79 +139,14 @@ const MyAds = () => {
     }
   };
 
-  const renewAds = async ({ ids, packageId }) => {
-    try {
-      setIsRenewingAd(true);
-      let payload = {};
-      if (Array.isArray(ids)) {
-        payload = {
-          item_ids: ids.join(","),
-          ...(isFreeAdListing ? {} : { package_id: packageId }),
-        };
-      } else {
-        payload = {
-          item_ids: ids,
-          ...(isFreeAdListing ? {} : { package_id: packageId }),
-        };
-      }
-
-      const res = await renewItemApi.renewItem(payload);
-
-      if (res?.data?.error === false) {
-        toast.success(res?.data?.message);
-        setIsChoosePackage(false);
-        setRenewIds([]);
-        await getMyItemsData(1);
-      } else {
-        toast.error(res?.data?.message);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsRenewingAd(false);
-    }
-  };
-
-  const handleRenew = (ids) => {
-    const idsToRenew = Array.isArray(ids) ? ids : renewIds;
-
-    if (isFreeAdListing) {
-      renewAds({ ids: idsToRenew });
-    } else {
-      if (!selectedPackageId) {
-        toast.error(t("pleaseSelectPackage"));
-        return;
-      }
-
-      const subPackage = ItemPackages.find(
-        (p) => Number(p.id) === Number(selectedPackageId)
-      );
-      if (!subPackage?.is_active) {
-        toast.error(t("purchasePackageFirst"));
-        navigate("/user-subscription");
-        return;
-      }
-      renewAds({ ids: idsToRenew, packageId: selectedPackageId });
-    }
-  };
-
   // Handle context menu actions
   const handleContextMenuAction = (action, adId) => {
     const ad = MyItems.find((item) => item.id === adId);
-
     switch (action) {
       case "select":
         // Only allow selection for expired ads
         if (ad && ad.status === "expired") {
           handleAdSelection(adId);
-        }
-        break;
-      case "renew":
-        if (isFreeAdListing) {
-          handleRenew([adId]);
-        } else {
-          setRenewIds([adId]);
-          setIsChoosePackage(true);
         }
         break;
       case "delete":
@@ -236,14 +159,14 @@ const MyAds = () => {
   };
 
   const handleSelectAll = () => {
-    if (renewIds.length === expiredAds.length) {
-      setRenewIds([]);
+    if (selectedIds.length === expiredAds.length) {
+      setSelectedIds([]);
     } else {
-      setRenewIds(expiredAds.map((item) => item.id));
+      setSelectedIds(expiredAds.map((item) => item.id));
     }
   };
 
-  const handleCancelSelection = () => setRenewIds([]);
+  const handleCancelSelection = () => setSelectedIds([]);
 
   return (
     <>
@@ -311,12 +234,12 @@ const MyAds = () => {
       </div>
 
       {/* Selection controls - only show when there are expired ads and at least one is selected */}
-      {canMultiSelect && renewIds.length > 0 && (
+      {canMultiSelect && selectedIds.length > 0 && (
         <div className="flex items-center justify-between mt-[30px]">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <Checkbox
-                checked={renewIds.length === expiredAds.length}
+                checked={selectedIds.length === expiredAds.length}
                 onCheckedChange={handleSelectAll}
                 className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
               />
@@ -324,7 +247,7 @@ const MyAds = () => {
             </div>
           </div>
           <p className="text-sm">
-            {renewIds.length} {renewIds.length === 1 ? t("ad") : t("ads")}{" "}
+            {selectedIds.length} {selectedIds.length === 1 ? t("ad") : t("ads")}{" "}
             {t("selected")}
           </p>
         </div>
@@ -341,8 +264,8 @@ const MyAds = () => {
               key={item?.id}
               data={item}
               isApprovedSort={sortValue === "approved"}
-              isSelected={renewIds.includes(item?.id)}
-              isSelectable={renewIds.length > 0 && item.status === "expired"}
+              isSelected={selectedIds.includes(item?.id)}
+              isSelectable={selectedIds.length > 0 && item.status === "expired"}
               onSelectionToggle={() => handleAdSelection(item?.id)}
               onContextMenuAction={(action) =>
                 handleContextMenuAction(action, item?.id)
@@ -369,7 +292,7 @@ const MyAds = () => {
       )}
 
       {/* Action buttons for selected ads - show at bottom */}
-      {renewIds.length > 0 && (
+      {selectedIds.length > 0 && (
         <div className="mt-[30px]">
           <div className="flex items-center justify-end gap-3">
             <Button
@@ -379,43 +302,14 @@ const MyAds = () => {
               {t("cancel")}
             </Button>
             <Button
-              onClick={() => {
-                if (renewIds.length === 0) return; // no selection
-                setSelectedIds([...renewIds]); // copy renewIds to selectedIds
-                setIsDeleteDialog(true);
-              }}
+              onClick={() => setIsDeleteDialog(true)}
               className="bg-destructive text-white"
             >
               {t("remove")}
             </Button>
-            <Button
-              onClick={() => {
-                if (isFreeAdListing) {
-                  handleRenew(); // directly renew
-                } else {
-                  setIsChoosePackage(true);
-                }
-              }}
-              disabled={isRenewingAd}
-              className="bg-primary text-white"
-            >
-              {isRenewingAd ? t("loading") : t("renew")}
-            </Button>
           </div>
         </div>
       )}
-
-      <ChoosePackageModal
-        key={IsChoosePackage}
-        selectedPackageId={selectedPackageId}
-        setSelectedPackageId={setSelectedPackageId}
-        ItemPackages={ItemPackages}
-        setItemPackages={setItemPackages}
-        IsChoosePackage={IsChoosePackage}
-        setIsChoosePackage={setIsChoosePackage}
-        handleRenew={handleRenew}
-        isRenewingAd={isRenewingAd}
-      />
       <ReusableAlertDialog
         open={IsDeleteDialog}
         onCancel={() => setIsDeleteDialog(false)}

@@ -8,6 +8,7 @@ import { t } from "@/utils";
 import { useClientLayoutLogic } from "./useClientLayoutLogic";
 import CustomImage from "../Common/CustomImage";
 import ScrollToTopButton from "./ScrollToTopButton";
+import AdsLoader from "../AdSense/AdsLoader";
 
 export default function Layout({ children }) {
   const { isLoading, isMaintenanceMode, isRedirectToLanding } =
@@ -42,6 +43,7 @@ export default function Layout({ children }) {
         <div className="flex-1">{children}</div>
         <ScrollToTopButton />
         <Footer />
+        <AdsLoader />
       </div>
     </PushNotificationLayout>
   );

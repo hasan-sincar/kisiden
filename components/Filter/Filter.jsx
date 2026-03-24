@@ -1,7 +1,5 @@
 import FilterTree from "./FilterTree";
 import { t } from "@/utils";
-import { useSelector } from "react-redux";
-import { getCurrentLangCode } from "@/redux/reducer/languageSlice";
 import {
   Accordion,
   AccordionContent,
@@ -11,20 +9,16 @@ import {
 import LocationTree from "./LocationTree";
 import BudgetFilter from "./BudgetFilter";
 import DatePostedFilter from "./DatePostedFilter";
-import RangeFilter from "./RangeFilter";
 import ExtraDetailsFilter from "./ExtraDetailsFilter";
+import { useLangFromSearchParams } from "../Common/useLangFromSearchParams";
 
 const Filter = ({
   customFields,
   extraDetails,
   setExtraDetails,
   newSearchParams,
-  country,
-  state,
-  city,
-  area,
 }) => {
-  const langId = useSelector(getCurrentLangCode);
+  const langId = useLangFromSearchParams();
   const isShowCustomfieldFilter =
     customFields &&
     customFields.length > 0 &&
@@ -35,8 +29,6 @@ const Filter = ({
         field.type === "dropdown"
     );
 
-  const isLocationSelected = country || state || city || area;
-
   return (
     <div className="w-full border rounded-lg overflow-hidden">
       <div className="px-4 py-2 font-semibold border-b text-xl">
@@ -45,9 +37,7 @@ const Filter = ({
       <div className=" flex flex-col ">
         <Accordion
           type="multiple"
-          defaultValue={
-            isLocationSelected ? ["location", "category"] : ["category"]
-          }
+          defaultValue={["category"]}
           className="w-full"
         >
           <AccordionItem value="category" className="border-b">
@@ -80,16 +70,6 @@ const Filter = ({
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
               <DatePostedFilter />
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="nearby-range" className="border-b">
-            <AccordionTrigger className="p-4">
-              <span className="font-semibold text-base">
-                {t("nearByKmRange")}
-              </span>
-            </AccordionTrigger>
-            <AccordionContent className="px-4 pb-4">
-              <RangeFilter />
             </AccordionContent>
           </AccordionItem>
           {isShowCustomfieldFilter && (

@@ -15,7 +15,6 @@ import {
   saveCity,
 } from "@/redux/reducer/locationSlice";
 import { useDispatch, useSelector } from "react-redux";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import LocationModal from "../../Location/LocationModal";
 import { toast } from "sonner";
 import { FaLocationCrosshairs } from "react-icons/fa6";
@@ -24,13 +23,10 @@ import CustomLink from "@/components/Common/CustomLink";
 import { ArrowRight } from "lucide-react";
 import { setIsVisitedLandingPage } from "@/redux/reducer/globalStateSlice";
 import CustomImage from "@/components/Common/CustomImage";
-import { useNavigate } from "@/components/Common/useNavigate";
 import LandingAdEditSearchAutocomplete from "@/components/Location/LandingAdEditSearchAutocomplete";
 
 const AnythingYouWant = () => {
   const dispatch = useDispatch();
-  const { navigate } = useNavigate();
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const LocationData = useSelector(getCityData);
   const companyName = useSelector(getCompanyName);
   const [selectedCity, setSelectedCity] = useState(LocationData);
@@ -47,17 +43,15 @@ const AnythingYouWant = () => {
       KmRange > 0
         ? !selectedCity?.lat || !selectedCity?.long
         : !selectedCity?.areaId &&
-          !selectedCity?.city &&
-          !selectedCity?.state &&
-          !selectedCity?.country;
+        !selectedCity?.city &&
+        !selectedCity?.state &&
+        !selectedCity?.country;
 
     if (isInvalidLocation) {
       toast.error(t("pleaseSelectLocation"));
       return;
     }
-
     saveCity(selectedCity);
-    navigate("/");
   };
 
   return (

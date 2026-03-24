@@ -8,7 +8,7 @@ import { t } from "@/utils";
 import { addItemReviewApi } from "@/utils/api";
 import { toast } from "sonner";
 
-const GiveReview = ({ itemId, setSelectedChatDetails, setBuyer }) => {
+const GiveReview = ({ itemId, setSelectedChatDetails, setChatListData }) => {
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [review, setReview] = useState("");
@@ -77,17 +77,17 @@ const GiveReview = ({ itemId, setSelectedChatDetails, setBuyer }) => {
             review: res?.data?.data,
           },
         }));
-        setBuyer((prev) => ({
+        setChatListData((prev) => ({
           ...prev,
-          BuyerChatList: prev.BuyerChatList.map((chatItem) =>
+          list: prev.list.map((chatItem) =>
             chatItem?.item?.id === Number(res?.data?.data?.item_id)
               ? {
-                  ...chatItem,
-                  item: {
-                    ...chatItem.item,
-                    review: res?.data?.data?.review, // use review from API
-                  },
-                }
+                ...chatItem,
+                item: {
+                  ...chatItem.item,
+                  review: res?.data?.data?.review,
+                },
+              }
               : chatItem
           ),
         }));
@@ -128,11 +128,10 @@ const GiveReview = ({ itemId, setSelectedChatDetails, setBuyer }) => {
                 tabIndex={0}
               >
                 <FaStar
-                  className={`text-3xl ${
-                    (hoveredRating || rating) >= starValue
-                      ? "text-yellow-400"
-                      : "text-gray-200"
-                  }`}
+                  className={`text-3xl ${(hoveredRating || rating) >= starValue
+                    ? "text-yellow-400"
+                    : "text-gray-200"
+                    }`}
                 />
               </button>
             ))}
@@ -147,9 +146,8 @@ const GiveReview = ({ itemId, setSelectedChatDetails, setBuyer }) => {
             placeholder={t("writeAReview")}
             value={review}
             onChange={handleReviewChange}
-            className={`min-h-[100px] resize-none border-gray-200 rounded ${
-              errors.review ? "border-red-500" : ""
-            }`}
+            className={`min-h-[100px] resize-none border-gray-200 rounded ${errors.review ? "border-red-500" : ""
+              }`}
           />
           {errors.review && (
             <p className="text-red-500 text-sm mt-1">{errors.review}</p>

@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import BankTransferPayment from "./BankTransferPayment";
 import CustomImage from "@/components/Common/CustomImage";
 import PaypalPayment from "./PaypalPayment";
+import { useNavigate } from "@/components/Common/useNavigate";
+import PaytabsPayment from "./PaytabsPayment";
+import DpoPayment from "./DpoPayment";
 
 const PaymentModal = ({
   showPaymentModal,
@@ -25,8 +28,9 @@ const PaymentModal = ({
   selectedPackage,
   packageSettings,
   isLoading,
-  setToggleApiAfterPaymentSuccess
 }) => {
+
+  const { navigate } = useNavigate()
   const [showStripePayment, setShowStripePayment] = useState(false);
   const isBankTransferActive =
     Number(packageSettings?.bankTransfer?.status) === 1;
@@ -40,7 +44,7 @@ const PaymentModal = ({
       const { status } = event.data;
       if (status === "success") {
         toast.success(t("paymentSuccess"));
-        setToggleApiAfterPaymentSuccess((prev) => !prev)
+        navigate('/')
       } else if (status === "cancel") {
         toast.error(t("paymentCancelled"));
       } else {
@@ -81,7 +85,7 @@ const PaymentModal = ({
               packageSettings={packageSettings}
               PaymentModalClose={PaymentModalClose}
               setShowStripePayment={setShowStripePayment}
-              setToggleApiAfterPaymentSuccess={setToggleApiAfterPaymentSuccess}
+              navigate={navigate}
             />
           ) : (
             <div className="flex flex-col gap-4 mt-2">
@@ -112,7 +116,7 @@ const PaymentModal = ({
                   packageSettings={packageSettings}
                   selectedPackage={selectedPackage}
                   setShowPaymentModal={setShowPaymentModal}
-                  setToggleApiAfterPaymentSuccess={setToggleApiAfterPaymentSuccess}
+                  navigate={navigate}
                 />
               )}
               {packageSettings?.Paystack?.status == 1 && (
@@ -131,6 +135,18 @@ const PaymentModal = ({
               {packageSettings?.Paypal?.status == 1 && (
                 <PaypalPayment selectedPackage={selectedPackage} />
               )}
+
+              {
+                packageSettings?.Paytabs?.status == 1 && (
+                  <PaytabsPayment selectedPackage={selectedPackage} />
+                )
+              }
+
+              {
+                packageSettings?.DPO?.status == 1 && (
+                  <DpoPayment selectedPackage={selectedPackage} />
+                )
+              }
 
               {isBankTransferActive && (
                 <BankTransferPayment closePaymentModal={PaymentModalClose} />

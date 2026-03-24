@@ -16,7 +16,7 @@ const StripePayment = ({
   packageSettings,
   PaymentModalClose,
   setShowStripePayment,
-  setToggleApiAfterPaymentSuccess
+  navigate
 }) => {
   const [stripePromise, setStripePromise] = useState(null);
   const [clientSecret, setClientSecret] = useState("");
@@ -107,7 +107,7 @@ const StripePayment = ({
         } else {
           // Payment succeeded
           toast.success(t("paymentSuccess"));
-          setToggleApiAfterPaymentSuccess((prev) => !prev)
+          navigate('/')
           PaymentModalClose();
         }
       } catch (error) {

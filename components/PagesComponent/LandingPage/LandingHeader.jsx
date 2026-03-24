@@ -1,7 +1,6 @@
 "use client";
 import { t } from "@/utils";
 import { useSelector } from "react-redux";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import { settingsData } from "@/redux/reducer/settingSlice";
 import LanguageDropdown from "../../Common/LanguageDropdown";
 import LandingMobileMenu from "@/components/PagesComponent/LandingPage/LandingMobileMenu";
@@ -10,7 +9,6 @@ import CustomImage from "@/components/Common/CustomImage";
 import CustomLink from "@/components/Common/CustomLink";
 
 const LandingHeader = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const settings = useSelector(settingsData);
   const [isShowMobileMenu, setIsShowMobileMenu] = useState(false);
   const [activeSection, setActiveSection] = useState("anythingYouWant");
@@ -78,11 +76,10 @@ const LandingHeader = () => {
                 <li>
                   <CustomLink
                     href="#anythingYouWant"
-                    className={`cursor-pointer transition-all duration-200 ${
-                      activeSection === "anythingYouWant"
-                        ? "text-primary"
-                        : "hover:text-primary"
-                    }`}
+                    className={`cursor-pointer transition-all duration-200 ${activeSection === "anythingYouWant"
+                      ? "text-primary"
+                      : "hover:text-primary"
+                      }`}
                   >
                     {t("home")}
                   </CustomLink>
@@ -90,11 +87,10 @@ const LandingHeader = () => {
                 <li>
                   <CustomLink
                     href="#work_process"
-                    className={`cursor-pointer transition-all duration-200 ${
-                      activeSection === "work_process"
-                        ? "text-primary"
-                        : "hover:text-primary"
-                    }`}
+                    className={`cursor-pointer transition-all duration-200 ${activeSection === "work_process"
+                      ? "text-primary"
+                      : "hover:text-primary"
+                      }`}
                     onClick={handleMobileMenuClose}
                   >
                     {t("whyChooseUs")}
@@ -103,11 +99,10 @@ const LandingHeader = () => {
                 <li>
                   <CustomLink
                     href="#faq"
-                    className={`cursor-pointer transition-all duration-200 ${
-                      activeSection === "faq"
-                        ? "text-primary"
-                        : "hover:text-primary"
-                    }`}
+                    className={`cursor-pointer transition-all duration-200 ${activeSection === "faq"
+                      ? "text-primary"
+                      : "hover:text-primary"
+                      }`}
                     onClick={handleMobileMenuClose}
                   >
                     {t("faqs")}
@@ -116,11 +111,10 @@ const LandingHeader = () => {
                 <li>
                   <CustomLink
                     href="#ourBlogs"
-                    className={`cursor-pointer transition-all duration-200 ${
-                      activeSection === "ourBlogs"
-                        ? "text-primary"
-                        : "hover:text-primary"
-                    }`}
+                    className={`cursor-pointer transition-all duration-200 ${activeSection === "ourBlogs"
+                      ? "text-primary"
+                      : "hover:text-primary"
+                      }`}
                     onClick={handleMobileMenuClose}
                   >
                     {t("blog")}

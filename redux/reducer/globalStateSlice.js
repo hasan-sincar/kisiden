@@ -7,10 +7,7 @@ const initialState = {
   IsShowBankDetails: false,
   Notification: null,
   IsUnauthorized: false,
-  selectedLocation: null,
-  // Add blocked users state
-  blockedUsersList: [],
-  blockedUsersLoading: false,
+  IsFetchingLanguage: false
 };
 
 export const globalStateSlice = createSlice({
@@ -32,26 +29,9 @@ export const globalStateSlice = createSlice({
     setIsUnauthorized: (state, action) => {
       state.IsUnauthorized = action.payload;
     },
-    setSelectedLocation: (state, action) => {
-      state.selectedLocation = action.payload;
-    },
-    // Add blocked users reducers
-    setBlockedUsersList: (state, action) => {
-      state.blockedUsersList = action.payload;
-    },
-    setBlockedUsersLoading: (state, action) => {
-      state.blockedUsersLoading = action.payload;
-    },
-    addBlockedUser: (state, action) => {
-      const userId = action.payload;
-      if (!state.blockedUsersList.some(user => user.id === userId)) {
-        state.blockedUsersList.push({ id: userId });
-      }
-    },
-    removeBlockedUser: (state, action) => {
-      const userId = action.payload;
-      state.blockedUsersList = state.blockedUsersList.filter(user => user.id !== userId);
-    },
+    setIsFetchingLanguage: (state, action) => {
+      state.IsFetchingLanguage = action.payload;
+    }
   },
 });
 
@@ -62,12 +42,7 @@ export const {
   setIsShowBankDetails,
   setNotification,
   setIsUnauthorized,
-  setSelectedLocation,
-  // Export blocked users actions
-  setBlockedUsersList,
-  setBlockedUsersLoading,
-  addBlockedUser,
-  removeBlockedUser,
+  setIsFetchingLanguage
 } = globalStateSlice.actions;
 
 export const getIsVisitedLandingPage = createSelector(
@@ -107,28 +82,9 @@ export const getIsUnauthorized = createSelector(
   (GlobalState) => GlobalState.IsUnauthorized
 );
 
-export const getSelectedLocation = createSelector(
+export const getIsFetchingLanguage = createSelector(
   (state) => state.GlobalState,
-  (GlobalState) => GlobalState.selectedLocation
+  (GlobalState) => GlobalState.IsFetchingLanguage
 );
 
-// Add blocked users selectors with fallbacks
-export const getBlockedUsersList = createSelector(
-  (state) => state.GlobalState,
-  (GlobalState) => GlobalState?.blockedUsersList || []
-);
 
-export const getBlockedUsersLoading = createSelector(
-  (state) => state.GlobalState,
-  (GlobalState) => GlobalState?.blockedUsersLoading || false
-);
-
-export const getIsUserBlocked = createSelector(
-  [getBlockedUsersList, (state, userId) => userId],
-  (blockedUsersList, userId) => {
-    if (!blockedUsersList || !Array.isArray(blockedUsersList)) {
-      return false;
-    }
-    return blockedUsersList.some(user => user.id === userId);
-  }
-);

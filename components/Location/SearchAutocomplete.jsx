@@ -2,11 +2,9 @@ import { saveCity } from "@/redux/reducer/locationSlice";
 import { getIsPaidApi } from "@/redux/reducer/settingSlice";
 import { t } from "@/utils";
 import { getLocationApi } from "@/utils/api";
-import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useDebounce } from "use-debounce";
-import { useNavigate } from "../Common/useNavigate";
 import { MapPin } from "lucide-react";
 import {
   Command,
@@ -16,16 +14,17 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useUpdateLocationInUrl } from "../Common/useUpdateLocationInUrl";
+import { useRouter } from "next/navigation";
 
 const SearchAutocomplete = ({
   saveOnSuggestionClick,
   OnHide,
   setSelectedLocation,
+  shouldSaveToRedux = true,
 }) => {
   const isSuggestionClick = useRef(false);
   const IsPaidApi = useSelector(getIsPaidApi);
-  const { navigate } = useNavigate();
-  const pathname = usePathname();
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebounce(search, 500);
   const [autoState, setAutoState] = useState({
@@ -34,6 +33,8 @@ const SearchAutocomplete = ({
     show: false,
   });
   const sessionTokenRef = useRef(null);
+  const { updateLocationInUrl } = useUpdateLocationInUrl();
+  const router = useRouter();
 
   // Generate a new session token (UUID v4)
   const generateSessionToken = () => {
@@ -107,7 +108,6 @@ const SearchAutocomplete = ({
         setAutoState({ suggestions: [], loading: false, show: false });
       }
     };
-
     fetchSuggestions();
   }, [debouncedSearch, IsPaidApi]);
 
@@ -125,7 +125,6 @@ const SearchAutocomplete = ({
           session_id: sessionTokenRef.current,
         }),
       });
-
       const result = response?.data?.data?.results?.[0];
       const addressComponents = result.address_components || [];
 
@@ -135,31 +134,31 @@ const SearchAutocomplete = ({
         );
         return component?.long_name || "";
       };
-
       const city = getAddressComponent("locality");
       const state = getAddressComponent("administrative_area_level_1");
       const country = getAddressComponent("country");
+      const formattedAddress = [city, state, country].filter(Boolean).join(", ");
+
       const data = {
         lat: result?.geometry?.location?.lat,
         long: result?.geometry?.location?.lng,
         city,
         state,
         country,
-        formattedAddress: suggestion?.description,
+        formattedAddress,
       };
-      setSearch(suggestion?.description || "");
+      setSearch(formattedAddress || "");
       setAutoState({ suggestions: [], loading: false, show: false });
-
       // Reset session token after place details request (session complete)
       sessionTokenRef.current = null;
-
       if (saveOnSuggestionClick) {
-        saveCity(data);
-        OnHide?.();
-        // avoid redirect if already on home page otherwise router.push triggering server side api calls
-        if (pathname !== "/") {
-          navigate("/");
+        if (shouldSaveToRedux) {
+          saveCity(data);
+          router.push('/');
+        } else {
+          updateLocationInUrl(data);
         }
+        OnHide?.();
       } else {
         setSelectedLocation(data);
       }
@@ -178,12 +177,13 @@ const SearchAutocomplete = ({
       setSearch(suggestion?.description || "");
       setAutoState({ suggestions: [], loading: false, show: false });
       if (saveOnSuggestionClick) {
-        saveCity(data);
-        OnHide?.();
-        // avoid redirect if already on home page otherwise router.push triggering server side api calls
-        if (pathname !== "/") {
-          navigate("/");
+        if (shouldSaveToRedux) {
+          saveCity(data);
+          router.push('/')
+        } else {
+          updateLocationInUrl(data);
         }
+        OnHide?.();
       } else {
         setSelectedLocation(data);
       }

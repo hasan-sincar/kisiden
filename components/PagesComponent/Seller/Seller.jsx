@@ -11,17 +11,17 @@ import Layout from "@/components/Layout/Layout";
 import OpenInAppDrawer from "@/components/Common/OpenInAppDrawer";
 import BreadCrumb from "@/components/BreadCrumb/BreadCrumb";
 import { useSelector } from "react-redux";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
+import { getReduxCurrentLangCode } from "@/redux/reducer/languageSlice";
 
 const Seller = ({ id, searchParams }) => {
-
-  const CurrentLanguage = useSelector(CurrentLanguageData);
+  const currentLangCode = useSelector(getReduxCurrentLangCode); // to refresh the static lable with updated data
   const [steps, setSteps] = useState(1);
   const [IsNoUserFound, setIsNoUserFound] = useState(false);
 
   const [seller, setSeller] = useState(null);
   const [ratings, setRatings] = useState(null);
   const [isSellerDataLoading, setIsSellerDataLoading] = useState(false);
+  const [ratings_count, setRatingsCount] = useState({})
 
   const [isLoadMoreReview, setIsLoadMoreReview] = useState(false);
   const [reviewHasMore, setReviewHasMore] = useState(false);
@@ -50,6 +50,8 @@ const Seller = ({ id, searchParams }) => {
         setIsNoUserFound(true);
       } else {
         const sellerData = res?.data?.data?.ratings;
+        const ratingCount = res?.data?.data?.ratings_count
+        setRatingsCount(ratingCount)
         if (page === 1) {
           setRatings(sellerData);
         } else {
@@ -82,7 +84,6 @@ const Seller = ({ id, searchParams }) => {
   if (IsNoUserFound) {
     return <NoData name={t("noSellerFound")} />;
   }
-
   return (
     <Layout>
       {isSellerDataLoading ? (
@@ -93,23 +94,21 @@ const Seller = ({ id, searchParams }) => {
           <div className="container mx-auto mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
               <div className="col-span-12 lg:col-span-4">
-                <SellerDetailCard seller={seller} ratings={ratings} />
+                <SellerDetailCard seller={seller} ratingCount={ratings?.data?.length} setSeller={setSeller} />
               </div>
               <div className="flex flex-col gap-8 col-span-12 lg:col-span-8">
                 <div className="p-4 flex items-center gap-4 bg-muted border rounded-md w-full">
                   <button
                     onClick={() => handleSteps(1)}
-                    className={`py-2 px-4 rounded-md ${
-                      steps === 1 ? "bg-primary text-white" : ""
-                    }`}
+                    className={`py-2 px-4 rounded-md ${steps === 1 ? "bg-primary text-white" : ""
+                      }`}
                   >
                     {t("liveAds")}
                   </button>
                   <button
                     onClick={() => handleSteps(2)}
-                    className={`py-2 px-4 rounded-md ${
-                      steps === 2 ? "bg-primary text-white" : ""
-                    }`}
+                    className={`py-2 px-4 rounded-md ${steps === 2 ? "bg-primary text-white" : ""
+                      }`}
                   >
                     {t("reviews")}
                   </button>
@@ -118,11 +117,12 @@ const Seller = ({ id, searchParams }) => {
                 {steps === 2 && (
                   <SellerRating
                     ratingsData={ratings}
-                    seller={seller}
+                    averageRating={seller?.average_rating}
                     isLoadMoreReview={isLoadMoreReview}
                     reviewHasMore={reviewHasMore}
                     reviewCurrentPage={reviewCurrentPage}
                     getSeller={getSeller}
+                    ratings_count={ratings_count}
                   />
                 )}
               </div>

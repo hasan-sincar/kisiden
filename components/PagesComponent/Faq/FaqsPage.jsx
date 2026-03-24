@@ -5,19 +5,18 @@ import { useEffect, useState } from "react";
 import { getFaqApi } from "@/utils/api";
 import FaqCard from "./FaqCard";
 import Layout from "@/components/Layout/Layout";
-import { useSelector } from "react-redux";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import PageLoader from "@/components/Common/PageLoader";
 import NoData from "@/components/EmptyStates/NoData";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
 
 const FaqsPage = () => {
   const [faqs, setFaqs] = useState([]);
   const [loading, setLoading] = useState(false);
-  const CurrentLanguage = useSelector(CurrentLanguageData);
+  const langCode = useLangFromSearchParams();
 
   useEffect(() => {
     fetchFaqs();
-  }, [CurrentLanguage.id]);
+  }, [langCode]);
 
   const fetchFaqs = async () => {
     try {

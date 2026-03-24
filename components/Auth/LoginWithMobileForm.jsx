@@ -20,12 +20,16 @@ const LoginWithMobileForm = ({
   formattedNumber,
   onForgotPassword,
   OnHide,
+  setForgotPasswordLoading,
+  forgotPasswordLoading,
+  isLoadingWithGoogle,
+  showLoader,
+  setShowLoader
 }) => {
   const numberInputRef = useAutoFocus();
-  const { number, countryCode, showLoader } = loginStates;
+  const { number, countryCode } = loginStates;
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const fcm_id = useSelector(Fcmtoken);
-  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
 
   const handleInputChange = (value, data) => {
     setLoginStates((prev) => ({
@@ -50,11 +54,7 @@ const LoginWithMobileForm = ({
         toast.error(t("invalidPhoneNumber"));
         return;
       }
-
-      setLoginStates((prev) => ({
-        ...prev,
-        showLoader: true,
-      }));
+      setShowLoader(true)
       const params = {
         mobile: formattedNumber,
         password: loginStates.password,
@@ -74,10 +74,7 @@ const LoginWithMobileForm = ({
     } catch (error) {
       console.log(error);
     } finally {
-      setLoginStates((prev) => ({
-        ...prev,
-        showLoader: false,
-      }));
+      setShowLoader(false)
     }
   };
 
@@ -165,7 +162,7 @@ const LoginWithMobileForm = ({
           className="text-right font-semibold text-primary w-fit self-end"
           onClick={handleForgotPasswordClick}
           type="button"
-          disabled={forgotPasswordLoading}
+          disabled={forgotPasswordLoading || showLoader || isLoadingWithGoogle}
         >
           {forgotPasswordLoading ? (
             <>
@@ -181,11 +178,11 @@ const LoginWithMobileForm = ({
       </div>
       <Button
         type="submit"
-        disabled={showLoader}
+        disabled={showLoader || forgotPasswordLoading || isLoadingWithGoogle}
         className="text-xl text-white font-light px-4 py-2"
         size="big"
       >
-        {showLoader ? <Loader2 className="size-6 animate-spin" /> : t("login")}
+        {showLoader ? <Loader2 className="!size-6 animate-spin" /> : t("login")}
       </Button>
     </form>
   );

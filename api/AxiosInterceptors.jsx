@@ -3,6 +3,11 @@ import { setIsUnauthorized } from "@/redux/reducer/globalStateSlice";
 import { store } from "@/redux/store";
 import axios from "axios";
 
+const getLangFromUrl = () => {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("lang") || undefined;
+};
+
 const Api = axios.create({
   baseURL: `${process.env.NEXT_PUBLIC_API_URL}${process.env.NEXT_PUBLIC_END_POINT}`,
 });
@@ -11,12 +16,12 @@ let isUnauthorizedToastShown = false;
 
 Api.interceptors.request.use(function (config) {
   let token = undefined;
-  let langCode = undefined;
+  let langCode = process.env.NEXT_PUBLIC_DEFAULT_LANG_CODE;
 
   if (typeof window !== "undefined") {
     const state = store.getState();
     token = state?.UserSignup?.data?.token;
-    langCode = state?.CurrentLanguage?.language?.code;
+    langCode = getLangFromUrl() || langCode;
   }
 
   if (token) config.headers.authorization = `Bearer ${token}`;

@@ -17,8 +17,11 @@ import { t } from "@/utils";
 import { useMediaQuery } from "usehooks-ts";
 import BlockedUsersMenu from "../Chat/BlockedUsersMenu";
 import { cn } from "@/lib/utils";
+import { useSelector } from "react-redux";
+import { getReduxCurrentLangCode } from "@/redux/reducer/languageSlice";
 
 const ProfileDashboard = () => {
+  const currentLangCode = useSelector(getReduxCurrentLangCode); // to refresh the static lable with updated data
   const pathname = usePathname();
   const isNotifications = pathname === "/notifications";
   const isSubscriptions = pathname === "/user-subscription";
@@ -49,7 +52,7 @@ const ProfileDashboard = () => {
     } else if (isReviews) {
       return t("reviews");
     } else if (isChat) {
-      return "chat";
+      return t("chat");;
     } else if (isJobApplications) {
       return t("jobApplications");
     }

@@ -10,8 +10,13 @@ import ShareDropdown from "@/components/Common/ShareDropdown";
 import CustomLink from "@/components/Common/CustomLink";
 import CustomImage from "@/components/Common/CustomImage";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { followUserApi, unfollowUserApi } from "@/utils/api";
+import { useState } from "react";
+import { toast } from "sonner";
+import FollowersFollowingModal from "@/components/Profile/FollowersFollowingModal";
 
-const SellerDetailCard = ({ seller, ratings }) => {
+const SellerDetailCard = ({ seller, ratingCount, setSeller }) => {
   const pathname = usePathname();
   const memberSinceYear = seller?.created_at
     ? extractYear(seller.created_at)
@@ -19,7 +24,55 @@ const SellerDetailCard = ({ seller, ratings }) => {
   const currentUrl = `${process.env.NEXT_PUBLIC_WEB_URL}${pathname}`;
   const CompanyName = useSelector(getCompanyName);
   const FbTitle = seller?.name + " | " + CompanyName;
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [modalInitialTab, setModalInitialTab] = useState("followers");
 
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [isUnFollowing, setIsUnFollowing] = useState(false)
+
+  const handleFollow = async () => {
+    try {
+      setIsFollowing(true)
+      const res = await followUserApi.followUser({ user_id: seller?.id })
+      if (res?.data?.error === false) {
+        toast.success(res?.data?.message)
+        // Update the seller state to reflect follow
+        setSeller(prev => ({
+          ...prev,
+          is_following: 1,
+          followers_count: (Number(prev?.followers_count) || 0) + 1
+        }))
+      } else {
+        toast.error(res?.data?.message)
+      }
+    } catch (error) {
+      console.log(error)
+    } finally {
+      setIsFollowing(false)
+    }
+  }
+
+  const handleUnfollow = async () => {
+    try {
+      setIsUnFollowing(true)
+      const res = await unfollowUserApi.unfollowUser({ user_id: seller?.id })
+      if (res?.data?.error === false) {
+        toast.success(res?.data?.message)
+        // Update the seller state to reflect unfollow
+        setSeller(prev => ({
+          ...prev,
+          is_following: 0,
+          followers_count: Math.max(0, (Number(prev?.followers_count) || 0) - 1)
+        }))
+      } else {
+        toast.error(res?.data?.message)
+      }
+    } catch (error) {
+      console.log(error)
+    } finally {
+      setIsUnFollowing(false)
+    }
+  }
 
   return (
     <div className="rounded-lg border overflow-hidden">
@@ -62,19 +115,51 @@ const SellerDetailCard = ({ seller, ratings }) => {
           className="aspect-square rounded-xl object-cover"
         />
 
-        <div className="text-center w-full">
+        <div className="flex flex-col gap-3 text-center w-full">
           <h3 className="text-xl font-bold">{seller?.name}</h3>
-          <div className="flex items-center justify-center gap-1 text-sm mt-1">
+          <div className="flex items-center gap-3 justify-center">
+            <button
+              type="button"
+              className="hover:underline"
+              onClick={() => {
+                setModalInitialTab("followers");
+                setShowFollowersModal(true);
+              }}
+            >
+              {seller?.followers_count} {t("followers")}
+            </button>
+            <div className="w-0.5 h-4 bg-border" />
+            <button
+              type="button"
+              className="hover:underline"
+              onClick={() => {
+                setModalInitialTab("following");
+                setShowFollowersModal(true);
+              }}
+            >
+              {seller?.following_count} {t("following")}
+            </button>
+          </div>
+          <div className="flex items-center justify-center gap-1 text-sm">
             <IoMdStar />
             <span>
               {Number(seller?.average_rating).toFixed(2)} |{" "}
-              {ratings?.data?.length} {t("ratings")}
+              {ratingCount} {t("ratings")}
             </span>
           </div>
         </div>
       </div>
+      <FollowersFollowingModal
+        isOpen={showFollowersModal}
+        onClose={() => setShowFollowersModal(false)}
+        initialTab={modalInitialTab}
+        followersCount={seller?.followers_count}
+        followingCount={seller?.following_count}
+        userId={seller?.id}
+        isSellerPage={true}
+      />
 
-      {seller?.show_personal_details === 1 &&
+      {seller?.show_personal_details == 1 &&
         (seller?.email || seller?.mobile) && (
           <div className="border-t p-4 flex flex-col gap-4">
             {seller?.email && (
@@ -107,6 +192,20 @@ const SellerDetailCard = ({ seller, ratings }) => {
             )}
           </div>
         )}
+
+      <div className="border-t p-4 flex items-center gap-4">
+        <Button disabled={isUnFollowing || isFollowing} variant="outline" className='p-4 flex-1 border-primary text-primary hover:text-primary' onClick={seller?.is_following == 1 ? handleUnfollow : handleFollow} >
+          {
+            isUnFollowing || isFollowing ?
+              t("loading")
+              :
+              seller?.is_following == 1 ?
+                t('unfollow')
+                :
+                t('follow')
+          }
+        </Button>
+      </div>
     </div>
   );
 };

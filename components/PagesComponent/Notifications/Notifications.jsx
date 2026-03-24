@@ -11,7 +11,6 @@ import {
 import { useSelector } from "react-redux";
 import { useEffect, useState } from "react";
 import { getNotificationList } from "@/utils/api";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import Pagination from "@/components/Common/Pagination";
 import NoData from "@/components/EmptyStates/NoData";
 import NotificationSkeleton from "./NotificationSkeleton";
@@ -21,7 +20,6 @@ import { useNavigate } from "@/components/Common/useNavigate";
 import { cn } from "@/lib/utils";
 
 const Notifications = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const [notifications, setNotifications] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);

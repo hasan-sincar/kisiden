@@ -1,23 +1,20 @@
 "use client";
-import { getCurrentLangCode } from "@/redux/reducer/languageSlice";
-import { getDefaultLanguageCode } from "@/redux/reducer/settingSlice";
 import Link from "next/link";
-import { useSelector } from "react-redux";
+import { useLangFromSearchParams } from "./useLangFromSearchParams";
 
 const CustomLink = ({ href, children, ...props }) => {
-  const defaultLangCode = useSelector(getDefaultLanguageCode);
-  const currentLangCode = useSelector(getCurrentLangCode);
+  const defaultLangCode = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE;
+  const currentLangCode = useLangFromSearchParams()
 
   const langCode = currentLangCode || defaultLangCode;
 
   // Split hash (#) safely from href
-  const [baseHref, hash = ""] = href.split("#");
+  const [baseHref, hash = ""] = href?.split("#");
 
   // Append lang param safely
   const separator = baseHref.includes("?") ? "&" : "?";
-  const newHref = `${baseHref}${separator}lang=${langCode}${
-    hash ? `#${hash}` : ""
-  }`;
+  const newHref = `${baseHref}${separator}lang=${langCode}${hash ? `#${hash}` : ""
+    }`;
 
   return (
     <Link href={newHref} {...props}>

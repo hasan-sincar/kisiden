@@ -11,6 +11,7 @@ import { HiOutlineUpload } from "react-icons/hi";
 import { MdClose } from "react-icons/md";
 import { t } from "@/utils";
 import CustomImage from "@/components/Common/CustomImage";
+import { toast } from "sonner";
 
 const EditComponentThree = ({
   uploadedImages,

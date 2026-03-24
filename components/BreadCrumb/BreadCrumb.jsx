@@ -9,13 +9,14 @@ import {
 } from "@/components/ui/breadcrumb";
 import { useSelector } from "react-redux";
 import { t } from "@/utils";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import CustomLink from "@/components/Common/CustomLink";
-import { getCurrentLangCode } from "@/redux/reducer/languageSlice";
 
 const BreadCrumb = ({ title2 }) => {
-  const langCode = useSelector(getCurrentLangCode);
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const langCode = searchParams.get("lang")
   const BreadcrumbPath = useSelector(
     (state) => state.BreadcrumbPath.BreadcrumbPath
   );
@@ -29,14 +30,14 @@ const BreadCrumb = ({ title2 }) => {
     },
     ...(title2
       ? [
-          {
-            title: title2,
-            key: "custom",
-            isLink: false,
-          },
-        ]
+        {
+          title: title2,
+          key: "custom",
+          isLink: false,
+        },
+      ]
       : BreadcrumbPath && BreadcrumbPath.length > 0
-      ? BreadcrumbPath.map((crumb, index) => {
+        ? BreadcrumbPath.map((crumb, index) => {
           const isLast = index === BreadcrumbPath.length - 1;
           return {
             title: crumb.name,
@@ -51,7 +52,11 @@ const BreadCrumb = ({ title2 }) => {
                 newSearchParams.delete("category");
                 newSearchParams.set("lang", langCode);
                 const newUrl = `/ads?${newSearchParams.toString()}`;
-                window.history.pushState(null, "", newUrl);
+                if (pathname === '/ads') {
+                  window.history.pushState(null, "", newUrl);
+                } else {
+                  router.push(newUrl);
+                }
               } else {
                 // ✅ ensure lang param is present
                 const newSearchParams = new URLSearchParams(searchParams);
@@ -61,13 +66,17 @@ const BreadCrumb = ({ title2 }) => {
                 let newUrl = crumb.slug.includes("?")
                   ? `${crumb.slug}&lang=${langCode}`
                   : `${crumb.slug}?lang=${langCode}`;
-
-                window.history.pushState(null, "", newUrl);
+                const targetPath = newUrl.split('?')[0];
+                if (pathname === targetPath) {
+                  window.history.pushState(null, "", newUrl);
+                } else {
+                  router.push(newUrl);
+                }
               }
             },
           };
         })
-      : []),
+        : []),
   ];
 
   return (

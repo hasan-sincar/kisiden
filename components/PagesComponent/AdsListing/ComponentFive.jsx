@@ -8,7 +8,6 @@ import { useSelector } from "react-redux";
 import ManualAddress from "./ManualAddress";
 import { getIsBrowserSupported } from "@/redux/reducer/locationSlice";
 import { getIsPaidApi } from "@/redux/reducer/settingSlice";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import { t } from "@/utils";
 import LandingAdEditSearchAutocomplete from "@/components/Location/LandingAdEditSearchAutocomplete";
 import { Loader2 } from "lucide-react";
@@ -26,7 +25,6 @@ const ComponentFive = ({
   isAdPlaced,
   handleGoBack,
 }) => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const [showManualAddress, setShowManualAddress] = useState(false);
   const isBrowserSupported = useSelector(getIsBrowserSupported);
   const [IsGettingCurrentLocation, setIsGettingCurrentLocation] =
@@ -131,7 +129,7 @@ const ComponentFive = ({
               </div>
             </div>
             <div className="flex flex-col gap-3 items-center justify-center">
-              <p className="text-xl font-semibold">
+              <p className="text-xl font-semibold text-center">
                 {t("whatLocAdYouSelling")}
               </p>
               <button

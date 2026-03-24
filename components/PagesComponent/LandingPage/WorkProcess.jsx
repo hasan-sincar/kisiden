@@ -4,11 +4,9 @@ import Arrow from "../../../public/assets/Arrow.svg";
 import { workProcessSteps } from "@/utils/constants";
 import { useSelector } from "react-redux";
 import { settingsData } from "@/redux/reducer/settingSlice";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import CustomImage from "@/components/Common/CustomImage";
 
 const WorkProcess = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const settings = useSelector(settingsData);
 
   return (

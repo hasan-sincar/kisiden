@@ -8,9 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useSelector } from "react-redux";
 import { useEffect, useState } from "react";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import NoData from "@/components/EmptyStates/NoData";
 import { Badge } from "@/components/ui/badge";
 import TransactionSkeleton from "@/components/Skeletons/TransactionSkeleton";
@@ -20,7 +18,6 @@ import Pagination from "@/components/Common/Pagination";
 import UploadReceiptModal from "./UploadReceiptModal";
 
 const Transactions = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const [transactions, setTransactions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -106,10 +103,10 @@ const Transactions = () => {
                     <TableCell>
                       {formatDateMonthYear(transaction?.created_at)}
                     </TableCell>
-                    <TableCell>{transaction?.amount}</TableCell>
+                    <TableCell>{transaction?.amount == 0 ? t("Free") : transaction?.amount}</TableCell>
                     <TableCell>
                       {transaction?.payment_status === "pending" &&
-                      transaction?.payment_gateway === "BankTransfer" ? (
+                        transaction?.payment_gateway === "BankTransfer" ? (
                         <button
                           onClick={() => handleUploadReceipt(transaction?.id)}
                           className="py-2 px-4 rounded whitespace-nowrap text-white bg-primary"

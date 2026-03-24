@@ -142,16 +142,16 @@ const OtpScreen = ({
       return;
     }
     setShowLoader(true);
-    if (otp_service_provider === "twilio") {
+    if (otp_service_provider === "twilio" || otp_service_provider === "2factor") {
       await verifyOTPWithTwillio();
     } else {
       await verifyOTPWithFirebase();
     }
   };
 
-  const resendOtpWithTwillio = async () => {
+  const resendOtpWithTwillio = async (PhoneNumber) => {
     try {
-      const response = await getOtpApi.getOtp({ number: formattedNumber, country_code: countryCode });
+      const response = await getOtpApi.getOtp({ number: PhoneNumber, country_code: countryCode });
       if (response?.data?.error === false) {
         toast.success(t("otpSentSuccess"));
         setResendTimer(60); // Start the 60-second timer
@@ -187,8 +187,8 @@ const OtpScreen = ({
     e.preventDefault();
     setResendOtpLoader(true);
     const PhoneNumber = `${countryCode}${formattedNumber}`;
-    if (otp_service_provider === "twilio") {
-      await resendOtpWithTwillio();
+    if (otp_service_provider === "twilio" || otp_service_provider === "2factor") {
+      await resendOtpWithTwillio(formattedNumber);
     } else {
       await resendOtpWithFirebase(PhoneNumber);
     }

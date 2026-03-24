@@ -140,13 +140,13 @@ const MyAdsCard = ({
           <CheckSquare className="size-4" />
           {isSelected ? "Deselect" : "Select"}
         </ContextMenuItem>
-        <ContextMenuItem
+        {/* <ContextMenuItem
           onClick={() => onContextMenuAction("renew")}
           className="flex items-center gap-2 cursor-pointer"
         >
           <RotateCcw className="size-4 text-primary" />
           <span className="text-primary">{t("renew")}</span>
-        </ContextMenuItem>
+        </ContextMenuItem> */}
         <ContextMenuItem
           onClick={() => onContextMenuAction("delete")}
           className="flex items-center gap-2 text-destructive focus:text-destructive cursor-pointer"

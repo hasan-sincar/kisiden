@@ -85,7 +85,7 @@ const MakeOfferModal = ({ isOpen, onClose, productDetails }) => {
       if (response?.data?.error === false) {
         toast.success(t("offerSentSuccessfully"));
         onClose();
-        navigate("/chat?activeTab=buying&chatid=" + response?.data?.data?.id);
+        navigate("/chat?activeTab=buying&chatid=" + response?.data?.data?.id + '&chat_ad_id=' + productDetails?.id);
       } else {
         toast.error(t("unableToSendOffer"));
       }
@@ -169,12 +169,12 @@ const MakeOfferModal = ({ isOpen, onClose, productDetails }) => {
         </div>
       ) : (
         <div className="space-y-3">
-          {tips.map((tip, index) => (
+          {tips.map((tip) => (
             <div key={tip?.id} className="flex items-center gap-2">
               <div className="p-2 text-white bg-primary rounded-full">
                 <FaCheck size={18} />
               </div>
-              <p className="">{tip?.description}</p>
+              <p className="">{tip?.translated_name}</p>
             </div>
           ))}
         </div>

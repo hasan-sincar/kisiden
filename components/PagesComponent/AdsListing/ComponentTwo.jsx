@@ -130,55 +130,56 @@ const ComponentTwo = ({
       </div>
 
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="currency">{t("currency")}</Label>
-        {
-          currencies?.length > 0 ?
-            <Select
-              value={current.currency_id?.toString()}
-              onValueChange={handleCurrencyChange}
-              dir={isRTL ? "rtl" : "ltr"}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Currency" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {currencies?.map((currency) => (
-                    <SelectItem
-                      key={currency.id}
-                      value={currency.id.toString()}
-                    >
-                      {currency.iso_code} ({currency.symbol})
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            :
-            <Select
-              value={currencyIsoCode} // ✅ same default value you already have
-              disabled
-              dir={isRTL ? "rtl" : "ltr"}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
 
-              {/* Required for RTL */}
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value={currencyIsoCode}>
-                    {currencyIsoCode} ({currencySymbol})
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-        }
-      </div>
       {/* Render the rest only for default language */}
       {langId === defaultLangId && (
         <>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="currency">{t("currency")}</Label>
+            {
+              currencies?.length > 0 ?
+                <Select
+                  value={current.currency_id?.toString()}
+                  onValueChange={handleCurrencyChange}
+                  dir={isRTL ? "rtl" : "ltr"}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {currencies?.map((currency) => (
+                        <SelectItem
+                          key={currency.id}
+                          value={currency.id.toString()}
+                        >
+                          {currency.iso_code} ({currency.symbol})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                :
+                <Select
+                  value={currencyIsoCode} // ✅ same default value you already have
+                  disabled
+                  dir={isRTL ? "rtl" : "ltr"}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+
+                  {/* Required for RTL */}
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value={currencyIsoCode}>
+                        {currencyIsoCode} ({currencySymbol})
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+            }
+          </div>
           {is_job_category ? (
             <>
               <div className="flex flex-col gap-2">

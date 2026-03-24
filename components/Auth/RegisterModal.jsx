@@ -23,6 +23,7 @@ const RegisterModal = ({
 }) => {
   // Get Global data
   const settings = useSelector(settingsData);
+  const [showLoader, setShowLoader] = useState(false);
   const [descriptionState, setDescriptionState] = useState({
     type: "register", // "register" | "otp"
     phoneNumber: "",
@@ -109,6 +110,8 @@ const RegisterModal = ({
                   OnHide={OnHide}
                   setIsMailSentSuccess={setIsMailSentSuccess}
                   key={IsRegisterWithEmail}
+                  showLoader={showLoader}
+                  setShowLoader={setShowLoader}
                 />
               )}
 
@@ -121,6 +124,8 @@ const RegisterModal = ({
                   key={IsRegisterWithEmail}
                   isOTPScreen={isOTPScreen}
                   setIsOTPScreen={setIsOTPScreen}
+                  showLoader={showLoader}
+                  setShowLoader={setShowLoader}
                 />
               )}
 
@@ -144,6 +149,7 @@ const RegisterModal = ({
                     size="big"
                     className="flex items-center justify-center py-4 text-base h-auto"
                     onClick={() => setIsRegisterWithEmail(false)}
+                    disabled={showLoader}
                   >
                     <MdOutlineLocalPhone className="!size-6" />
                     {t("continueWithMobile")}
@@ -157,6 +163,7 @@ const RegisterModal = ({
                     size="big"
                     className="flex items-center justify-center py-4 text-base h-auto"
                     onClick={() => setIsRegisterWithEmail(true)}
+                    disabled={showLoader}
                   >
                     <MdOutlineEmail className="!size-6" />
                     {t("continueWithEmail")}

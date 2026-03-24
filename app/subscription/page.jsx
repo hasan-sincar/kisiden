@@ -1,4 +1,4 @@
-import Subscription from "@/components/PagesComponent/Subscription/Subscription";
+import CategorySelectionSubscription from "@/components/PagesComponent/Subscription/CategorySelectionSubscription";
 import { SEO_REVALIDATE_SECONDS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ export const generateMetadata = async ({ searchParams }) => {
 };
 
 const SubscriptionPage = () => {
-  return <Subscription />;
+  return <CategorySelectionSubscription />;
 };
 
 export default SubscriptionPage;

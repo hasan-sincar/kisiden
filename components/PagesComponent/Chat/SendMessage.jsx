@@ -22,6 +22,14 @@ const SendMessage = ({ selectedChatDetails, setChatMessages }) => {
     );
   }
 
+  if (selectedChatDetails?.user_blocked) {
+    return (
+      <div className="p-4 border-t text-center text-muted-foreground">
+        {t("youBlockedThisContact")}
+      </div>
+    );
+  }
+
   const id = selectedChatDetails?.id;
   const [message, setMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);

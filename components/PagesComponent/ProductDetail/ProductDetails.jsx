@@ -29,12 +29,15 @@ import MakeFeaturedAd from "./MakeFeaturedAd";
 import RenewAd from "./RenewAd";
 import AdEditedByAdmin from "./AdEditedByAdmin";
 import NoData from "@/components/EmptyStates/NoData";
+import AdBanner from "@/components/AdSense/AdBanner";
+import AdSquare from "@/components/AdSense/AdSquare";
 
 const ProductDetails = ({ slug }) => {
   const CurrentLanguage = useSelector(CurrentLanguageData);
   const dispatch = useDispatch();
   const pathName = usePathname();
   const searchParams = useSearchParams();
+  const langCode = searchParams.get("lang")
   const isShare = searchParams.get("share") == "true" ? true : false;
   const isMyListing = pathName?.startsWith("/my-listing") ? true : false;
   const [productDetails, setProductDetails] = useState(null);
@@ -58,7 +61,7 @@ const ProductDetails = ({ slug }) => {
 
   useEffect(() => {
     fetchProductDetails();
-  }, [CurrentLanguage?.id]);
+  }, [langCode]);
 
   useEffect(() => {
     if (window.innerWidth <= 768 && !isMyListing && isShare) {
@@ -168,6 +171,7 @@ const ProductDetails = ({ slug }) => {
             />
           )}
           <div className="container mt-8">
+            <AdBanner />
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 mt-6">
               <div className="col-span-1 lg:col-span-8">
                 <div className="flex flex-col gap-7">
@@ -225,8 +229,9 @@ const ProductDetails = ({ slug }) => {
                   <RenewAd
                     item_id={productDetails?.id}
                     setProductDetails={setProductDetails}
-                    currentLanguageId={CurrentLanguage?.id}
                     setStatus={setStatus}
+                    categoryId={productDetails?.category?.id}
+                    categoryName={productDetails?.category?.translated_name}
                   />
                 )}
 
@@ -238,14 +243,16 @@ const ProductDetails = ({ slug }) => {
                     setProductDetails={setProductDetails}
                   />
                 )}
+                <AdSquare className="aspect-square" />
               </div>
             </div>
             {!isMyListing && (
               <SimilarProducts
                 productDetails={productDetails}
-                key={`similar-products-${CurrentLanguage?.id}`}
               />
             )}
+
+            <AdBanner className="mt-8" />
             <OpenInAppDrawer
               isOpenInApp={isOpenInApp}
               setIsOpenInApp={setIsOpenInApp}

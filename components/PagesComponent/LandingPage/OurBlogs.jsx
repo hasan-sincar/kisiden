@@ -10,16 +10,17 @@ import { RiArrowLeftLine, RiArrowRightLine } from "react-icons/ri";
 import { getBlogsApi } from "@/utils/api";
 import BlogCardSkeleton from "../../Skeletons/BlogCardSkeleton.jsx";
 import BlogCard from "./BlogCard.jsx";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice.js";
 import { useSelector } from "react-redux";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams.jsx";
+import { getIsRtl } from "@/redux/reducer/languageSlice.js";
 
 const OurBlogs = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
-  const isRTL = CurrentLanguage?.rtl;
+  const isRTL = useSelector(getIsRtl)
   const [api, setApi] = useState();
   const [current, setCurrent] = useState(0);
   const [Blogs, setBlogs] = useState([]);
   const [IsLoading, setIsLoading] = useState(true);
+  const langCode = useLangFromSearchParams()
 
   const getBlogsData = async () => {
     try {
@@ -34,7 +35,7 @@ const OurBlogs = () => {
 
   useEffect(() => {
     getBlogsData();
-  }, [CurrentLanguage.id]);
+  }, [langCode]);
 
   useEffect(() => {
     if (!api) {
@@ -66,32 +67,31 @@ const OurBlogs = () => {
           <CarouselContent className="-ml-3 md:-ml-[30px]">
             {IsLoading
               ? Array.from({ length: 6 }).map((_, i) => (
-                  <CarouselItem
-                    key={i}
-                    className="sm:basis-1/2 xl:basis-1/3 pl-3 md:pl-[30px]"
-                  >
-                    <BlogCardSkeleton />
-                  </CarouselItem>
-                ))
+                <CarouselItem
+                  key={i}
+                  className="sm:basis-1/2 xl:basis-1/3 pl-3 md:pl-[30px]"
+                >
+                  <BlogCardSkeleton />
+                </CarouselItem>
+              ))
               : Blogs &&
-                Blogs.length > 0 &&
-                Blogs.map((blog) => (
-                  <CarouselItem
-                    key={blog?.id}
-                    className="sm:basis-1/2 xl:basis-1/3 pl-3 md:pl-[30px]"
-                  >
-                    <BlogCard blog={blog} />
-                  </CarouselItem>
-                ))}
+              Blogs.length > 0 &&
+              Blogs.map((blog) => (
+                <CarouselItem
+                  key={blog?.id}
+                  className="sm:basis-1/2 xl:basis-1/3 pl-3 md:pl-[30px]"
+                >
+                  <BlogCard blog={blog} />
+                </CarouselItem>
+              ))}
           </CarouselContent>
         </Carousel>
 
         <div className="flex items-center justify-center mt-[30px] gap-4">
           <button
             onClick={() => api?.scrollTo(current - 1)}
-            className={`bg-primary p-2 rounded ${
-              !api?.canScrollPrev() ? "opacity-65 cursor-default" : ""
-            }`}
+            className={`bg-primary p-2 rounded ${!api?.canScrollPrev() ? "opacity-65 cursor-default" : ""
+              }`}
             disabled={!api?.canScrollPrev()}
           >
             <RiArrowLeftLine
@@ -102,9 +102,8 @@ const OurBlogs = () => {
           </button>
           <button
             onClick={() => api?.scrollTo(current + 1)}
-            className={`bg-primary p-2 rounded ${
-              !api?.canScrollNext() ? "opacity-65 cursor-default" : ""
-            }`}
+            className={`bg-primary p-2 rounded ${!api?.canScrollNext() ? "opacity-65 cursor-default" : ""
+              }`}
             disabled={!api?.canScrollNext()}
           >
             <RiArrowRightLine

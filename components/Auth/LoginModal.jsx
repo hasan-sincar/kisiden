@@ -35,6 +35,7 @@ import OtpScreen from "./OtpScreen";
 import TermsAndPrivacyLinks from "./TermsAndPrivacyLinks";
 import { setIsLoginOpen } from "@/redux/reducer/globalStateSlice";
 import ResetPasswordScreen from "./ResetPasswordScreen";
+import { Loader2 } from "lucide-react";
 
 const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
   const settings = useSelector(settingsData);
@@ -46,10 +47,12 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
   const [loginStates, setLoginStates] = useState({
     number: isDemoMode ? "919876598765" : "",
     countryCode: isDemoMode ? "+91" : '',
-    showLoader: false,
     regionCode: "",
     password: isDemoMode ? "123456" : "",
   });
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [isLoadingWithGoogle, setIsLoadingWithGoogle] = useState(false)
+  const [showLoader, setShowLoader] = useState(false)
 
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [FirebaseId, setFirebaseId] = useState("");
@@ -131,6 +134,7 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
   const handleGoogleSignup = async () => {
     const provider = new GoogleAuthProvider();
     try {
+      setIsLoadingWithGoogle(true)
       const res = await signInWithPopup(auth, provider);
       const user = res.user;
       try {
@@ -157,6 +161,8 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
     } catch (error) {
       const errorCode = error.code;
       handleFirebaseAuthError(errorCode);
+    } finally {
+      setIsLoadingWithGoogle(false)
     }
   };
 
@@ -168,7 +174,7 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
   // Handle forgot password - send OTP and show OTP screen
   const handleForgotPassword = async () => {
     const PhoneNumber = `${loginStates.countryCode}${formattedNumber}`;
-    if (otp_service_provider === "twilio") {
+    if (otp_service_provider === "twilio" || otp_service_provider === "2factor") {
       try {
         const response = await getOtpApi.getOtp({ number: formattedNumber, country_code: countryCode });
         if (response?.data?.error === false) {
@@ -296,7 +302,7 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
                 mobile_authentication === 1 &&
                 email_authentication === 1 &&
                 (IsLoginWithEmail ? (
-                  <LoginWithEmailForm OnHide={OnHide} key={IsLoginWithEmail} />
+                  <LoginWithEmailForm OnHide={OnHide} key={IsLoginWithEmail} forgotPasswordLoading={forgotPasswordLoading} setForgotPasswordLoading={setForgotPasswordLoading} showLoader={showLoader} setShowLoader={setShowLoader} isLoadingWithGoogle={isLoadingWithGoogle} />
                 ) : (
                   <LoginWithMobileForm
                     formattedNumber={formattedNumber}
@@ -305,11 +311,16 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
                     onForgotPassword={handleForgotPassword}
                     OnHide={OnHide}
                     key={IsLoginWithEmail}
+                    forgotPasswordLoading={forgotPasswordLoading}
+                    setForgotPasswordLoading={setForgotPasswordLoading}
+                    isLoadingWithGoogle={isLoadingWithGoogle}
+                    showLoader={showLoader}
+                    setShowLoader={setShowLoader}
                   />
                 ))}
 
               {email_authentication === 1 && mobile_authentication === 0 && (
-                <LoginWithEmailForm OnHide={OnHide} key={IsLoginWithEmail} />
+                <LoginWithEmailForm OnHide={OnHide} key={IsLoginWithEmail} forgotPasswordLoading={forgotPasswordLoading} setForgotPasswordLoading={setForgotPasswordLoading} showLoader={showLoader} setShowLoader={setShowLoader} isLoadingWithGoogle={isLoadingWithGoogle} />
               )}
 
               {mobile_authentication === 1 && email_authentication === 0 && (
@@ -320,6 +331,9 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
                   setLoginStates={setLoginStates}
                   onForgotPassword={handleForgotPassword}
                   key={IsLoginWithEmail}
+                  forgotPasswordLoading={forgotPasswordLoading}
+                  setForgotPasswordLoading={setForgotPasswordLoading}
+                  isLoadingWithGoogle={isLoadingWithGoogle}
                 />
               )}
 
@@ -338,8 +352,11 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
                     size="big"
                     className="flex items-center justify-center py-4 text-base"
                     onClick={handleGoogleSignup}
+                    disabled={isLoadingWithGoogle || showLoader || forgotPasswordLoading}
                   >
-                    <FcGoogle className="!size-6" />
+                    {
+                      isLoadingWithGoogle ? <Loader2 className="!size-6 animate-spin" /> : <FcGoogle className="!size-6" />
+                    }
                     <span>{t("continueWithGoogle")}</span>
                   </Button>
                 )}
@@ -350,6 +367,7 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
                     size="big"
                     className="flex items-center justify-center py-4 text-base h-auto"
                     onClick={() => setIsLoginWithEmail(false)}
+                    disabled={showLoader || forgotPasswordLoading || isLoadingWithGoogle}
                   >
                     <MdOutlineLocalPhone className="!size-6" />
                     {t("continueWithMobile")}
@@ -362,6 +380,7 @@ const LoginModal = ({ IsLoginOpen, setIsRegisterModalOpen }) => {
                       size="big"
                       className="flex items-center justify-center py-4 text-base h-auto"
                       onClick={() => setIsLoginWithEmail(true)}
+                      disabled={showLoader || forgotPasswordLoading || isLoadingWithGoogle}
                     >
                       <MdOutlineEmail className="!size-6" />
                       {t("continueWithEmail")}

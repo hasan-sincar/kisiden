@@ -27,7 +27,6 @@ import AdSuccessModal from "./AdSuccessModal";
 import BreadCrumb from "@/components/BreadCrumb/BreadCrumb";
 import Layout from "@/components/Layout/Layout";
 import Checkauth from "@/HOC/Checkauth";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import AdLanguageSelector from "./AdLanguageSelector";
 import {
   getDefaultLanguageCode,
@@ -36,9 +35,11 @@ import {
 import { userSignUpData } from "@/redux/reducer/authSlice";
 import { isValidPhoneNumber } from "libphonenumber-js/max";
 import { getCurrentCountry } from "@/redux/reducer/locationSlice";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
+import PackageRequiredModal from "../Home/PackageRequiredModal";
 
 const AdsListing = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
+  const langCode = useLangFromSearchParams();
   const currentCountry = useSelector(getCurrentCountry);
   const [step, setStep] = useState(1);
   const [categories, setCategories] = useState();
@@ -64,6 +65,7 @@ const AdsListing = () => {
   const [openSuccessModal, setOpenSuccessModal] = useState(false);
   const [createdAdSlug, setCreatedAdSlug] = useState("");
   const userData = useSelector(userSignUpData);
+  const [packageModalCategory, setPackageModalCategory] = useState(null);
 
   const languages = useSelector(getLanguages);
   const defaultLanguageCode = useSelector(getDefaultLanguageCode);
@@ -102,22 +104,19 @@ const AdsListing = () => {
   const isPriceOptional =
     Number(categoryPath[categoryPath.length - 1]?.price_optional) === 1;
 
-  const allCategoryIdsString = categoryPath
-    .map((category) => category.id)
-    .join(",");
   let lastItemId = categoryPath[categoryPath.length - 1]?.id;
 
   useEffect(() => {
     if (step === 1) {
       handleFetchCategories();
     }
-  }, [CurrentLanguage.id]);
+  }, [langCode]);
 
   useEffect(() => {
-    if (step !== 1 && allCategoryIdsString) {
+    if (step !== 1 && lastItemId) {
       getCustomFieldsData();
     }
-  }, [allCategoryIdsString, CurrentLanguage.id]);
+  }, [lastItemId, langCode]);
 
   useEffect(() => {
     // Update category path translations when language changes
@@ -139,7 +138,7 @@ const AdsListing = () => {
           });
       }
     }
-  }, [CurrentLanguage.id]);
+  }, [langCode]);
 
   useEffect(() => {
     getCurrencies();
@@ -222,7 +221,11 @@ const AdsListing = () => {
           setCategoryPath((prevPath) => prevPath.slice(0, index + 1));
         }
       } else {
-        toast.error(res?.data?.message);
+        if (res?.data?.code === 103) {
+          setPackageModalCategory(category);
+          return
+        }
+        toast.error(res?.data?.message)
       }
     } catch (error) {
       console.log("error", error);
@@ -234,7 +237,7 @@ const AdsListing = () => {
   const getCustomFieldsData = async () => {
     try {
       const res = await getCustomFieldsApi.getCustomFields({
-        category_ids: allCategoryIdsString,
+        category_id: lastItemId,
       });
       const data = res?.data?.data;
       setCustomFields(data);
@@ -422,6 +425,7 @@ const AdsListing = () => {
     ) {
       return setStep(3);
     }
+
     if (uploadedImages.length === 0) {
       toast.error(t("uploadMainPicture"));
       setStep(4);
@@ -454,16 +458,17 @@ const AdsListing = () => {
       defaultLangId
     );
 
+
     const allData = {
       name: defaultDetails.name,
       slug: defaultDetails.slug.trim(),
       description: defaultDetails?.description,
       category_id: catId,
-      all_category_ids: allCategoryIdsString,
       price: defaultDetails.price,
       contact: defaultDetails.contact,
       video_link: defaultDetails?.video_link,
       // custom_fields: transformedCustomFields,
+      category_id: lastItemId,
       image: uploadedImages[0],
       gallery_images: otherImages,
       address: location?.formattedAddress,
@@ -719,12 +724,12 @@ const AdsListing = () => {
 
               {step == 4 && (
                 <ComponentFour
-                  uploadedImages={uploadedImages}
-                  setUploadedImages={setUploadedImages}
                   otherImages={otherImages}
                   setOtherImages={setOtherImages}
                   setStep={setStep}
                   handleGoBack={handleGoBack}
+                  uploadedImages={uploadedImages}
+                  setUploadedImages={setUploadedImages}
                 />
               )}
 
@@ -744,6 +749,12 @@ const AdsListing = () => {
           openSuccessModal={openSuccessModal}
           setOpenSuccessModal={setOpenSuccessModal}
           createdAdSlug={createdAdSlug}
+        />
+        <PackageRequiredModal
+          open={!!packageModalCategory} // !! converts object to true, null to false
+          onClose={() => setPackageModalCategory(null)} // "Closes" it by clearing the state
+          categoryId={packageModalCategory?.id} // Efficiently pass the ID
+          categoryName={packageModalCategory?.translated_name}
         />
       </div>
     </Layout>

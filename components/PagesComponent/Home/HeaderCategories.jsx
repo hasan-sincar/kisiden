@@ -14,6 +14,7 @@ import { IoIosMore } from "react-icons/io";
 import CustomImage from "@/components/Common/CustomImage";
 import { useNavigate } from "@/components/Common/useNavigate";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useUpdateLocationInUrl } from "@/components/Common/useUpdateLocationInUrl";
 
 const HeaderCategories = ({ cateData }) => {
   const containerRef = useRef(null);
@@ -21,6 +22,7 @@ const HeaderCategories = ({ cateData }) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { navigate } = useNavigate();
+  const { generateAdsUrl } = useUpdateLocationInUrl();
 
   const [fitCategoriesCount, setFitCategoriesCount] = useState(3);
 
@@ -57,26 +59,19 @@ const HeaderCategories = ({ cateData }) => {
 
   // Helper function to build URL with category while preserving existing search params
   const buildCategoryUrl = (categorySlug) => {
-    if (pathname.startsWith("/ads")) {
-      // Preserve existing search params and update category
-      const newSearchParams = new URLSearchParams(searchParams.toString());
-      newSearchParams.delete("lang");
-      newSearchParams.set("category", categorySlug);
-      return `/ads?${newSearchParams.toString()}`;
-    } else {
-      // Not on ads page, just add category
-      return `/ads?category=${categorySlug}`;
-    }
+    const isAdsPage = pathname.startsWith("/ads");
+    return generateAdsUrl({ category: categorySlug }, !isAdsPage);
   };
 
   const handleCategoryClick = (slug) => {
+
     if (pathname.startsWith("/ads")) {
       const newSearchParams = new URLSearchParams(searchParams.toString());
       newSearchParams.set("category", slug);
       const newUrl = `/ads?${newSearchParams.toString()}`;
       window.history.pushState(null, "", newUrl);
     } else {
-      navigate(`/ads?category=${slug}`);
+      navigate(generateAdsUrl({ category: slug }, true));
     }
   };
 
@@ -87,7 +82,7 @@ const HeaderCategories = ({ cateData }) => {
       const newUrl = `/ads?${newSearchParams.toString()}`;
       window.history.pushState(null, "", newUrl);
     } else {
-      navigate(`/ads`);
+      navigate(generateAdsUrl({}, true));
     }
   };
 

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { IoSearch } from "react-icons/io5";
 import { t } from "@/utils";
 import { MdArrowBack, MdOutlineKeyboardArrowRight } from "react-icons/md";
 import { BiCurrentLocation } from "react-icons/bi";
@@ -22,22 +21,24 @@ import {
   setKilometerRange,
 } from "@/redux/reducer/locationSlice";
 import { useDispatch, useSelector } from "react-redux";
-import { getMinRange } from "@/redux/reducer/settingSlice";
-import { usePathname } from "next/navigation";
 import { useDebounce } from "use-debounce";
 import SearchAutocomplete from "./SearchAutocomplete";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
-import { useNavigate } from "../Common/useNavigate";
 import useGetLocation from "../Layout/useGetLocation";
+import { useUpdateLocationInUrl } from "../Common/useUpdateLocationInUrl";
+import { useNavigate } from "../Common/useNavigate";
+import { getMinRange } from "@/redux/reducer/settingSlice";
+import { usePathname, useSearchParams } from "next/navigation";
 
-const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
+const LocationSelector = ({ OnHide, selectedCity, setSelectedCity, setIsMapLocation, shouldSaveToRedux = true }) => {
+
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const dispatch = useDispatch();
   const { navigate } = useNavigate();
-  const pathname = usePathname();
-  const minLength = useSelector(getMinRange);
   const { ref, inView } = useInView();
   const IsBrowserSupported = useSelector(getIsBrowserSupported);
+  const { updateLocationInUrl } = useUpdateLocationInUrl();
+  const minLength = useSelector(getMinRange);
 
   const viewHistory = useRef([]);
   const skipNextSearchEffect = useRef(false);
@@ -105,7 +106,6 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
       if (search) {
         params.search = search;
       }
-
       switch (view) {
         case "countries":
           response = await getCoutriesApi.getCoutries(params);
@@ -135,19 +135,22 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
 
         // MOD: if no results and not on countries, auto-save & close
         if (items.length === 0 && view !== "countries" && !search) {
+
+          let locationDataToSave = {};
+
           switch (view) {
             case "states":
-              saveCity({
+              locationDataToSave = {
                 city: "",
                 state: "",
                 country: location.country.name,
                 lat: location.country.latitude,
                 long: location.country.longitude,
                 formattedAddress: location.country.translated_name,
-              });
+              };
               break;
             case "cities":
-              saveCity({
+              locationDataToSave = {
                 city: "",
                 state: location.state.name,
                 country: location.country.name,
@@ -159,13 +162,14 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
                 ]
                   .filter(Boolean)
                   .join(", "),
-              });
+              };
               break;
             case "areas":
-              saveCity({
+              locationDataToSave = {
                 city: location.city.name,
                 state: location.state.name,
                 country: location.country.name,
+                areaId: location.area?.id || "", // if needed
                 lat: location.city.latitude,
                 long: location.city.longitude,
                 formattedAddress: [
@@ -175,11 +179,19 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
                 ]
                   .filter(Boolean)
                   .join(", "),
-              });
+              };
               break;
           }
 
-          handleSubmitLocation();
+          // ✅ Save formattedAddress in redux
+          if (shouldSaveToRedux) {
+            saveCity(locationDataToSave);
+            handleSubmitLocation();
+          } else {
+            updateLocationInUrl(locationDataToSave);
+          }
+
+          // ✅ Update URL (client side, no SSR trigger)
           OnHide();
           return; // stop further processing
         }
@@ -220,7 +232,6 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
     switch (currentView) {
       case "countries":
         newLocation = {
-          ...selectedLocation,
           country: item,
           state: null,
           city: null,
@@ -246,12 +257,12 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
         nextView = "areas";
         break;
       case "areas":
-        saveCity({
-          country: selectedLocation?.country?.name,
-          state: selectedLocation?.state?.name,
-          city: selectedLocation?.city?.name,
-          area: item?.name,
+        const locationDataToSave = {
+          country: selectedLocation.country?.name,
+          state: selectedLocation.state?.name,
+          city: selectedLocation.city?.name,
           areaId: item?.id,
+          area: item?.translated_name,
           lat: item?.latitude,
           long: item?.longitude,
           formattedAddress: [
@@ -262,8 +273,13 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
           ]
             .filter(Boolean)
             .join(", "),
-        });
-        handleSubmitLocation();
+        };
+        if (shouldSaveToRedux) {
+          saveCity(locationDataToSave);
+          handleSubmitLocation();
+        } else {
+          updateLocationInUrl(locationDataToSave);
+        }
         OnHide();
         return;
     }
@@ -292,18 +308,26 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
   };
 
   const getFormattedLocation = () => {
-    if (!selectedLocation) return t("location");
-    const parts = [];
-    if (selectedLocation.area?.translated_name)
-      parts.push(selectedLocation.area.translated_name);
-    if (selectedLocation.city?.translated_name)
-      parts.push(selectedLocation.city.translated_name);
-    if (selectedLocation.state?.translated_name)
-      parts.push(selectedLocation.state.translated_name);
-    if (selectedLocation.country?.translated_name)
-      parts.push(selectedLocation.country.translated_name);
 
-    return parts.length > 0 ? parts.join(", ") : t("location");
+    if (shouldSaveToRedux) {
+      if (!selectedLocation) return t("location");
+      const parts = [];
+      if (selectedLocation.area?.translated_name)
+        parts.push(selectedLocation.area.translated_name);
+      if (selectedLocation.city?.translated_name)
+        parts.push(selectedLocation.city.translated_name);
+      if (selectedLocation.state?.translated_name)
+        parts.push(selectedLocation.state.translated_name);
+      if (selectedLocation.country?.translated_name)
+        parts.push(selectedLocation.country.translated_name);
+
+      if (parts.length > 0) return parts.join(", ");
+
+      return selectedCity?.address_translated || selectedCity?.formattedAddress || t("location");
+    }
+    const location = searchParams.get("location");
+    if (location) return location;
+    return t("location");
   };
 
   const handleBack = async () => {
@@ -338,29 +362,32 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
   };
 
   const handleAllSelect = () => {
+    let locationDataToSave = null;
     switch (currentView) {
       case "countries":
-        resetCityData();
-        handleSubmitLocation();
+        // Reset everything
+        if (shouldSaveToRedux) {
+          resetCityData();
+          handleSubmitLocation();
+        } else {
+          updateLocationInUrl({});
+        }
+        // Clear location from URL
         OnHide();
-        break;
+        return;
       case "states":
-        saveCity({
-          city: "",
-          state: "",
+        locationDataToSave = {
           country: selectedLocation?.country?.name,
+          formattedAddress: selectedLocation?.country?.translated_name || "",
           lat: selectedLocation?.country?.latitude,
           long: selectedLocation?.country?.longitude,
-          formattedAddress: selectedLocation?.country?.translated_name,
-        });
-        handleSubmitLocation();
-        OnHide();
+          // no state, city, areaId
+        };
         break;
       case "cities":
-        saveCity({
-          city: "",
-          state: selectedLocation?.state?.name,
+        locationDataToSave = {
           country: selectedLocation?.country?.name,
+          state: selectedLocation?.state?.name,
           lat: selectedLocation?.state?.latitude,
           long: selectedLocation?.state?.longitude,
           formattedAddress: [
@@ -368,16 +395,16 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
             selectedLocation?.country?.translated_name,
           ]
             .filter(Boolean)
-            .join(", "),
-        });
-        handleSubmitLocation();
-        OnHide();
+            .join(", ")
+          // no city, no areaId
+        };
         break;
       case "areas":
-        saveCity({
-          city: selectedLocation?.city?.name,
-          state: selectedLocation?.state?.name,
+        locationDataToSave = {
           country: selectedLocation?.country?.name,
+          state: selectedLocation?.state?.name,
+          city: selectedLocation?.city?.name,
+          // no areaId (because "All Areas")
           lat: selectedLocation?.city?.latitude,
           long: selectedLocation?.city?.longitude,
           formattedAddress: [
@@ -386,12 +413,19 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
             selectedLocation?.country?.translated_name,
           ]
             .filter(Boolean)
-            .join(", "),
-        });
-        handleSubmitLocation();
-        OnHide();
+            .join(", ")
+        };
         break;
     }
+    // ✅ Update URL centrally
+    // ✅ Save only label in redux
+    if (shouldSaveToRedux) {
+      saveCity(locationDataToSave);
+      handleSubmitLocation();
+    } else {
+      updateLocationInUrl(locationDataToSave);
+    }
+    OnHide();
   };
 
   const getAllButtonTitle = () => {
@@ -457,7 +491,7 @@ const LocationSelector = ({ OnHide, setSelectedCity, setIsMapLocation }) => {
 
       {currentView === "countries" ? (
         <div className="flex items-center gap-2 border rounded-sm relative">
-          <SearchAutocomplete saveOnSuggestionClick={true} OnHide={OnHide} />
+          <SearchAutocomplete saveOnSuggestionClick={true} OnHide={OnHide} shouldSaveToRedux={shouldSaveToRedux} />
         </div>
       ) : (
         <div className="flex items-center gap-2 border rounded-sm relative p-3 ltr:pl-9 rtl:pr-9">

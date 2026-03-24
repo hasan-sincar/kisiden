@@ -7,7 +7,6 @@ import { t } from "@/utils";
 import { getIsPaidApi } from "@/redux/reducer/settingSlice";
 import { useSelector } from "react-redux";
 import dynamic from "next/dynamic";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import LandingAdEditSearchAutocomplete from "@/components/Location/LandingAdEditSearchAutocomplete";
 import { getIsBrowserSupported } from "@/redux/reducer/locationSlice";
 import { Loader2 } from "lucide-react";
@@ -26,7 +25,6 @@ const EditComponentFour = ({
   handleGoBack,
 }) => {
   const isBrowserSupported = useSelector(getIsBrowserSupported);
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const [showManualAddress, setShowManualAddress] = useState();
   const [IsGettingCurrentLocation, setIsGettingCurrentLocation] =
     useState(false);

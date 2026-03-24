@@ -93,7 +93,6 @@ const AdsStatusChangeCards = ({
   const makeItemSoldOut = async () => {
     try {
       setIsChangingStatus(true);
-      await new Promise((resolve) => setTimeout(resolve, 5000));
       const res = await chanegItemStatusApi.changeItemStatus({
         item_id: productDetails?.id,
         status: "sold out",

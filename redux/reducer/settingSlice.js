@@ -135,3 +135,22 @@ export const getAboutUs = createSelector(
   (settings) => settings?.data?.data?.about_us
 );
 
+
+export const getFaviconUrl = createSelector(
+  (state) => state.Settings,
+  (settings) => settings?.data?.data?.favicon_icon
+);
+
+export const getAdsenseSettings = createSelector(
+  (state) => state.Settings,
+  (settings) => ({
+    adsense_enabled: Number(settings?.data?.data?.adsense_enabled) === 1,
+    adsense_mode: settings?.data?.data?.adsense_mode,
+    adsense_client_id: settings?.data?.data?.adsense_client_id,
+    adsense_banner_slot_id: settings?.data?.data?.adsense_banner_slot_id,
+    adsense_vertical_slot_id: settings?.data?.data?.adsense_vertical_slot_id,
+    adsense_square_slot_id: settings?.data?.data?.adsense_square_slot_id,
+  })
+);
+
+

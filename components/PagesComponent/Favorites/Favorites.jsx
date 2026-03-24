@@ -3,14 +3,13 @@ import ProductCard from "@/components/Common/ProductCard";
 import NoData from "@/components/EmptyStates/NoData";
 import ProductCardSkeleton from "@/components/Common/ProductCardSkeleton";
 import { Button } from "@/components/ui/button";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import { t } from "@/utils";
 import { getFavouriteApi } from "@/utils/api";
 import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
 
 const Favorites = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
+  const langCode = useLangFromSearchParams()
   const [favoritesData, setFavoriteData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -22,16 +21,14 @@ const Favorites = () => {
       if (page === 1) {
         setIsLoading(true);
       }
-      const response = await getFavouriteApi.getFavouriteApi({ page });
+      const response = await getFavouriteApi.getFavouriteApi({ page, limit: 12 });
       const data = response?.data?.data?.data;
       if (page === 1) {
         setFavoriteData(data);
       } else {
         setFavoriteData((prevData) => [...prevData, ...data]);
       }
-
       setCurrentPage(response?.data?.data.current_page);
-
       if (response?.data?.data.current_page < response?.data?.data.last_page) {
         setHasMore(true);
       } else {
@@ -47,7 +44,7 @@ const Favorites = () => {
 
   useEffect(() => {
     fetchFavoriteItems(currentPage);
-  }, [currentPage, CurrentLanguage.id]);
+  }, [currentPage, langCode]);
 
   const handleLoadMore = () => {
     setIsLoadMore(true);

@@ -3,13 +3,16 @@ import { useEffect, useState } from "react";
 import AllItems from "./AllItems";
 import FeaturedSections from "./FeaturedSections";
 import { FeaturedSectionApi, sliderApi } from "@/utils/api";
-import { getCurrentLangCode } from "@/redux/reducer/languageSlice";
-import { useSelector } from "react-redux";
-import { getCityData, getKilometerRange } from "@/redux/reducer/locationSlice";
 import OfferSliderSkeleton from "@/components/PagesComponent/Home/OfferSliderSkeleton";
 import FeaturedSectionsSkeleton from "./FeaturedSectionsSkeleton";
 import PopularCategories from "./PopularCategories";
 import dynamic from "next/dynamic";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
+import AdVertical from "@/components/AdSense/AdVertical";
+import AdFooterBanner from "@/components/AdSense/AdFooterBanner";
+import { useSelector } from "react-redux";
+import { getAdsenseSettings } from "@/redux/reducer/settingSlice";
+import { getCityData, getKilometerRange } from "@/redux/reducer/locationSlice";
 
 const OfferSlider = dynamic(() => import("./OfferSlider"), {
   ssr: false,
@@ -17,9 +20,12 @@ const OfferSlider = dynamic(() => import("./OfferSlider"), {
 });
 
 const Home = () => {
+
   const KmRange = useSelector(getKilometerRange);
   const cityData = useSelector(getCityData);
-  const currentLanguageCode = useSelector(getCurrentLangCode);
+  const { adsense_enabled, adsense_mode } = useSelector(getAdsenseSettings);
+  const isManualAds = adsense_enabled && adsense_mode === "manual";
+  const langCode = useLangFromSearchParams();
   const [IsFeaturedLoading, setIsFeaturedLoading] = useState(false);
   const [featuredData, setFeaturedData] = useState([]);
   const [Slider, setSlider] = useState([]);
@@ -81,7 +87,9 @@ const Home = () => {
       }
     };
     fetchFeaturedSectionData();
-  }, [cityData.lat, cityData.long, KmRange, currentLanguageCode]);
+  }, [
+    cityData.lat, cityData.long, KmRange, langCode,
+  ]);
   return (
     <>
       {IsSliderLoading ? (
@@ -93,16 +101,32 @@ const Home = () => {
         )
       )}
       <PopularCategories />
-      {IsFeaturedLoading ? (
-        <FeaturedSectionsSkeleton />
-      ) : (
-        <FeaturedSections
-          featuredData={featuredData}
-          setFeaturedData={setFeaturedData}
-          allEmpty={allEmpty}
-        />
-      )}
-      <AllItems cityData={cityData} KmRange={KmRange} />
+
+      <div className="container">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-6">
+          <div className={!isManualAds ? "lg:col-span-12" : "lg:col-span-9"}>
+            {IsFeaturedLoading ? (
+              <FeaturedSectionsSkeleton />
+            ) : (
+              <FeaturedSections
+                featuredData={featuredData}
+                setFeaturedData={setFeaturedData}
+                allEmpty={allEmpty}
+              />
+            )}
+            <AllItems cityData={cityData} KmRange={KmRange} />
+          </div>
+          {isManualAds && (
+            <div className="hidden lg:block lg:col-span-3 lg:mt-[104px]">
+              <div className="flex flex-col justify-center gap-7">
+                <AdVertical />
+                <AdVertical />
+              </div>
+            </div>
+          )}
+        </div>
+        <AdFooterBanner className="mt-12" />
+      </div>
     </>
   );
 };

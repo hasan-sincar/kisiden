@@ -13,7 +13,7 @@ const RazorpayPayment = ({
   packageSettings,
   selectedPackage,
   setShowPaymentModal,
-  setToggleApiAfterPaymentSuccess
+  navigate
 }) => {
   const { Razorpay } = useRazorpay();
   const { data: settingsData } = useSelector((state) => state.Settings);
@@ -42,7 +42,7 @@ const RazorpayPayment = ({
         order_id: paymentIntent.id,
         handler: function (response) {
           toast.success(t("paymentSuccess"));
-          setToggleApiAfterPaymentSuccess((prev) => !prev)
+          navigate('/')
         },
         prefill: {
           name: user.name,

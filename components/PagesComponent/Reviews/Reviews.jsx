@@ -3,22 +3,22 @@ import { t } from "@/utils";
 import RatingsSummary from "./RatingsSummary";
 import RatingsSummarySkeleton from "./RatingsSummarySkeleton";
 import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
 import { getMyReviewsApi } from "@/utils/api";
 import MyReviewsCard from "./MyReviewsCard.jsx";
 import MyReviewsCardSkeleton from "@/components/PagesComponent/Reviews/MyReviewsCardSkeleton";
 import { Button } from "@/components/ui/button";
 import NoData from "@/components/EmptyStates/NoData";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
 
 const Reviews = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const [MyReviews, setMyReviews] = useState([]);
   const [AverageRating, setAverageRating] = useState("");
+  const [RatingsCount, setRatingsCount] = useState({});
   const [CurrentPage, setCurrentPage] = useState(1);
   const [ReviewHasMore, setReviewHasMore] = useState(false);
   const [IsLoading, setIsLoading] = useState(false);
   const [IsLoadMore, setIsLoadMore] = useState(false);
+  const langCode = useLangFromSearchParams()
 
   const getReveiws = async (page) => {
     try {
@@ -28,6 +28,7 @@ const Reviews = () => {
       const res = await getMyReviewsApi.getMyReviews({ page });
       setAverageRating(res?.data?.data?.average_rating);
       setMyReviews(res?.data?.data?.ratings?.data);
+      setRatingsCount(res?.data?.data?.ratings_count);
       setCurrentPage(res?.data?.data?.ratings?.current_page);
       if (
         res?.data?.data?.ratings?.current_page <
@@ -45,7 +46,7 @@ const Reviews = () => {
 
   useEffect(() => {
     getReveiws(1);
-  }, [CurrentLanguage?.id]);
+  }, [langCode]);
 
   const handleReviewLoadMore = () => {
     setIsLoadMore(true);
@@ -59,7 +60,7 @@ const Reviews = () => {
     </>
   ) : MyReviews && MyReviews.length > 0 ? (
     <>
-      <RatingsSummary averageRating={AverageRating} reviews={MyReviews} />
+      <RatingsSummary averageRating={AverageRating} ratings_count={RatingsCount} />
       <div className="mt-[30px] p-2 sm:p-4 bg-muted rounded-xl flex flex-col gap-[30px]">
         {MyReviews?.map((rating) => (
           <MyReviewsCard

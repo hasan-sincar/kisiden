@@ -16,7 +16,6 @@ import { RiMailSendLine } from "react-icons/ri";
 import { useSelector } from "react-redux";
 import { TbPhoneCall } from "react-icons/tb";
 import { FaSquareXTwitter } from "react-icons/fa6";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import { contactUsApi } from "@/utils/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,7 +26,6 @@ import parse from "html-react-parser";
 import Link from "next/link";
 
 const ContactUs = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const settings = useSelector(settingsData);
   const [IsLoading, setIsLoading] = useState(false);
   const contactUs = settings?.contact_us;

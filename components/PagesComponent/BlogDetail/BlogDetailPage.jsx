@@ -21,13 +21,13 @@ import { Badge } from "@/components/ui/badge";
 import Layout from "@/components/Layout/Layout";
 import { getCompanyName } from "@/redux/reducer/settingSlice";
 import PopularPosts from "../Blogs/PopularPosts";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import NoData from "@/components/EmptyStates/NoData";
 import PageLoader from "@/components/Common/PageLoader";
 import CustomImage from "@/components/Common/CustomImage";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
+import AdSquare from "@/components/AdSense/AdSquare";
 
 const BlogDetailPage = ({ slug }) => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const path = usePathname();
   const dispatch = useDispatch();
   const admin = useSelector((state) => state?.Settings?.data?.data?.admin);
@@ -37,11 +37,11 @@ const BlogDetailPage = ({ slug }) => {
   const [isLoading, setIsLoading] = useState(false);
   const currentUrl = `${process.env.NEXT_PUBLIC_WEB_URL}${path}`;
 
-  const langCode = CurrentLanguage?.code?.toUpperCase();
+  const langCode = useLangFromSearchParams();
 
   useEffect(() => {
     getBlogsData();
-  }, [CurrentLanguage.id]);
+  }, [langCode]);
 
   const getBlogsData = async () => {
     try {
@@ -124,8 +124,8 @@ const BlogDetailPage = ({ slug }) => {
                 <div className="max-w-full prose lg:prose-lg">
                   {parse(
                     blogData?.translated_description ||
-                      blogData?.description ||
-                      ""
+                    blogData?.description ||
+                    ""
                   )}
                 </div>
                 <div className="border-t pt-4 flex items-center justify-between ">
@@ -182,6 +182,7 @@ const BlogDetailPage = ({ slug }) => {
 
             <div className="col-span-1 md:col-span-4">
               <PopularPosts langCode={langCode} />
+              <AdSquare className="mt-8 aspect-square" />
             </div>
           </div>
           <div className="flex gap-8 flex-col">

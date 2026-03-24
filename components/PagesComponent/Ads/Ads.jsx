@@ -36,14 +36,28 @@ import {
   setBreadcrumbPath,
 } from "@/redux/reducer/breadCrumbSlice";
 import { seoData, t } from "@/utils";
-import { getSelectedLocation } from "@/redux/reducer/globalStateSlice";
 import { generateKeywords } from "@/utils/generateKeywords";
+import AdVertical from "@/components/AdSense/AdVertical";
+import AdFooterBanner from "@/components/AdSense/AdFooterBanner";
+import { useTranslateLocationInUrl } from "@/components/Location/useTranslateLocationInUrl";
+import { getAdsenseSettings, getMaxRange, getMinRange } from "@/redux/reducer/settingSlice";
+import AdBanner from "@/components/AdSense/AdBanner";
 
 const Ads = () => {
   const dispatch = useDispatch();
   const searchParams = useSearchParams();
   const newSearchParams = new URLSearchParams(searchParams);
   const BreadcrumbPath = useSelector(BreadcrumbPathData);
+  const min_range = useSelector(getMinRange);
+  const max_range = useSelector(getMaxRange);
+
+  const { adsense_enabled, adsense_mode } = useSelector(getAdsenseSettings)
+  const isShowCustomAd = adsense_enabled && adsense_mode === "manual"
+
+  const km_range_raw = searchParams.get("km_range") || "";
+  const km_range = (km_range_raw && Number(km_range_raw) > 0)
+    ? Math.min(Math.max(Number(km_range_raw), min_range), max_range).toString()
+    : "";
 
   const [view, setView] = useState("grid");
   const [advertisements, setAdvertisements] = useState({
@@ -53,16 +67,14 @@ const Ads = () => {
     isLoading: false,
     isLoadMore: false,
   });
+  useTranslateLocationInUrl();
   const [featuredTitle, setFeaturedTitle] = useState("");
-
-  const selectedLocation = useSelector(getSelectedLocation);
-
   const query = searchParams.get("query") || "";
   const slug = searchParams.get("category") || "";
   const country = searchParams.get("country") || "";
   const state = searchParams.get("state") || "";
   const city = searchParams.get("city") || "";
-  const area = searchParams.get("area") || "";
+  const location = searchParams.get("location") || "";
   const areaId = Number(searchParams.get("areaId")) || "";
   const lat = Number(searchParams.get("lat"));
   const lng = Number(searchParams.get("lng"));
@@ -73,7 +85,6 @@ const Ads = () => {
     ? Number(searchParams.get("max_price"))
     : "";
   const date_posted = searchParams.get("date_posted") || "";
-  const km_range = searchParams.get("km_range") || "";
   const sortBy = searchParams.get("sort_by") || "new-to-old";
   const langCode = searchParams.get("lang");
   const featured_section = searchParams.get("featured_section") || "";
@@ -83,6 +94,8 @@ const Ads = () => {
     min_price !== null &&
     min_price !== undefined &&
     min_price >= 0;
+
+
 
   const knownParams = [
     "country",
@@ -101,6 +114,7 @@ const Ads = () => {
     "query",
     "lang",
     "featured_section",
+    "location",
   ];
 
   const title = useMemo(() => {
@@ -238,10 +252,10 @@ const Ads = () => {
     }
   }, [slug, langCode]);
 
-  const getCustomFieldsData = async (categoryIds) => {
+  const getCustomFieldsData = async (categoryId) => {
     try {
       const res = await getCustomFieldsApi.getCustomFields({
-        category_ids: categoryIds,
+        category_id: categoryId,
         filter: true,
       });
       const data = res?.data?.data;
@@ -309,8 +323,8 @@ const Ads = () => {
         })),
       ];
       dispatch(setBreadcrumbPath(breadcrumbArray));
-      const categoryIds = data.map((category) => category.id).join(",");
-      await getCustomFieldsData(categoryIds);
+      const lastCategoryId = data.at(-1)?.id;
+      await getCustomFieldsData(lastCategoryId);
     } catch (error) {
       console.log(error);
     }
@@ -428,6 +442,7 @@ const Ads = () => {
     newSearchParams.delete("lat");
     newSearchParams.delete("lng");
     newSearchParams.delete("km_range");
+    newSearchParams.delete("location");
     window.history.pushState(null, "", `/ads?${newSearchParams.toString()}`);
   };
 
@@ -478,6 +493,7 @@ const Ads = () => {
     newSearchParams.delete("lat");
     newSearchParams.delete("lng");
     newSearchParams.delete("km_range");
+    newSearchParams.delete("location");
     newSearchParams.delete("date_posted");
     newSearchParams.delete("min_price");
     newSearchParams.delete("max_price");
@@ -516,6 +532,9 @@ const Ads = () => {
       <BreadCrumb />
       <div className="container mt-8">
         <div className="flex flex-col">
+
+          <AdBanner className='mb-6' />
+
           <h1 className="text-2xl font-semibold mb-6">{title}</h1>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="xl:col-span-3 lg:col-span-4 col-span-1">
@@ -524,11 +543,8 @@ const Ads = () => {
                 extraDetails={extraDetails}
                 setExtraDetails={setExtraDetails}
                 newSearchParams={newSearchParams}
-                country={country}
-                state={state}
-                city={city}
-                area={area}
               />
+              <AdVertical className="mt-8" />
             </div>
             <div className="xl:col-span-9 lg:col-span-8 col-span-1 flex flex-col gap-5">
               <div className="flex justify-between items-center">
@@ -620,15 +636,14 @@ const Ads = () => {
                     </Badge>
                   )}
 
-                  {(country || state || city || area) && (
+                  {location && (
                     <Badge
                       variant="outline"
                       className="px-4 text-base font-normal py-2 rounded-full flex items-center gap-2 bg-muted"
                     >
                       <span>
                         {t("location")}:{" "}
-                        {selectedLocation?.translated_name ||
-                          selectedLocation?.name}
+                        {location}
                       </span>
                       <IoIosCloseCircle
                         size={22}
@@ -749,7 +764,6 @@ const Ads = () => {
                   </button>
                 )}
               </div>
-
               <div className="grid grid-cols-12 gap-4">
                 {advertisements?.isLoading ? (
                   Array.from({ length: 12 }).map((_, index) =>
@@ -806,6 +820,9 @@ const Ads = () => {
                     </Button>
                   </div>
                 )}
+              <div>
+                <AdFooterBanner />
+              </div>
             </div>
           </div>
         </div>

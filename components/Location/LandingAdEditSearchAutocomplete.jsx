@@ -2,11 +2,9 @@ import { saveCity } from "@/redux/reducer/locationSlice";
 import { getIsPaidApi } from "@/redux/reducer/settingSlice";
 import { t } from "@/utils";
 import { getLocationApi } from "@/utils/api";
-import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useDebounce } from "use-debounce";
-import { useNavigate } from "../Common/useNavigate";
 import { MapPin } from "lucide-react";
 import {
   Command,
@@ -24,8 +22,6 @@ const LandingAdEditSearchAutocomplete = ({
 }) => {
   const isSuggestionClick = useRef(false);
   const IsPaidApi = useSelector(getIsPaidApi);
-  const { navigate } = useNavigate();
-  const pathname = usePathname();
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebounce(search, 500);
   const [autoState, setAutoState] = useState({
@@ -157,10 +153,6 @@ const LandingAdEditSearchAutocomplete = ({
       if (saveOnSuggestionClick) {
         saveCity(data);
         OnHide?.();
-        // avoid redirect if already on home page otherwise router.push triggering server side api calls
-        if (pathname !== "/") {
-          navigate("/");
-        }
       } else {
         setSelectedLocation(data);
       }
@@ -181,10 +173,6 @@ const LandingAdEditSearchAutocomplete = ({
       if (saveOnSuggestionClick) {
         saveCity(data);
         OnHide?.();
-        // avoid redirect if already on home page otherwise router.push triggering server side api calls
-        if (pathname !== "/") {
-          navigate("/");
-        }
       } else {
         setSelectedLocation(data);
       }

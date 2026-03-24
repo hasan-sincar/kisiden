@@ -5,12 +5,12 @@ import { Button } from '@/components/ui/button';
 import NoData from '@/components/EmptyStates/NoData';
 
 
-const SellerRating = ({ ratingsData, seller, isLoadMoreReview, reviewHasMore, reviewCurrentPage, getSeller }) => {
+const SellerRating = ({ ratingsData, averageRating, isLoadMoreReview, reviewHasMore, reviewCurrentPage, getSeller, ratings_count }) => {
 
     return (
         ratingsData?.data?.length > 0 ?
             <>
-                <RatingsSummary averageRating={seller?.average_rating} reviews={ratingsData?.data} />
+                <RatingsSummary averageRating={averageRating} ratings_count={ratings_count} />
                 <div className='flex flex-col gap-4 bg-muted p-4 rounded-lg'>
                     {ratingsData?.data?.map((rating) => (
                         <SellerReviewCard key={rating.id} rating={rating} />

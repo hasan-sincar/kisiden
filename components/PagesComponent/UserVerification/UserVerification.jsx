@@ -42,9 +42,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import PageLoader from "@/components/Common/PageLoader";
-import { getCurrentLangCode } from "@/redux/reducer/languageSlice";
 import CustomImage from "@/components/Common/CustomImage";
 import { useNavigate } from "@/components/Common/useNavigate";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
 
 const UserVerification = () => {
   const { navigate } = useNavigate();
@@ -54,7 +54,7 @@ const UserVerification = () => {
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
-  const langCode = useSelector(getCurrentLangCode);
+  const langCode = useLangFromSearchParams()
   const languages = useSelector(getLanguages);
   const defaultLanguageCode = useSelector(getDefaultLanguageCode);
   const defaultLangId = languages?.find(
@@ -247,11 +247,10 @@ const UserVerification = () => {
                 />
                 <label
                   htmlFor={option}
-                  className={`${
-                    currentTranslation[id] === option
-                      ? "bg-primary text-white"
-                      : "bg-white"
-                  } border rounded-md px-4 py-2 cursor-pointer transition-colors flex items-center`}
+                  className={`${currentTranslation[id] === option
+                    ? "bg-primary text-white"
+                    : "bg-white"
+                    } border rounded-md px-4 py-2 cursor-pointer transition-colors flex items-center`}
                 >
                   {translated_value?.[index] || option}
                 </label>
@@ -430,11 +429,10 @@ const UserVerification = () => {
                     key={field?.id}
                   >
                     <Label
-                      className={`${
-                        field?.is_required === 1 && defaultLangId === langId
-                          ? "requiredInputLabel"
-                          : ""
-                      }`}
+                      className={`${field?.is_required === 1 && defaultLangId === langId
+                        ? "requiredInputLabel"
+                        : ""
+                        }`}
                       htmlFor={field?.id}
                     >
                       {field?.translated_name || field?.name}

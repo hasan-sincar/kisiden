@@ -11,14 +11,14 @@ import { useSelector } from "react-redux";
 import { settingsData } from "@/redux/reducer/settingSlice";
 import googleDownload from "../../public/assets/Google Download.png";
 import appleDownload from "../../public/assets/iOS Download.png";
-import { usePathname } from "next/navigation";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import CustomImage from "../Common/CustomImage";
 import Link from "next/link";
+import { useState } from "react";
+import PackageRequiredModal from "../PagesComponent/Home/PackageRequiredModal";
 
 export default function Footer() {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const settings = useSelector(settingsData);
+  const [isPackageModalOpen, setIsPackageModalOpen] = useState(false);
   const currentYear = new Date().getFullYear();
   const showGetInTouchSection =
     settings?.company_address ||
@@ -67,9 +67,8 @@ export default function Footer() {
         )}
 
         <div
-          className={`grid grid-1 sm:grid-cols-12 gap-12 ${
-            showDownloadLinks && "mt-[-70px] lg:mt-[-64px] xl:mt-[-75px]"
-          }`}
+          className={`grid grid-1 sm:grid-cols-12 gap-12 ${showDownloadLinks && "mt-[-70px] lg:mt-[-64px] xl:mt-[-75px]"
+            }`}
         >
           {/* Company Info */}
           <div className="space-y-6 sm:col-span-12 lg:col-span-4">
@@ -153,11 +152,17 @@ export default function Footer() {
                 <CustomLink
                   key={link.id}
                   href={link.href}
-                  className="group block hover:text-[var(--primary-color)] transition-colors"
+                  className="group block hover:text-primary transition-colors"
+                  onClick={(e) => {
+                    if (link.href === "/subscription") {
+                      e.preventDefault();
+                      setIsPackageModalOpen(true);
+                    }
+                  }}
                 >
                   <span className="relative flex items-center">
-                    <span className="absolute left-0 top-1/2 transform -translate-y-1/2 h-[10px] w-[10px] bg-[var(--primary-color)] rounded-full opacity-0 group-hover:opacity-100 transition-all duration-500"></span>
-                    <span className="opacity-65 group-hover:text-[var(--primary-color)] group-hover:opacity-100 group-hover:ml-4 transition-all duration-500">
+                    <span className="absolute left-0 top-1/2 transform -translate-y-1/2 h-[10px] w-[10px] bg-primary rounded-full opacity-0 group-hover:opacity-100 transition-all duration-500"></span>
+                    <span className="opacity-65 group-hover:text-primary group-hover:opacity-100 group-hover:ml-4 transition-all duration-500">
                       {t(link.labelKey)}
                     </span>
                   </span>
@@ -246,6 +251,12 @@ export default function Footer() {
           </div>
         </div>
       </div>
+      <PackageRequiredModal
+        key={isPackageModalOpen}
+        open={isPackageModalOpen}
+        onClose={() => setIsPackageModalOpen(false)}
+        initialStep={2}
+      />
     </footer>
   );
 }

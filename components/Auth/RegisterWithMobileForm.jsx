@@ -28,6 +28,8 @@ const RegisterWithMobileForm = ({
   setDescriptionState,
   isOTPScreen,
   setIsOTPScreen,
+  showLoader,
+  setShowLoader
 }) => {
   const auth = getAuth();
   const settings = useSelector(settingsData);
@@ -40,7 +42,6 @@ const RegisterWithMobileForm = ({
   const [countryCode, setCountryCode] = useState("");
   const [regionCode, setRegionCode] = useState("");
   const [confirmationResult, setConfirmationResult] = useState(null);
-  const [showLoader, setShowLoader] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [password, setPassword] = useState("");
@@ -209,11 +210,12 @@ const RegisterWithMobileForm = ({
     // Send OTP
     setShowLoader(true);
     const isUserExists = await checkIfUserExistsOrNot();
+
     if (isUserExists) {
       setShowLoader(false);
       return;
     }
-    if (otp_service_provider === "twilio") {
+    if (otp_service_provider === "twilio" || otp_service_provider === "2factor") {
       await sendOtpWithTwillio(PhoneNumber);
     } else {
       await sendOtpWithFirebase(PhoneNumber);

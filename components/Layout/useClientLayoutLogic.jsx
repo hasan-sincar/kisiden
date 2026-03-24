@@ -11,24 +11,28 @@ import {
   setIsBrowserSupported,
 } from "@/redux/reducer/locationSlice";
 import { getIsVisitedLandingPage } from "@/redux/reducer/globalStateSlice";
-import { getCurrentLangCode, getIsRtl } from "@/redux/reducer/languageSlice";
+import { getIsRtl } from "@/redux/reducer/languageSlice";
 import {
   getHasFetchedSystemSettings,
   setHasFetchedSystemSettings,
 } from "@/utils/getFetcherStatus";
 import { useNavigate } from "../Common/useNavigate";
+import { useLangFromSearchParams } from "../Common/useLangFromSearchParams";
+import { useLanguageSync } from "../Common/useLanguageSync";
 
 export function useClientLayoutLogic() {
   const dispatch = useDispatch();
   const { navigate } = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
-  const currentLangCode = useSelector(getCurrentLangCode);
+  const langCode = useLangFromSearchParams();
   const isMaintenanceMode = useSelector(getIsMaintenanceMode);
   const isRtl = useSelector(getIsRtl);
   const appliedRange = useSelector(getKilometerRange);
   const isVisitedLandingPage = useSelector(getIsVisitedLandingPage);
   const [isRedirectToLanding, setIsRedirectToLanding] = useState(false);
 
+  // Custom hook to handle language synchronization and translation fetching
+  useLanguageSync(langCode);
 
   useEffect(() => {
     const getSystemSettings = async () => {
@@ -85,7 +89,7 @@ export function useClientLayoutLogic() {
 
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     if (isSafari) dispatch(setIsBrowserSupported(false));
-  }, [currentLangCode]);
+  }, [langCode]);
 
   // Set direction of the document
   useEffect(() => {

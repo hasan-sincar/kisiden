@@ -1,18 +1,22 @@
 import CustomLink from "@/components/Common/CustomLink";
 import CustomImage from "@/components/Common/CustomImage";
+import { useUpdateLocationInUrl } from "@/components/Common/useUpdateLocationInUrl";
 
 const PopularCategoryCard = ({ item }) => {
+
+  const { generateAdsUrl } = useUpdateLocationInUrl();
+
   return (
     <CustomLink
-      href={`/ads?category=${item?.slug}`}
+      href={generateAdsUrl({ category: item?.slug }, true)}
       className="flex flex-col gap-4"
     >
-      <div className="border p-2.5 rounded-full">
+      <div className="border rounded-full">
         <CustomImage
           src={item?.image}
           width={96}
           height={96}
-          className="aspect-square w-full rounded-full"
+          className="aspect-square w-full rounded-full object-contain bg-muted"
           alt="Category"
           loading="eager"
         />

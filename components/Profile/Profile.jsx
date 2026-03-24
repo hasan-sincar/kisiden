@@ -5,7 +5,7 @@ import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
-import { loadUpdateUserData, userSignUpData } from "@/redux/reducer/authSlice";
+import { decreaseFollowing, loadUpdateUserData, userSignUpData } from "@/redux/reducer/authSlice";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { Button, buttonVariants } from "../ui/button";
@@ -22,6 +22,7 @@ import PhoneInput from "react-phone-input-2";
 import "react-phone-input-2/lib/style.css";
 import { isValidPhoneNumber } from "libphonenumber-js/max";
 import { Loader2 } from "lucide-react";
+import FollowersFollowingModal from "./FollowersFollowingModal";
 
 const Profile = () => {
   const UserData = useSelector(userSignUpData);
@@ -45,6 +46,8 @@ const Profile = () => {
   const [isPending, setIsPending] = useState(false);
   const [VerificationStatus, setVerificationStatus] = useState("");
   const [RejectionReason, setRejectionReason] = useState("");
+  const [showFollowersModal, setShowFollowersModal] = useState(false);
+  const [modalInitialTab, setModalInitialTab] = useState("followers");
   const getVerificationProgress = async () => {
     try {
       const res = await getVerificationStatusApi.getVerificationStatus();
@@ -211,6 +214,7 @@ const Profile = () => {
     }
   };
 
+
   // Show loader when pending is true
   if (isPending) {
     return (
@@ -225,99 +229,141 @@ const Profile = () => {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      <div className="flex flex-col md:flex-row md:items-center sm:justify-between gap-4 md:border md:py-6 md:px-4 md:rounded">
-        <div className="flex flex-col md:flex-row items-center gap-4 flex-1">
-          <div className="relative">
-            {/* use next js image directly here */}
-            {profileImage && (
-              <Image
-                src={profileImage}
-                alt="User profile"
-                width={120}
-                height={120}
-                className="w-[120px] h-auto aspect-square rounded-full border-muted border-4"
-              />
-            )}
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex-1 flex flex-col md:flex-row md:items-center sm:justify-between gap-4 md:border md:py-6 md:px-4 md:rounded">
+          <div className="flex flex-col md:flex-row items-center gap-4 flex-1">
+            <div className="relative">
+              {/* use next js image directly here */}
+              {profileImage && (
+                <Image
+                  src={profileImage}
+                  alt="User profile"
+                  width={120}
+                  height={120}
+                  className="w-[120px] h-auto aspect-square rounded-full border-muted border-4"
+                />
+              )}
 
-            <div className="flex items-center justify-center p-1 absolute size-10 rounded-full top-20 right-0 bg-primary border-4 border-[#efefef] text-white cursor-pointer">
-              <input
-                type="file"
-                id="profileImageUpload"
-                className="hidden"
-                accept="image/*"
-                onChange={handleImageChange}
-              />
-              <label htmlFor="profileImageUpload" className="cursor-pointer">
-                <MdAddPhotoAlternate size={22} />
-              </label>
+              <div className="flex items-center justify-center p-1 absolute size-10 rounded-full top-20 right-0 bg-primary border-4 border-[#efefef] text-white cursor-pointer">
+                <input
+                  type="file"
+                  id="profileImageUpload"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                />
+                <label htmlFor="profileImageUpload" className="cursor-pointer">
+                  <MdAddPhotoAlternate size={22} />
+                </label>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 flex-1">
+              <h1
+                className="text-xl text-center ltr:md:text-left rtl:md:text-right font-medium break-words line-clamp-2"
+                title={UserData?.name}
+              >
+                {UserData?.name}
+              </h1>
+              <p className="break-all text-center ltr:md:text-left rtl:md:text-right">
+                {UserData?.email}
+              </p>
             </div>
           </div>
-          <div className="flex flex-col gap-2 flex-1">
-            <h1
-              className="text-xl text-center ltr:md:text-left rtl:md:text-right font-medium break-words line-clamp-2"
-              title={UserData?.name}
-            >
-              {UserData?.name}
-            </h1>
-            <p className="break-all text-center ltr:md:text-left rtl:md:text-right">
-              {UserData?.email}
-            </p>
+          <div className="md:max-w-[50%] flex justify-center md:justify-end">
+            {(() => {
+              switch (VerificationStatus) {
+                case "approved":
+                  return (
+                    <div className="flex items-center gap-1 rounded text-white bg-[#fa6e53] py-1 px-2 text-sm">
+                      <MdVerifiedUser size={14} />
+                      <span>{t("verified")}</span>
+                    </div>
+                  );
+
+                case "not applied":
+                  return (
+                    <div className="flex justify-end">
+                      <CustomLink
+                        href="/user-verification"
+                        className={buttonVariants()}
+                      >
+                        {t("verfiyNow")}
+                      </CustomLink>
+                    </div>
+                  );
+                case "pending":
+                case "resubmitted":
+                  return (
+                    <Button type="button" className="cursor-auto">
+                      {t("inReview")}
+                    </Button>
+                  );
+                default:
+                  return null;
+              }
+            })()}
           </div>
         </div>
-        <div className="md:max-w-[50%] flex justify-center md:justify-end">
-          {(() => {
-            switch (VerificationStatus) {
-              case "approved":
-                return (
-                  <div className="flex items-center gap-1 rounded text-white bg-[#fa6e53] py-1 px-2 text-sm">
-                    <MdVerifiedUser size={14} />
-                    <span>{t("verified")}</span>
-                  </div>
-                );
-
-              case "not applied":
-                return (
-                  <div className="flex justify-end">
-                    <CustomLink
-                      href="/user-verification"
-                      className={buttonVariants()}
-                    >
-                      {t("verfiyNow")}
-                    </CustomLink>
-                  </div>
-                );
-
-              case "rejected":
-                return (
-                  <div className="flex flex-col gap-4 items-center md:items-end">
-                    {RejectionReason && (
-                      <p className="text-sm text-center md:text-right capitalize">
-                        {RejectionReason}
-                      </p>
-                    )}
-
-                    <CustomLink
-                      href="/user-verification"
-                      className={buttonVariants() + " w-fit"}
-                    >
-                      {t("applyAgain")}
-                    </CustomLink>
-                  </div>
-                );
-
-              case "pending":
-              case "resubmitted":
-                return (
-                  <Button type="button" className="cursor-auto">
-                    {t("inReview")}
-                  </Button>
-                );
-              default:
-                return null;
-            }
-          })()}
+        <div className="flex flex-row md:flex-col justify-around md:justify-center gap-4 bg-white border p-4 rounded-md md:min-w-[200px]">
+          <div className="flex flex-col items-center md:items-start gap-1">
+            <span>
+              {t("followers")}
+            </span>
+            <button
+              type="button"
+              className="text-xl font-medium hover:underline"
+              onClick={() => {
+                setModalInitialTab("followers");
+                setShowFollowersModal(true);
+              }}
+            >
+              {UserData?.followers_count}
+            </button>
+          </div>
+          <div className="w-[1px] md:w-full h-auto md:h-[1px] bg-border" />
+          <div className="flex flex-col items-center md:items-start gap-1">
+            <span>
+              {t("following")}
+            </span>
+            <button
+              type="button"
+              className="text-xl font-medium hover:underline"
+              onClick={() => {
+                setModalInitialTab("following");
+                setShowFollowersModal(true);
+              }}
+            >
+              {UserData?.following_count}
+            </button>
+          </div>
         </div>
       </div>
+      {showFollowersModal && <FollowersFollowingModal
+        isOpen={showFollowersModal}
+        onClose={() => setShowFollowersModal(false)}
+        initialTab={modalInitialTab}
+        followersCount={UserData?.followers_count}
+        followingCount={UserData?.following_count}
+        userId={UserData?.id}
+        updateFollowingCount={() => decreaseFollowing()}
+        isSellerPage={false}
+      />}
+      {VerificationStatus === "rejected" && (
+        <div className="md:p-4 md:bg-[#fff5f5] md:border md:border-[#feb2b2] md:rounded-md flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">
+            {t("applicationRejectionReason")}
+          </h2>
+          <p className="text-sm leading-relaxed">
+            {RejectionReason}
+          </p>
+          <CustomLink
+            href="/user-verification"
+            className={buttonVariants() + " w-fit px-4 py-2 text-sm"}
+          >
+            {t("applyAgain")}
+          </CustomLink>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:border md:py-6 md:px-4 md:rounded">
         <h1 className="col-span-full text-xl font-medium">
           {t("personalInfo")}

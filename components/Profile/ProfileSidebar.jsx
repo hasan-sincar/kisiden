@@ -16,14 +16,12 @@ import { useState } from "react";
 import { deleteUserApi, logoutApi } from "@/utils/api";
 import { deleteUser, getAuth } from "firebase/auth";
 import ReusableAlertDialog from "../Common/ReusableAlertDialog";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import { useSelector } from "react-redux";
 import { useNavigate } from "../Common/useNavigate";
 import DeleteAccountVerifyOtpModal from "../Auth/DeleteAccountVerifyOtpModal";
 import { getOtpServiceProvider } from "@/redux/reducer/settingSlice";
 
 const ProfileSidebar = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const { navigate } = useNavigate();
   const pathname = usePathname();
   const userData = useSelector(userSignUpData);
@@ -84,7 +82,7 @@ const ProfileSidebar = () => {
     } catch (error) {
       console.error("Error deleting user:", error.message);
       const isMobileLogin = userData?.type === "phone";
-      if (error.code === "auth/requires-recent-login") {
+      if (error.code === "auth/requires-recent-login" || error.message?.includes("CREDENTIAL_TOO_OLD_LOGIN_AGAIN")) {
         if (isMobileLogin) {
           setIsDeleteAccount(false);
           setIsVerifyOtpBeforeDelete(true);

@@ -5,65 +5,56 @@ import { generateKeywords } from "@/utils/generateKeywords";
 
 export const dynamic = "force-dynamic";
 
-
 const buildIndexableParams = (searchParams) => {
-  const indexableFilters = [
-    "category",
-    "query",
-    "country",
-    "state",
-    "city",
-    "areaId",
-    "sortBy",
-    "min_price",
-    "max_price",
-    "date_posted",
-  ];
-
+  const {
+    category,
+    query,
+    country,
+    state,
+    city,
+    areaId,
+    sortBy,
+    min_price,
+    max_price,
+    date_posted,
+    lat,
+    lng,
+    km_range,
+  } = searchParams || {};
   const params = new URLSearchParams();
-
-  const { country, state, city, areaId } = searchParams || {};
-
-  const locationPriority = areaId
-    ? "areaId"
-    : city
-      ? "city"
-      : state
-        ? "state"
-        : country
-          ? "country"
-          : null;
-
-  indexableFilters.forEach((key) => {
-    let value = searchParams[key];
-    if (value === undefined || value === "") return;
-
-    // 🧹 Skip non-selected location levels
-    if (["country", "state", "city", "areaId"].includes(key)) {
-      if (key !== locationPriority) return;
+  // Non-location filters
+  if (category) params.append("category_slug", category);
+  if (query) params.append("search", query);
+  if (sortBy) params.append("sort_by", sortBy);
+  if (min_price) params.append("min_price", Number(min_price));
+  if (max_price) params.append("max_price", Number(max_price));
+  if (date_posted) params.append("posted_since", date_posted);
+  // Location logic
+  if (Number(km_range) > 0) {
+    if (lat) params.append("latitude", lat);
+    if (lng) params.append("longitude", lng);
+    params.append("radius", km_range);
+  } else {
+    if (areaId) {
+      params.append("area_id", Number(areaId));
+    } else if (city) {
+      params.append("city", city);
+    } else if (state) {
+      params.append("state", state);
+    } else if (country) {
+      params.append("country", country);
     }
-
-    if (["areaId", "min_price", "max_price"].includes(key))
-      value = Number(value);
-    if (key === "category") params.append("category_slug", value);
-    else if (key === "query") params.append("search", value);
-    else if (key === "date_posted") params.append("posted_since", value);
-    else params.append(key, value);
-  });
-
+  }
   return params.toString();
 };
 
 const buildCanonicalParams = (searchParams) => {
   const params = new URLSearchParams();
-
   const { category, query, lang } = searchParams || {};
-
   if (category) params.append("category", category);
   if (query) params.append("search", query);
   // Add lang to canonical params for consistency with sitemap
   if (lang) params.append("lang", lang);
-
   return params.toString();
 };
 

@@ -1,11 +1,11 @@
-import { getCurrentLangCode } from "@/redux/reducer/languageSlice";
 import { getIsPaidApi } from "@/redux/reducer/settingSlice";
 import { getLocationApi } from "@/utils/api";
 import { useSelector } from "react-redux";
+import { useLangFromSearchParams } from "../Common/useLangFromSearchParams";
 
 const useGetLocation = () => {
   const IsPaidApi = useSelector(getIsPaidApi);
-  const currentLangCode = useSelector(getCurrentLangCode);
+  const currentLangCode = useLangFromSearchParams();
 
   const fetchLocationData = async (pos) => {
     const { lat, lng } = pos;

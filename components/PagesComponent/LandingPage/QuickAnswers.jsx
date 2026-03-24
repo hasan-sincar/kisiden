@@ -1,19 +1,18 @@
 "use client";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import { t } from "@/utils";
 import { getFaqApi } from "@/utils/api";
 import { useEffect, useState } from "react";
-import { useSelector } from "react-redux";
 
 const QuickAnswers = () => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const [Faqs, setFaqs] = useState([]);
+  const langCode = useLangFromSearchParams()
 
   const getFaqData = async () => {
     try {
@@ -26,7 +25,7 @@ const QuickAnswers = () => {
 
   useEffect(() => {
     getFaqData();
-  }, [CurrentLanguage.id]);
+  }, [langCode]);
 
   return (
     <section className="py-28" id="faq">

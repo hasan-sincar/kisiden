@@ -25,7 +25,6 @@ import EditComponentFour from "./EditComponentFour";
 import { toast } from "sonner";
 import Layout from "@/components/Layout/Layout";
 import Checkauth from "@/HOC/Checkauth";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import { useSelector } from "react-redux";
 import AdSuccessModal from "../AdsListing/AdSuccessModal";
 import {
@@ -35,9 +34,10 @@ import {
 import AdLanguageSelector from "../AdsListing/AdLanguageSelector";
 import PageLoader from "@/components/Common/PageLoader";
 import { isValidPhoneNumber } from "libphonenumber-js/max";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
 
 const EditListing = ({ id }) => {
-  const CurrentLanguage = useSelector(CurrentLanguageData);
+  const langCode = useLangFromSearchParams()
   const [step, setStep] = useState(1);
   const [CreatedAdSlug, setCreatedAdSlug] = useState("");
   const [openSuccessModal, setOpenSuccessModal] = useState(false);
@@ -83,7 +83,7 @@ const EditListing = ({ id }) => {
 
   useEffect(() => {
     getSingleListingData();
-  }, [CurrentLanguage.id]);
+  }, [langCode]);
 
   const fetchCategoryPath = async (childCategoryId) => {
     try {
@@ -97,10 +97,10 @@ const EditListing = ({ id }) => {
     }
   };
 
-  const getCustomFields = async (categoryIds, extraFieldValue) => {
+  const getCustomFields = async (categoryId, extraFieldValue) => {
     try {
       const customFieldsRes = await getCustomFieldsApi.getCustomFields({
-        category_ids: categoryIds,
+        category_id: categoryId,
       });
       const data = customFieldsRes?.data?.data;
       setCustomFields(data);
@@ -135,14 +135,13 @@ const EditListing = ({ id }) => {
       setIsLoading(true);
       const res = await getMyItemsApi.getMyItems({ id: Number(id) });
       const listingData = res?.data?.data?.data?.[0];
-
       if (!listingData) {
         throw new Error("Listing not found");
       }
       // Get currencies data directly
       const [_, __, currenciesData] = await Promise.all([
         getCustomFields(
-          listingData.all_category_ids,
+          listingData.category.id,
           listingData?.all_translated_custom_fields
         ),
         fetchCategoryPath(listingData?.category_id),
@@ -184,10 +183,6 @@ const EditListing = ({ id }) => {
   };
 
   const handleImageSubmit = () => {
-    if (uploadedImages.length === 0) {
-      toast.error(t("uploadMainPicture"));
-      return;
-    }
     setStep(4);
   };
 
@@ -347,8 +342,8 @@ const EditListing = ({ id }) => {
       contact: defaultDetails.contact,
       region_code: defaultDetails?.region_code?.toUpperCase() || "",
       video_link: defaultDetails?.video_link,
-      // custom_fields: transformedCustomFields,
       image: typeof uploadedImages == "string" ? null : uploadedImages[0],
+      // custom_fields: transformedCustomFields,
       gallery_images: OtherImages,
       address: Location?.formattedAddress,
       latitude: Location?.lat,
@@ -358,7 +353,10 @@ const EditListing = ({ id }) => {
       state: Location?.state,
       city: Location?.city,
       ...(Location?.area_id ? { area_id: Number(Location?.area_id) } : {}),
-      delete_item_image_id: deleteImagesId,
+      delete_item_image_id: deleteImagesId
+        ?.split(",")                // convert string to array
+        .filter((id) => id !== "main_image")  // remove main_image
+        .join(","),
       ...(Object.keys(nonDefaultTranslations).length > 0 && {
         translations: nonDefaultTranslations,
       }),

@@ -12,24 +12,28 @@ import { useSelector } from "react-redux";
 import { t } from "@/utils";
 import { getIsRtl } from "@/redux/reducer/languageSlice.js";
 import { Loader2 } from "lucide-react";
-import useGetCategories from "@/components/Layout/useGetCategories.jsx";
-
+import { featuredCategoriesApi } from "@/utils/api.js";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams.jsx";
 const PopularCategories = () => {
-  const {
-    cateData,
-    getCategories,
-    isCatLoading,
-    isCatLoadMore,
-    catLastPage,
-    catCurrentPage,
-  } = useGetCategories();
 
   const isRTL = useSelector(getIsRtl);
+  const langCode = useLangFromSearchParams();
+  const [cateData, setCateData] = useState([]);
+  const [isCatLoading, setIsCatLoading] = useState(true);
+  const [isCatLoadMore, setIsCatLoadMore] = useState(false);
+  const [catCurrentPage, setCatCurrentPage] = useState(1);
+  const [catLastPage, setCatLastPage] = useState(1);
+
   const [api, setApi] = useState();
   const [current, setCurrent] = useState(0);
+
   const isNextDisabled =
     isCatLoadMore ||
     ((!api || !api.canScrollNext()) && catCurrentPage >= catLastPage);
+
+  useEffect(() => {
+    getCategories(1);
+  }, [langCode]);
 
   useEffect(() => {
     if (!api) {
@@ -40,6 +44,32 @@ const PopularCategories = () => {
       setCurrent(api.selectedScrollSnap());
     });
   }, [api, cateData.length]);
+
+  const getCategories = async (page = 1) => {
+    if (page === 1) {
+      setIsCatLoading(true);
+    } else {
+      setIsCatLoadMore(true);
+    }
+    try {
+      const res = await featuredCategoriesApi.getFeaturedCategories({
+        page,
+      });
+      if (res?.data?.error === false) {
+        const data = res.data.data;
+        setCateData((prev) =>
+          page === 1 ? data.data : [...prev, ...data.data]
+        );
+        setCatCurrentPage(data.current_page);
+        setCatLastPage(data.last_page);
+      }
+    } catch (error) {
+      console.error("Featured categories error:", error);
+    } finally {
+      setIsCatLoading(false);
+      setIsCatLoadMore(false);
+    }
+  };
 
   const handleNext = async () => {
     if (api && api.canScrollNext()) {
@@ -52,7 +82,7 @@ const PopularCategories = () => {
     }
   };
 
-  return isCatLoading && !cateData.length ? (
+  return isCatLoading ? (
     <PopularCategoriesSkeleton />
   ) : (
     cateData && cateData.length > 0 && (
@@ -64,9 +94,8 @@ const PopularCategories = () => {
           <div className="flex items-center justify-center gap-2 sm:gap-4">
             <button
               onClick={() => api && api.scrollTo(current - 1)}
-              className={`bg-primary p-1 sm:p-2 rounded-full ${
-                !api?.canScrollPrev() ? "opacity-65 cursor-default" : ""
-              }`}
+              className={`bg-primary p-1 sm:p-2 rounded-full ${!api?.canScrollPrev() ? "opacity-65 cursor-default" : ""
+                }`}
               disabled={!api?.canScrollPrev()}
             >
               <RiArrowLeftLine
@@ -77,9 +106,8 @@ const PopularCategories = () => {
             </button>
             <button
               onClick={handleNext}
-              className={`bg-primary p-1 sm:p-2 rounded-full ${
-                isNextDisabled ? "opacity-65 cursor-default" : ""
-              }`}
+              className={`bg-primary p-1 sm:p-2 rounded-full ${isNextDisabled ? "opacity-65 cursor-default" : ""
+                }`}
               disabled={isNextDisabled}
             >
               {isCatLoadMore ? (

@@ -4,15 +4,14 @@ import AllItemsSkeleton from "@/components/PagesComponent/Home/AllItemsSkeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { resetBreadcrumb } from "@/redux/reducer/breadCrumbSlice";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
 import { t } from "@/utils";
 import { allItemApi } from "@/utils/api";
-import { Info, X } from "lucide-react";
+import { Info } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
 const AllItems = ({ cityData, KmRange }) => {
   const dispatch = useDispatch();
-  const CurrentLanguage = useSelector(CurrentLanguageData);
   const [AllItem, setAllItem] = useState([]);
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -21,16 +20,13 @@ const AllItems = ({ cityData, KmRange }) => {
 
   // State to track if we should show location alert
   const [locationAlertMessage, setLocationAlertMessage] = useState("");
-
+  const langCode = useLangFromSearchParams();
   const getAllItemData = async (page) => {
     if (page === 1) {
       setIsLoading(true);
     }
     try {
-      const params = {
-        page,
-        current_page: "home",
-      };
+      const params = { page, current_page: "home" };
       if (Number(KmRange) > 0 && (cityData?.areaId || cityData?.city)) {
         // Add location-based parameters for non-demo mode
         params.radius = KmRange;
@@ -48,7 +44,6 @@ const AllItems = ({ cityData, KmRange }) => {
           params.country = cityData.country;
         }
       }
-
       const response = await allItemApi.getItems(params);
       if (response.data?.error === true) {
         throw new Error(response.data?.message);
@@ -91,7 +86,7 @@ const AllItems = ({ cityData, KmRange }) => {
 
   useEffect(() => {
     getAllItemData(1);
-  }, [cityData.lat, cityData.long, KmRange, CurrentLanguage?.id]);
+  }, [cityData.lat, cityData.long, KmRange, langCode]);
 
   const handleLoadMore = () => {
     setIsLoadMore(true);
@@ -114,7 +109,7 @@ const AllItems = ({ cityData, KmRange }) => {
   };
 
   return (
-    <section className="container mt-12">
+    <section className="mt-12">
       <h5 className="text-xl sm:text-2xl font-medium">
         {t("allAdvertisements")}
       </h5>

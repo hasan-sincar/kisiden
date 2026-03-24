@@ -18,15 +18,13 @@ import ProductHorizontalCard from "@/components/Common/ProductHorizontalCard";
 import { useSearchParams } from "next/navigation";
 import { MdViewStream } from "react-icons/md";
 import { Button } from "@/components/ui/button";
-import { CurrentLanguageData } from "@/redux/reducer/languageSlice";
-import { useSelector } from "react-redux";
 import { t } from "@/utils";
 
 const SellerLsitings = ({ id }) => {
   const searchParams = useSearchParams();
   const view = searchParams.get("view") || "grid";
   const sortBy = searchParams.get("sort") || "new-to-old";
-  const CurrentLanguage = useSelector(CurrentLanguageData);
+  const langCode = searchParams.get("lang")
   const [isSellerItemsLoading, setIsSellerItemsLoading] = useState(false);
   const [sellerItems, setSellerItems] = useState([]);
   const [isSellerItemLoadMore, setIsSellerItemLoadMore] = useState(false);
@@ -35,7 +33,7 @@ const SellerLsitings = ({ id }) => {
 
   useEffect(() => {
     getSellerItems(1);
-  }, [sortBy, CurrentLanguage.id]);
+  }, [sortBy, langCode]);
 
   const getSellerItems = async (page) => {
     try {
@@ -129,21 +127,19 @@ const SellerLsitings = ({ id }) => {
         <div className="flex items-center gap-1">
           <button
             onClick={() => toggleView("grid")}
-            className={`flex items-center justify-center size-8 sm:size-10 text-muted-foreground transition-colors duration-300 cursor-pointer gap-2 rounded-full ${
-              view === "grid"
-                ? "bg-primary text-white"
-                : "hover:bg-black/15 hover:text-black"
-            }`}
+            className={`flex items-center justify-center size-8 sm:size-10 text-muted-foreground transition-colors duration-300 cursor-pointer gap-2 rounded-full ${view === "grid"
+              ? "bg-primary text-white"
+              : "hover:bg-black/15 hover:text-black"
+              }`}
           >
             <IoGrid className="size-5 sm:size-6" />
           </button>
           <button
             onClick={() => toggleView("list")}
-            className={`flex items-center justify-center size-8 sm:size-10 text-muted-foreground hover:text-black transition-colors duration-300 cursor-pointer gap-2 rounded-full ${
-              view === "list"
-                ? "bg-primary text-white"
-                : "hover:text-black hover:bg-black/15"
-            }`}
+            className={`flex items-center justify-center size-8 sm:size-10 text-muted-foreground hover:text-black transition-colors duration-300 cursor-pointer gap-2 rounded-full ${view === "list"
+              ? "bg-primary text-white"
+              : "hover:text-black hover:bg-black/15"
+              }`}
           >
             <MdViewStream className="size-5 sm:size-6" />
           </button>

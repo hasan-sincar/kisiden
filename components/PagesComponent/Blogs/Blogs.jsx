@@ -10,13 +10,12 @@ import { Button } from "@/components/ui/button";
 import NoData from "@/components/EmptyStates/NoData";
 import Tags from "./Tags";
 import { useSearchParams } from "next/navigation";
-import { useSelector } from "react-redux";
-import { getCurrentLangCode } from "@/redux/reducer/languageSlice";
+import AdVertical from "@/components/AdSense/AdVertical";
 
 const Blogs = () => {
   const searchParams = useSearchParams();
   const tag = searchParams?.get("tag");
-  const langCode = useSelector(getCurrentLangCode);
+  const langCode = searchParams.get("lang")
   const [blogs, setBlogs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -92,6 +91,7 @@ const Blogs = () => {
             </div>
             <div className="col-span-12 lg:col-span-4 order-1 lg:order-2">
               <Tags tag={tag} langCode={langCode} />
+              <AdVertical className="mt-8" />
             </div>
           </div>
         </div>

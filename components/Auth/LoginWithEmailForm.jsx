@@ -17,7 +17,7 @@ import { loadUpdateData } from "@/redux/reducer/authSlice";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
-const LoginWithEmailForm = ({ OnHide }) => {
+const LoginWithEmailForm = ({ OnHide, forgotPasswordLoading, setForgotPasswordLoading, showLoader, setShowLoader, isLoadingWithGoogle }) => {
   const emailRef = useAutoFocus();
   const auth = getAuth();
   const fetchFCM = useSelector(Fcmtoken);
@@ -25,10 +25,9 @@ const LoginWithEmailForm = ({ OnHide }) => {
     email: "",
     password: "",
     IsPasswordVisible: false,
-    showLoader: false,
   });
 
-  const { email, password, IsPasswordVisible, showLoader } = loginStates;
+  const { email, password, IsPasswordVisible } = loginStates;
 
   const signin = async (email, password) => {
     try {
@@ -66,7 +65,7 @@ const LoginWithEmailForm = ({ OnHide }) => {
     }
 
     try {
-      setLoginStates((prev) => ({ ...prev, showLoader: true }));
+      setShowLoader(true)
       const userCredential = await signin(email, password);
       const user = userCredential.user;
       if (user.emailVerified) {
@@ -99,20 +98,23 @@ const LoginWithEmailForm = ({ OnHide }) => {
       console.log("Error code:", errorCode);
       handleFirebaseAuthError(errorCode);
     } finally {
-      setLoginStates((prev) => ({ ...prev, showLoader: false }));
+      setShowLoader(false)
     }
   };
 
+
   const handleForgotModal = async (e) => {
     e.preventDefault();
-    await sendPasswordResetEmail(auth, email)
-      .then(() => {
-        toast.success(t("resetPassword"));
-      })
-      .catch((error) => {
-        console.log("error", error);
-        handleFirebaseAuthError(error?.code);
-      });
+    try {
+      setForgotPasswordLoading(true);
+      await sendPasswordResetEmail(auth, email);
+      toast.success(t("resetPassword"));
+    } catch (error) {
+      console.log("error", error);
+      handleFirebaseAuthError(error?.code);
+    } finally {
+      setForgotPasswordLoading(false);
+    }
   };
 
   return (
@@ -166,14 +168,24 @@ const LoginWithEmailForm = ({ OnHide }) => {
             className="text-right font-semibold text-primary"
             onClick={handleForgotModal}
             type="button"
+            disabled={forgotPasswordLoading || showLoader || isLoadingWithGoogle}
           >
-            {t("forgtPassword")}
+            {forgotPasswordLoading ? (
+              <>
+                <span className="flex items-center gap-2 justify-end">
+                  <Loader2 className="size-4 animate-spin" />
+                  <span>{t("loading")}</span>
+                </span>
+              </>
+            ) : (
+              t("forgtPassword")
+            )}
           </button>
         </div>
         <Button
           className="text-xl text-white font-light px-4 py-2"
           size="big"
-          disabled={showLoader}
+          disabled={showLoader || forgotPasswordLoading || isLoadingWithGoogle}
         >
           {showLoader ? (
             <Loader2 className="size-6 animate-spin" />

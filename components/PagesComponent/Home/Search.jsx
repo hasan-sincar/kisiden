@@ -23,6 +23,8 @@ import { FaSearch } from "react-icons/fa";
 import { usePathname } from "next/navigation";
 import { useNavigate } from "@/components/Common/useNavigate";
 import useGetCategories from "@/components/Layout/useGetCategories";
+import { useUpdateLocationInUrl } from "@/components/Common/useUpdateLocationInUrl";
+import { useLangFromSearchParams } from "@/components/Common/useLangFromSearchParams";
 
 const Search = () => {
   const {
@@ -45,6 +47,8 @@ const Search = () => {
   const hasMore = catCurrentPage < catLastPage;
   const { ref, inView } = useInView();
   const [searchQuery, setSearchQuery] = useState("");
+  const { generateAdsUrl } = useUpdateLocationInUrl();
+  const langCode = useLangFromSearchParams();
 
   useEffect(() => {
     if (open && inView && hasMore && !isCatLoadMore) {
@@ -54,24 +58,19 @@ const Search = () => {
 
   const handleSearchNav = (e) => {
     e.preventDefault();
-
-    const query = encodeURIComponent(searchQuery);
-
-    // Build the base URL with query and language
-    const baseUrl = `/ads?query=${query}`;
-
-    // Add category parameter if not "all-categories"
-    const url =
-      selectedItem?.slug === "all-categories"
-        ? baseUrl
-        : `/ads?category=${selectedItem?.slug}&query=${query}`;
-
-    // Use consistent navigation method
-    if (pathname === "/ads") {
-      // If already on ads page, use history API to avoid full page reload
-      window.history.pushState(null, "", url);
+    const isAdsPage = pathname === "/ads";
+    // Build URL: useHeaderLocation = true only if NOT on /ads page
+    const url = generateAdsUrl({
+      query: searchQuery,
+      category: selectedItem?.slug
+    }, !isAdsPage);
+    if (isAdsPage) {
+      // On ads page, use pushState and manually append lang 
+      const separator = url.includes("?") ? "&" : "?";
+      const finalUrl = langCode ? `${url}${separator}lang=${langCode}` : url;
+      window.history.pushState(null, "", finalUrl);
     } else {
-      // If on different page, use router for navigation
+      // Moving from Home to Ads
       navigate(url);
     }
   };

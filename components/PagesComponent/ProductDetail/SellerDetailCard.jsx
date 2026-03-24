@@ -5,7 +5,7 @@ import { IoMdStar } from "react-icons/io";
 import { FaArrowRight, FaPaperPlane } from "react-icons/fa";
 import { IoChatboxEllipsesOutline } from "react-icons/io5";
 import { useSelector } from "react-redux";
-import { extractYear, t } from "@/utils";
+import { extractYear, getDefaultCountryCode, t } from "@/utils";
 import CustomLink from "@/components/Common/CustomLink";
 import { BiPhoneCall } from "react-icons/bi";
 import { itemOfferApi } from "@/utils/api";
@@ -55,8 +55,15 @@ const SellerDetailCard = ({ productDetails, setProductDetails }) => {
       const response = await itemOfferApi.offer({
         item_id: offerData.itemId,
       });
-      const { data } = response.data;
-      navigate("/chat?activeTab=buying&chatid=" + data?.id);
+
+      if (response?.data?.error === false) {
+        const { data } = response.data;
+        navigate("/chat?activeTab=buying&chatid=" + data?.id + '&chat_ad_id=' + offerData.itemId);
+
+      } else {
+        toast.error(response?.data?.message);
+      }
+
     } catch (error) {
       toast.error(t("unableToStartChat"));
       console.log(error);
@@ -81,10 +88,18 @@ const SellerDetailCard = ({ productDetails, setProductDetails }) => {
     setShowApplyModal(true);
   };
 
+
+  const contactNumber = productDetails?.contact;
+
+  const regionCode = productDetails?.region_code?.toUpperCase();
+  const countryCode = getDefaultCountryCode(regionCode) || "";
+
+  const prefix = countryCode ? `+${countryCode}` : "";
+  const mobile = contactNumber ? `${prefix}${contactNumber}` : null;
   return (
     <>
       <div className="flex items-center rounded-lg border flex-col">
-        {(userData?.is_verified === 1 || memberSinceYear) && (
+        {(userData?.is_verified == 1 || memberSinceYear) && (
           <div className="p-4 flex justify-between items-center w-full">
             {productDetails?.user?.is_verified == 1 && (
               <Badge
@@ -116,7 +131,7 @@ const SellerDetailCard = ({ productDetails, setProductDetails }) => {
             <div className="flex flex-col gap-1 min-w-0">
               <CustomLink
                 href={`/seller/${productDetails?.user?.id}`}
-                className="font-bold text-lg text_ellipsis"
+                className="font-bold text-lg truncate"
               >
                 {productDetails?.user?.name}
               </CustomLink>
@@ -134,11 +149,11 @@ const SellerDetailCard = ({ productDetails, setProductDetails }) => {
                     {t("ratings")}
                   </div>
                 )}
-              {productDetails?.user?.show_personal_details === 1 &&
+              {productDetails?.user?.show_personal_details == 1 &&
                 productDetails?.user?.email && (
                   <Link
                     href={`mailto:${productDetails?.user?.email}`}
-                    className="text-sm text_ellipsis"
+                    className="text-sm truncate"
                   >
                     {productDetails?.user?.email}
                   </Link>
@@ -164,13 +179,9 @@ const SellerDetailCard = ({ productDetails, setProductDetails }) => {
             )}
           </button>
 
-          {productDetails?.user?.mobile && (
+          {mobile && (
             <Link
-              href={`tel:${
-                productDetails?.user?.country_code
-                  ? `+${productDetails.user.country_code}`
-                  : ""
-              }${productDetails?.user?.mobile}`}
+              href={`tel:${mobile}`}
               className="bg-[#000] text-white p-4 rounded-md flex items-center gap-2 text-base font-medium justify-center whitespace-nowrap [flex:1_1_47%]"
             >
               <BiPhoneCall size={21} />
@@ -188,9 +199,8 @@ const SellerDetailCard = ({ productDetails, setProductDetails }) => {
           )}
           {isJobCategory && (
             <button
-              className={`text-white p-4 rounded-md flex items-center gap-2 text-base font-medium justify-center whitespace-nowrap [flex:1_1_47%] ${
-                isApplied ? "bg-primary" : "bg-black"
-              }`}
+              className={`text-white p-4 rounded-md flex items-center gap-2 text-base font-medium justify-center whitespace-nowrap [flex:1_1_47%] ${isApplied ? "bg-primary" : "bg-black"
+                }`}
               disabled={isApplied}
               onClick={handleApplyJob}
             >

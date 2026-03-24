@@ -68,6 +68,14 @@ export const LOGOUT = "logout";
 export const SET_ITEM_TOTAL_CLICK = "set-item-total-click";
 export const RESET_PASSWORD = "reset-password";
 export const GET_CURRENCIES = "get-currencies";
+export const GET_FOLLOWERS = "followers";
+export const GET_FOLLOWING = "following";
+export const FOLLOW_USER = "follow-user";
+export const UNFOLLOW_USER = "unfollow-user";
+export const GET_FEATURED_CATEGORIES = "get-featured-categories";
+export const GET_CHAT_ADLIST = "item-offer-list";
+export const DELETE_CHAT = "delete-chat";
+export const DELETE_CHAT_MESSAGES = "delete-chat-messages";
 
 // 1. SETTINGS API
 export const settingsApi = {
@@ -91,6 +99,12 @@ export const categoryApi = {
     return Api.get(GET_CATEGORIES, {
       params: { category_id, page, listing },
     });
+  },
+};
+// 3. FEATURED CATEGORY API
+export const featuredCategoriesApi = {
+  getFeaturedCategories: () => {
+    return Api.get(GET_FEATURED_CATEGORIES);
   },
 };
 // 3. MY ITEMS API
@@ -197,10 +211,12 @@ export const allItemApi = {
 // PACKAGE API
 
 export const getPackageApi = {
-  getPackage: ({ type } = {}) => {
+  getPackage: ({ type, category_id, is_subscribed } = {}) => {
     return Api.get(GET_PACKAGE, {
       params: {
         type,
+        category_id,
+        is_subscribed,
       },
     });
   },
@@ -615,10 +631,10 @@ export const paymentTransactionApi = {
 // custom field api
 
 export const getCustomFieldsApi = {
-  getCustomFields: ({ category_ids, filter } = {}) => {
+  getCustomFields: ({ filter, category_id } = {}) => {
     return Api.get(GET_CUSTOM_FIELDS, {
       params: {
-        category_ids,
+        category_id,
         ...(filter !== undefined ? { filter } : {}),
       },
     });
@@ -650,11 +666,12 @@ export const itemOfferApi = {
 };
 
 export const chatListApi = {
-  chatList: ({ type, page } = {}) => {
+  chatList: ({ type, page, item_id } = {}) => {
     return Api.get(CHAT_LIST, {
       params: {
         type,
         page,
+        item_id
       },
     });
   },
@@ -683,7 +700,6 @@ export const addItemApi = {
     contact,
     video_link,
     custom_fields,
-    image,
     gallery_images = [],
     address,
     latitude,
@@ -698,7 +714,8 @@ export const addItemApi = {
     translations,
     custom_field_translations,
     region_code,
-    currency_id
+    currency_id,
+    image
   } = {}) => {
     const formData = new FormData();
     // Append only if the value is defined and not an empty string
@@ -716,6 +733,7 @@ export const addItemApi = {
       formData.append("custom_fields", JSON.stringify(custom_fields));
 
     if (image) formData.append("image", image);
+
     if (gallery_images.length > 0) {
       gallery_images.forEach((gallery_image, index) => {
         formData.append(`gallery_images[${index}]`, gallery_image);
@@ -787,7 +805,7 @@ export const editItemApi = {
     translations,
     custom_field_translations,
     region_code,
-    currency_id
+    currency_id,
     // expiry_date,
   } = {}) => {
     const formData = new FormData();
@@ -1174,6 +1192,95 @@ export const getSeoSettingsApi = {
     return Api.get(GET_SEO_SETTINGS, {
       params: {
         page,
+      },
+    });
+  },
+};
+
+
+
+export const getFollowersApi = {
+  getFollowers: ({ user_id, search, page } = {}) => {
+    return Api.get(GET_FOLLOWERS, {
+      params: { user_id, search, page },
+    });
+  },
+};
+
+export const getFollowingApi = {
+  getFollowing: ({ user_id, search, page } = {}) => {
+    return Api.get(GET_FOLLOWING, {
+      params: { user_id, search, page },
+    });
+  },
+};
+
+
+export const followUserApi = {
+  followUser: ({
+    user_id
+  } = {}) => {
+    const formData = new FormData();
+    if (user_id) formData.append("user_id", user_id);
+    return Api.post(FOLLOW_USER, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+};
+
+export const unfollowUserApi = {
+  unfollowUser: ({
+    user_id
+  } = {}) => {
+    const formData = new FormData();
+    if (user_id) formData.append("user_id", user_id);
+    return Api.post(UNFOLLOW_USER, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+};
+
+export const getChatAdListApi = {
+  getChatAdList: ({ type, page } = {}) => {
+    return Api.get(GET_CHAT_ADLIST, {
+      params: {
+        type,
+        page
+      },
+    });
+  },
+};
+
+export const deleteChatApi = {
+  deleteChat: ({ item_offer_id } = {}) => {
+    const formData = new FormData();
+    if (item_offer_id) formData.append("item_offer_id", item_offer_id);
+    return Api.post(DELETE_CHAT, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+  },
+};
+
+
+export const deleteChatMessagesApi = {
+  deleteChatMessages: ({ item_offer_id, message_ids = [] } = {}) => {
+    const formData = new FormData();
+    if (item_offer_id) formData.append("item_offer_id", item_offer_id);
+
+    // Append each ID individually with [] to ensure backend receives it as an array
+    message_ids.forEach((id) => {
+      formData.append("message_ids[]", id);
+    });
+
+    return Api.post(DELETE_CHAT_MESSAGES, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
       },
     });
   },

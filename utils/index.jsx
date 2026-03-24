@@ -2,7 +2,6 @@
 import { toast } from "sonner";
 import { store } from "../redux/store";
 import enTranslation from "./locale/en.json";
-import { generateKeywords } from "./generateKeywords";
 import { getCountryCallingCode } from "react-phone-number-input";
 
 export const t = (label) => {
@@ -424,6 +423,21 @@ export const formatSalaryRange = (minSalary, maxSalary) => {
   return "";
 };
 
+export const formatSubscriptionDate = (dateString) => {
+  if (!dateString) return "-";
+
+  const countryCode =
+    process.env.NEXT_PUBLIC_DEFAULT_COUNTRY?.toUpperCase() || "US";
+  const locale = countryLocaleMap[countryCode] || "en-US";
+  const date = new Date(dateString);
+
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+};
+
 // utils/stickyNote.js
 export const createStickyNote = () => {
   // Check if sticky note already exists - prevent duplicates
@@ -681,10 +695,6 @@ export const generateSlug = (text) => {
     .replace(/^-+|-+$/g, ""); // Remove leading or trailing hyphens
 };
 
-export const isEmptyObject = (obj) => {
-  return Object.keys(obj).length === 0;
-};
-
 // Create a temporary element to measure the width of category names
 
 export const measureCategoryWidth = (categoryName) => {
@@ -699,38 +709,7 @@ export const measureCategoryWidth = (categoryName) => {
   return width;
 };
 
-export const calculateRatingPercentages = (ratings) => {
-  // Initialize counters for each star rating
-  const ratingCount = {
-    5: 0,
-    4: 0,
-    3: 0,
-    2: 0,
-    1: 0,
-  };
 
-  // Count the number of each star rating
-  ratings?.forEach((rating) => {
-    const roundedRating = Math.round(rating?.ratings); // Round down to the nearest whole number
-    if (roundedRating >= 1 && roundedRating <= 5) {
-      ratingCount[roundedRating] += 1;
-    }
-  });
-
-  // Get the total number of ratings
-  const totalRatings = ratings.length;
-
-  // Calculate the percentage for each rating
-  const ratingPercentages = {
-    5: (ratingCount[5] / totalRatings) * 100,
-    4: (ratingCount[4] / totalRatings) * 100,
-    3: (ratingCount[3] / totalRatings) * 100,
-    2: (ratingCount[2] / totalRatings) * 100,
-    1: (ratingCount[1] / totalRatings) * 100,
-  };
-
-  return { ratingCount, ratingPercentages };
-};
 
 export const isPdf = (url) => url?.toLowerCase().endsWith(".pdf");
 
@@ -938,9 +917,8 @@ export const prefillExtraDetails = ({
           break;
 
         case "fileinput":
-          if (isDefault && fieldValue?.length) {
-            const fileUrl = fieldValue[0];
-
+          if (isDefault && fieldValue) {
+            const fileUrl = Array.isArray(fieldValue) ? fieldValue[0] : fieldValue;
             // update preview immediately
             setFilePreviews?.((prev) => ({
               ...prev,
@@ -1204,9 +1182,13 @@ export const getFilteredCustomFields = (
 
   for (const field of fields) {
     const id = field.id;
+
+
     const val =
       field.type === "fileinput"
-        ? field.value
+        ? Array.isArray(field.value)
+          ? field.value[0]
+          : field.value
         : field.translated_selected_values;
 
     const isEmpty =
@@ -1227,10 +1209,9 @@ export const getFilteredCustomFields = (
   return Array.from(fieldMap.values());
 };
 
-export const getDefaultCountryCode = () => {
+export const getDefaultCountryCode = (defaultCountry = process.env.NEXT_PUBLIC_DEFAULT_COUNTRY?.toUpperCase()) => {
   try {
-    const defaultCountry =
-      process.env.NEXT_PUBLIC_DEFAULT_COUNTRY?.toUpperCase();
+
     if (defaultCountry) {
       return getCountryCallingCode(defaultCountry);
     }

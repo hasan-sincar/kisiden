@@ -1,13 +1,11 @@
 "use client";
-import { getCurrentLangCode } from "@/redux/reducer/languageSlice";
-import { getDefaultLanguageCode } from "@/redux/reducer/settingSlice";
 import { useRouter } from "next/navigation";
-import { useSelector } from "react-redux";
+import { useLangFromSearchParams } from "./useLangFromSearchParams";
 
 export const useNavigate = () => {
   const router = useRouter();
-  const currentLangCode = useSelector(getCurrentLangCode);
-  const defaultLangCode = useSelector(getDefaultLanguageCode);
+  const currentLangCode = useLangFromSearchParams()
+  const defaultLangCode = process.env.NEXT_PUBLIC_DEFAULT_LANGUAGE;
 
   const langCode = currentLangCode || defaultLangCode;
 

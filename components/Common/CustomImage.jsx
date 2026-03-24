@@ -31,7 +31,7 @@ const CustomImage = ({ src, alt, loading = "lazy", ...props }) => {
   return (
     <Image
       src={imgSrc}
-      alt={alt}
+      alt={alt || 'General Image'}
       onError={handleError}
       loading={loading} // Dynamic loading: defaults to "lazy" if not provided
       {...props} // width, height, className etc can still be passed

@@ -24,16 +24,12 @@ export const CurrentLanguageData = createSelector(
     (state) => state.CurrentLanguage,
     (CurrentLanguage) => CurrentLanguage.language
 );
+export const getReduxCurrentLangCode = createSelector(
+    (state) => state.CurrentLanguage,
+    (CurrentLanguage) => CurrentLanguage?.language?.code
+);
 
 export const getIsRtl = createSelector(
     (state) => state.CurrentLanguage,
     (CurrentLanguage) => CurrentLanguage.language.rtl
 );
-
-export const getCurrentLangCode = createSelector(
-    (state) => state.CurrentLanguage,
-    (CurrentLanguage) => CurrentLanguage.language.code
-);
-
-
-
