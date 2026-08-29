@@ -1,0 +1,24 @@
+workflows:
+  ios-release:
+    name: iOS Build
+    environment:
+      flutter: stable
+      xcode: latest
+
+    scripts:
+      - name: Install dependencies and Generate Icons
+        script: |
+          flutter pub get
+          dart run flutter_launcher_icons
+
+      - name: Check files, install pods and build IPA
+        script: |
+          flutter clean
+          echo "--- GoogleService-Info.plist dosyasının varlığı kontrol ediliyor... ---"
+          ls -l ios/Runner
+          echo "--------------------------------------------------------------------"
+          cd ios && pod install && cd ..
+          flutter build ios --release --build-number=$BUILD_NUMBER --no-codesign --no-swift-package-manager
+
+    artifacts:
+      - build/ios/ipa/*.ipa

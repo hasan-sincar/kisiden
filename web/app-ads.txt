@@ -1,0 +1,2 @@
+# Lütfen pub-0000000000000000 yazan yeri kendi AdMob Yayıncı Kimliğiniz (Publisher ID) ile değiştirin.
+google.com, pub-2864672373009685, DIRECT, f08c47fec0942fa0

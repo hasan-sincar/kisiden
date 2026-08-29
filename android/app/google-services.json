@@ -1,0 +1,63 @@
+{
+  "project_info": {
+    "project_number": "610548128900",
+    "firebase_url": "https://kisiden-projesi-default-rtdb.firebaseio.com",
+    "project_id": "kisiden-projesi",
+    "storage_bucket": "kisiden-projesi.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:610548128900:android:5ceeb1099ae3c9c4cb76d1",
+        "android_client_info": {
+          "package_name": "com.kisidencom.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "610548128900-75bh9rk7qhioc91esv0315ie0uepb64o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kisidencom.app",
+            "certificate_hash": "2eedc9b9aed75dc7f77ee6f5c84cf5cf41d86538"
+          }
+        },
+        {
+          "client_id": "610548128900-i9vn2o5lqa2estcu5tk9rdgsnl328he7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kisidencom.app",
+            "certificate_hash": "1ecfcacf4d25f128cd5ba0bff5beff8a71f54dce"
+          }
+        },
+        {
+          "client_id": "610548128900-9i31ppgrcd7lulmev2lnqkj733e8v372.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAKWCsCKDWoG2LZfU1VyXwOYGSCztF0td4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "610548128900-9i31ppgrcd7lulmev2lnqkj733e8v372.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "610548128900-u2qp6usl106q2iq2achqh49nrbctu8fo.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kisiden.appim"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,65 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && request.auth.token.role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin') || hasRole('moderator');
+    }
+
+    // Helper checks for image uploads
+    function isValidImageUpload10() {
+      return request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    function isValidImageUpload5() {
+      return request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Offer images (public read, restricted write)
+    match /offer_images/{businessId}/{offerId}/{fileName} {
+      allow read: if true;
+      allow write: if isSignedIn() && (
+        request.auth.uid == businessId || isAdmin()
+      ) && isValidImageUpload5();
+    }
+
+    // Business documents (private)
+    match /business_docs/{businessId}/{fileName} {
+      allow read: if isSignedIn() && (request.auth.uid == businessId || isAdmin());
+      allow write: if isSignedIn() && request.auth.uid == businessId
+        && request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // Listing images (used by the app) - allow public read but write only by owner
+    match /listing_images/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidImageUpload10();
+    }
+
+    // Ticket images: private to the user
+    match /tickets/{userId}/{allPaths=**} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidImageUpload10();
+    }
+
+    // Profile images
+    match /profile_images/{userId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn() && request.auth.uid == userId && isValidImageUpload5();
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
