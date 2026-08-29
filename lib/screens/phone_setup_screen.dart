@@ -8,7 +8,9 @@ import '../utils/theme_colors.dart';
 import '../utils/translations.dart';
 
 class PhoneSetupScreen extends StatefulWidget {
-  const PhoneSetupScreen({super.key});
+  final bool isFirstTimeSetup;
+
+  const PhoneSetupScreen({super.key, this.isFirstTimeSetup = false});
 
   @override
   State<PhoneSetupScreen> createState() => _PhoneSetupScreenState();
@@ -311,13 +313,15 @@ class _PhoneSetupScreenState extends State<PhoneSetupScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            onPressed: _skipForNow,
-            icon: const Icon(Icons.close),
-            tooltip: tr('not_now'),
-          ),
-        ],
+        actions: widget.isFirstTimeSetup
+            ? []
+            : [
+                IconButton(
+                  onPressed: _skipForNow,
+                  icon: const Icon(Icons.close),
+                  tooltip: tr('not_now'),
+                ),
+              ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

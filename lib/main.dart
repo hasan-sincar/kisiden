@@ -718,7 +718,7 @@ class _AuthCheckerState extends State<AuthChecker> {
     if (_isProfileComplete) {
       return const HomeScreen();
     } else {
-      return const PhoneSetupScreen();
+      return const PhoneSetupScreen(isFirstTimeSetup: true);
     }
   }
 }

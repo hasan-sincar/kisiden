@@ -284,8 +284,9 @@ extension DatabaseServiceAccount on DatabaseService {
         false;
 
     if (isPhoneAuthUser) {
-      // Phone-auth users already verified phone during sign-in flow.
-      return true;
+      // Phone-auth users must have name and email filled as mandatory fields
+      // They cannot skip this requirement
+      return hasName && hasEmail;
     }
 
     return skipped || (hasPhone && hasName && hasEmail);
