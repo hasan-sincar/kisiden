@@ -2889,6 +2889,7 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   int _totalActiveListings = 0;
+  bool _showSearchField = false;
 
   @override
   void initState() {
@@ -3111,70 +3112,6 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: tr('search_listing_title_or_no'),
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      tooltip: tr('clear_filter'),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {
-                          _searchQuery = '';
-                        });
-                      },
-                    )
-                  : null,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: 0,
-                horizontal: 16,
-              ),
-            ),
-            onChanged: (val) {
-              setState(() {
-                _searchQuery = val.toLowerCase();
-              });
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-          child: Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.blue[50],
-                child: const Icon(Icons.list_alt, color: Colors.blue),
-              ),
-              title: Text(
-                tr('total_active_listings'),
-                style: LocalFonts.poppins(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-              trailing: Text(
-                '$_totalActiveListings',
-                style: LocalFonts.poppins(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue[800],
-                ),
-              ),
-            ),
-          ),
-        ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
@@ -3203,136 +3140,228 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
                     listingNo.contains(_searchQuery);
               }).toList();
 
-              if (docs.isEmpty)
-                return Center(
-                  child: Text(
-                    tr('no_active_listings_matching_criteria'),
-                    style: LocalFonts.poppins(),
+              return CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.list_alt, color: Colors.blue),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$_totalActiveListings',
+                            style: LocalFonts.poppins(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue[800],
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            tooltip: tr('search_listing_title_or_no'),
+                            onPressed: () {
+                              setState(() {
+                                _showSearchField = !_showSearchField;
+                                if (!_showSearchField) {
+                                  _searchController.clear();
+                                  _searchQuery = '';
+                                }
+                              });
+                            },
+                            icon: Icon(
+                              _showSearchField ? Icons.close : Icons.search,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                );
-
-              return ListView.builder(
-                itemCount: docs.length,
-                itemBuilder: (context, index) {
-                  var data = docs[index].data() as Map<String, dynamic>;
-
-                  // İlanın halihazırda vitrinde olup olmadığını kontrol ediyoruz
-                  bool isShowcased = false;
-                  if (data['showcaseUntil'] != null) {
-                    DateTime showcaseDate = (data['showcaseUntil'] as Timestamp)
-                        .toDate();
-                    if (showcaseDate.isAfter(DateTime.now())) {
-                      isShowcased = true;
-                    }
-                  }
-                  bool isCatShowcased = false;
-                  if (data['categoryShowcaseUntil'] != null) {
-                    DateTime catShowcaseDate =
-                        (data['categoryShowcaseUntil'] as Timestamp).toDate();
-                    if (catShowcaseDate.isAfter(DateTime.now())) {
-                      isCatShowcased = true;
-                    }
-                  }
-                  bool isUrgentActive = false;
-                  if (data['isUrgent'] == true && data['urgentUntil'] != null) {
-                    DateTime urgentUntil = (data['urgentUntil'] as Timestamp)
-                        .toDate();
-                    if (urgentUntil.isAfter(DateTime.now())) {
-                      isUrgentActive = true;
-                    }
-                  }
-
-                  return ListTile(
-                    tileColor: isShowcased ? Colors.amber[50] : null,
-                    leading: CachedNetworkImage(
-                      imageUrl: data['imageUrl'] ?? '',
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                      placeholder: (c, u) => const SizedBox(
-                        width: 50,
-                        height: 50,
-                        child: Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                  if (_showSearchField)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                        child: TextField(
+                          controller: _searchController,
+                          autofocus: true,
+                          onChanged: (value) => setState(
+                            () => _searchQuery = value.toLowerCase(),
+                          ),
+                          decoration: InputDecoration(
+                            hintText: tr('search_listing_title_or_no'),
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _searchQuery.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                  ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
                       ),
-                      errorWidget: (c, u, e) => const Icon(Icons.image),
                     ),
-                    title: Text(data['title'] ?? ''),
-                    subtitle: Text('₺${data['price']}'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.star, color: Colors.amber),
-                          tooltip: tr('move_to_showcase'),
-                          onPressed: () =>
-                              _showShowcaseDialog(context, docs[index].id),
+                  if (docs.isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Text(
+                          tr('no_active_listings_matching_criteria'),
+                          style: LocalFonts.poppins(),
                         ),
-                        if (isShowcased)
-                          Tooltip(
-                            message: tr('on_home_showcase'),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 4.0),
-                              child: Icon(
-                                Icons.verified,
-                                color: Colors.blue,
-                                size: 20,
+                      ),
+                    )
+                  else
+                    SliverList.builder(
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        var data = docs[index].data() as Map<String, dynamic>;
+
+                        // İlanın halihazırda vitrinde olup olmadığını kontrol ediyoruz
+                        bool isShowcased = false;
+                        if (data['showcaseUntil'] != null) {
+                          DateTime showcaseDate =
+                              (data['showcaseUntil'] as Timestamp).toDate();
+                          if (showcaseDate.isAfter(DateTime.now())) {
+                            isShowcased = true;
+                          }
+                        }
+                        bool isCatShowcased = false;
+                        if (data['categoryShowcaseUntil'] != null) {
+                          DateTime catShowcaseDate =
+                              (data['categoryShowcaseUntil'] as Timestamp)
+                                  .toDate();
+                          if (catShowcaseDate.isAfter(DateTime.now())) {
+                            isCatShowcased = true;
+                          }
+                        }
+                        bool isUrgentActive = false;
+                        if (data['isUrgent'] == true &&
+                            data['urgentUntil'] != null) {
+                          DateTime urgentUntil =
+                              (data['urgentUntil'] as Timestamp).toDate();
+                          if (urgentUntil.isAfter(DateTime.now())) {
+                            isUrgentActive = true;
+                          }
+                        }
+
+                        return ListTile(
+                          tileColor: isShowcased ? Colors.amber[50] : null,
+                          leading: CachedNetworkImage(
+                            imageUrl: data['imageUrl'] ?? '',
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.cover,
+                            placeholder: (c, u) => const SizedBox(
+                              width: 50,
+                              height: 50,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
                               ),
                             ),
+                            errorWidget: (c, u, e) => const Icon(Icons.image),
                           ),
-                        if (isCatShowcased)
-                          Tooltip(
-                            message: tr('on_category_showcase'),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 4.0),
-                              child: Icon(
-                                Icons.category,
-                                color: Colors.orange,
-                                size: 20,
+                          title: Text(data['title'] ?? ''),
+                          subtitle: Text('₺${data['price']}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.star,
+                                  color: Colors.amber,
+                                ),
+                                tooltip: tr('move_to_showcase'),
+                                onPressed: () => _showShowcaseDialog(
+                                  context,
+                                  docs[index].id,
+                                ),
                               ),
-                            ),
-                          ),
-                        if (isUrgentActive)
-                          const Tooltip(
-                            message: 'Acil listede',
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 4.0),
-                              child: Icon(
-                                Icons.notifications_active,
-                                color: Colors.red,
-                                size: 20,
+                              if (isShowcased)
+                                Tooltip(
+                                  message: tr('on_home_showcase'),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Icon(
+                                      Icons.verified,
+                                      color: Colors.blue,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              if (isCatShowcased)
+                                Tooltip(
+                                  message: tr('on_category_showcase'),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Icon(
+                                      Icons.category,
+                                      color: Colors.orange,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              if (isUrgentActive)
+                                const Tooltip(
+                                  message: 'Acil listede',
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 4.0,
+                                    ),
+                                    child: Icon(
+                                      Icons.notifications_active,
+                                      color: Colors.red,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.edit,
+                                  color: Colors.blue,
+                                ),
+                                tooltip: tr('edit_listing_title'),
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => EditListingScreen(
+                                      listingId: docs[index].id,
+                                      currentData: data,
+                                      isAdminEditor: true,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          tooltip: tr('edit_listing_title'),
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => EditListingScreen(
-                                listingId: docs[index].id,
-                                currentData: data,
-                                isAdminEditor: true,
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.delete,
+                                  color: Colors.red,
+                                ),
+                                tooltip: tr('delete_listing'),
+                                onPressed: () => DatabaseService()
+                                    .deleteListing(docs[index].id),
                               ),
-                            ),
+                            ],
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          tooltip: tr('delete_listing'),
-                          onPressed: () =>
-                              DatabaseService().deleteListing(docs[index].id),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                  );
-                },
+                ],
               );
             },
           ),
@@ -4363,139 +4392,142 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
                 false,
           );
         }).toList();
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.people, color: Colors.blue),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${memberDocs.length}',
-                    style: LocalFonts.poppins(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue[800],
+        return CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.people, color: Colors.blue),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${memberDocs.length}',
+                      style: LocalFonts.poppins(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[800],
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: tr('member_search_hint'),
-                    onPressed: () {
-                      setState(() => _showSearchField = !_showSearchField);
-                      if (!_showSearchField) {
-                        _searchController.clear();
-                        _searchQuery = '';
-                      }
-                    },
-                    icon: Icon(_showSearchField ? Icons.close : Icons.search),
-                  ),
-                  IconButton(
-                    tooltip: tr('show_pro_members'),
-                    onPressed: () {
-                      setState(() => _showProOnly = !_showProOnly);
-                    },
-                    isSelected: _showProOnly,
-                    color: _showProOnly ? Colors.amber[800] : null,
-                    icon: const Icon(Icons.workspace_premium),
-                  ),
-                  IconButton(
-                    tooltip: tr('bulk_notification'),
-                    onPressed: () => _showAdminBroadcastDialog(sendToAll: true),
-                    icon: const Icon(Icons.campaign),
-                  ),
-                ],
+                    const Spacer(),
+                    IconButton(
+                      tooltip: tr('member_search_hint'),
+                      onPressed: () {
+                        setState(() => _showSearchField = !_showSearchField);
+                        if (!_showSearchField) {
+                          _searchController.clear();
+                          _searchQuery = '';
+                        }
+                      },
+                      icon: Icon(_showSearchField ? Icons.close : Icons.search),
+                    ),
+                    IconButton(
+                      tooltip: tr('show_pro_members'),
+                      onPressed: () {
+                        setState(() => _showProOnly = !_showProOnly);
+                      },
+                      isSelected: _showProOnly,
+                      color: _showProOnly ? Colors.amber[800] : null,
+                      icon: const Icon(Icons.workspace_premium),
+                    ),
+                    IconButton(
+                      tooltip: tr('bulk_notification'),
+                      onPressed: () =>
+                          _showAdminBroadcastDialog(sendToAll: true),
+                      icon: const Icon(Icons.campaign),
+                    ),
+                  ],
+                ),
               ),
             ),
             if (_showSearchField)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                  decoration: InputDecoration(
-                    hintText: tr('member_search_hint'),
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                  child: TextField(
+                    controller: _searchController,
+                    autofocus: true,
+                    onChanged: (value) => setState(() => _searchQuery = value),
+                    decoration: InputDecoration(
+                      hintText: tr('member_search_hint'),
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchQuery.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
               ),
-            Expanded(
-              child: filteredDocs.isEmpty
-                  ? Center(
-                      child: Text(
-                        tr('no_members_match_search'),
-                        style: LocalFonts.poppins(color: Colors.grey),
+            if (filteredDocs.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text(
+                    tr('no_members_match_search'),
+                    style: LocalFonts.poppins(color: Colors.grey),
+                  ),
+                ),
+              )
+            else
+              SliverList.builder(
+                itemCount: filteredDocs.length,
+                itemBuilder: (context, index) {
+                  var data = filteredDocs[index].data() as Map<String, dynamic>;
+                  bool isBanned =
+                      data['bannedUntil'] != null &&
+                      (data['bannedUntil'] as Timestamp).toDate().isAfter(
+                        DateTime.now(),
+                      );
+
+                  String? photoUrl = data['photoUrl']?.toString().trim();
+
+                  return ListTile(
+                    onTap: () => _showUserDetailsSheet(
+                      context,
+                      data,
+                      filteredDocs[index].id,
+                      isBanned,
+                    ), // YENİ: Profile erişim tıkı
+                    leading: _buildUserAvatar(photoUrl),
+                    title: Text(
+                      _resolveUserName(data),
+                      style: TextStyle(
+                        color: isBanned ? Colors.red : Colors.black,
+                        fontWeight: isBanned
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                       ),
-                    )
-                  : ListView.builder(
-                      itemCount: filteredDocs.length,
-                      itemBuilder: (context, index) {
-                        var data =
-                            filteredDocs[index].data() as Map<String, dynamic>;
-                        bool isBanned =
-                            data['bannedUntil'] != null &&
-                            (data['bannedUntil'] as Timestamp).toDate().isAfter(
-                              DateTime.now(),
-                            );
-
-                        String? photoUrl = data['photoUrl']?.toString().trim();
-
-                        return ListTile(
-                          onTap: () => _showUserDetailsSheet(
-                            context,
-                            data,
-                            filteredDocs[index].id,
-                            isBanned,
-                          ), // YENİ: Profile erişim tıkı
-                          leading: _buildUserAvatar(photoUrl),
-                          title: Text(
-                            _resolveUserName(data),
-                            style: TextStyle(
-                              color: isBanned ? Colors.red : Colors.black,
-                              fontWeight: isBanned
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                          subtitle: Text(
-                            isBanned
-                                ? '${tr('banned_user_prefix')}${data['email']}'
-                                : (data['email'] ?? ''),
-                            style: TextStyle(
-                              color: isBanned ? Colors.red : Colors.grey,
-                            ),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(
-                              Icons.settings,
-                              color: Colors.blue,
-                            ),
-                            onPressed: () => _showUserOptionsDialog(
-                              context,
-                              filteredDocs[index].id,
-                              _resolveUserName(data),
-                              (data['phoneNumber'] ?? '').toString().trim(),
-                              isBanned,
-                            ),
-                          ),
-                        );
-                      },
                     ),
-            ),
+                    subtitle: Text(
+                      isBanned
+                          ? '${tr('banned_user_prefix')}${data['email']}'
+                          : (data['email'] ?? ''),
+                      style: TextStyle(
+                        color: isBanned ? Colors.red : Colors.grey,
+                      ),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.settings, color: Colors.blue),
+                      onPressed: () => _showUserOptionsDialog(
+                        context,
+                        filteredDocs[index].id,
+                        _resolveUserName(data),
+                        (data['phoneNumber'] ?? '').toString().trim(),
+                        isBanned,
+                      ),
+                    ),
+                  );
+                },
+              ),
           ],
         );
       },
