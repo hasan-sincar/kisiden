@@ -1204,17 +1204,22 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                                                 if (_questionController.text
                                                     .trim()
                                                     .isNotEmpty) {
-                                                  await _dbService.askQuestion(
-                                                    widget.listingId,
-                                                    sellerId,
-                                                    _questionController.text
-                                                        .trim(),
-                                                    listingData['title'] ?? '',
-                                                  );
-                                                  _questionController.clear();
-                                                  FocusScope.of(
-                                                    context,
-                                                  ).unfocus();
+                                                  final submitted =
+                                                      await _dbService.askQuestion(
+                                                        widget.listingId,
+                                                        sellerId,
+                                                        _questionController.text
+                                                            .trim(),
+                                                        listingData['title'] ??
+                                                            '',
+                                                      );
+                                                  if (submitted && mounted) {
+                                                    _questionController.clear();
+                                                    FocusManager
+                                                        .instance
+                                                        .primaryFocus
+                                                        ?.unfocus();
+                                                  }
                                                 }
                                               },
                                             ),

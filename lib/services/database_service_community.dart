@@ -171,7 +171,7 @@ extension DatabaseServiceCommunity on DatabaseService {
     }
   }
 
-  Future<void> askQuestion(
+  Future<bool> askQuestion(
     String listingId,
     String sellerId,
     String question,
@@ -187,7 +187,7 @@ extension DatabaseServiceCommunity on DatabaseService {
           ),
         );
       }
-      return;
+      return false;
     }
     final user = _auth.currentUser!;
 
@@ -205,7 +205,7 @@ extension DatabaseServiceCommunity on DatabaseService {
             ),
           );
         }
-        return;
+        return false;
       }
     }
 
@@ -221,14 +221,19 @@ extension DatabaseServiceCommunity on DatabaseService {
           'replies': [],
           'timestamp': FieldValue.serverTimestamp(),
         });
-    await sendNotification(
-      sellerId,
-      'notif_title_new_question',
-      'notif_msg_new_question',
-      messageArgs: [listingTitle, question],
-      type: 'listing',
-      targetId: listingId,
-    );
+    try {
+      await sendNotification(
+        sellerId,
+        'notif_title_new_question',
+        'notif_msg_new_question',
+        messageArgs: [listingTitle, question],
+        type: 'listing',
+        targetId: listingId,
+      );
+    } catch (e) {
+      print('Yeni soru bildirimi gönderilemedi: $e');
+    }
+    return true;
   }
 
   Future<void> answerQuestion(
