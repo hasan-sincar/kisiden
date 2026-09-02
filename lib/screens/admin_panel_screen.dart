@@ -3352,7 +3352,7 @@ class _AdminUsersTab extends StatefulWidget {
 class _AdminUsersTabState extends State<_AdminUsersTab> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
-  bool _isRepairingAnonymousUsers = false;
+  bool _showProOnly = false;
 
   String _resolveUserName(Map<String, dynamic> data) {
     final raw = (data['name'] ?? '').toString().trim();
@@ -3382,148 +3382,21 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
     return hasCreatedAt && (hasName || hasEmail || hasPhone);
   }
 
-  Future<void> _repairAnonymousUsers() async {
-    if (_isRepairingAnonymousUsers) return;
-    setState(() => _isRepairingAnonymousUsers = true);
-
-    try {
-      final usersSnap = await FirebaseFirestore.instance
-          .collection('users')
-          .get();
-
-      int scanned = 0;
-      int anonymousCount = 0;
-      int updatedCount = 0;
-      int emailBasedCount = 0;
-      int phoneBasedCount = 0;
-      int bothContactCount = 0;
-      int noContactCount = 0;
-
-      WriteBatch batch = FirebaseFirestore.instance.batch();
-      int pendingWrites = 0;
-
-      Future<void> flushBatchIfNeeded({bool force = false}) async {
-        if (pendingWrites == 0) return;
-        if (!force && pendingWrites < 350) return;
-        await batch.commit();
-        batch = FirebaseFirestore.instance.batch();
-        pendingWrites = 0;
-      }
-
-      for (final doc in usersSnap.docs) {
-        scanned += 1;
-        final data = doc.data();
-        final rawName = (data['name'] ?? '').toString().trim();
-        final email = (data['email'] ?? '').toString().trim();
-        final phone = (data['phoneNumber'] ?? '').toString().trim();
-
-        final isAnonymous = rawName.isEmpty || rawName == 'İsimsiz';
-        if (!isAnonymous) continue;
-
-        anonymousCount += 1;
-        if (email.isNotEmpty && phone.isNotEmpty) {
-          bothContactCount += 1;
-        } else if (email.isNotEmpty) {
-          emailBasedCount += 1;
-        } else if (phone.isNotEmpty) {
-          phoneBasedCount += 1;
-        } else {
-          noContactCount += 1;
-        }
-
-        String resolvedName = '';
-        if (email.isNotEmpty) {
-          resolvedName = email.split('@').first.trim();
-        }
-        if (resolvedName.isEmpty && phone.isNotEmpty) {
-          resolvedName = phone;
-        }
-
-        if (resolvedName.isEmpty || resolvedName == rawName) continue;
-
-        batch.set(doc.reference, {
-          'name': resolvedName,
-        }, SetOptions(merge: true));
-        pendingWrites += 1;
-        updatedCount += 1;
-        await flushBatchIfNeeded();
-      }
-
-      await flushBatchIfNeeded(force: true);
-
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(
-            tr('anonymous_user_analysis_title'),
-            style: LocalFonts.poppins(fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${tr('scanned_user_count_prefix')}$scanned',
-                style: LocalFonts.poppins(),
-              ),
-              Text(
-                '${tr('anonymous_total_prefix')}$anonymousCount',
-                style: LocalFonts.poppins(),
-              ),
-              Text(
-                '${tr('updated_name_count_prefix')}$updatedCount',
-                style: LocalFonts.poppins(),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                tr('possible_registration_type_distribution'),
-                style: LocalFonts.poppins(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${tr('has_email_count_prefix')}$emailBasedCount',
-                style: LocalFonts.poppins(fontSize: 13),
-              ),
-              Text(
-                '${tr('has_phone_count_prefix')}$phoneBasedCount',
-                style: LocalFonts.poppins(fontSize: 13),
-              ),
-              Text(
-                '${tr('has_email_and_phone_count_prefix')}$bothContactCount',
-                style: LocalFonts.poppins(fontSize: 13),
-              ),
-              Text(
-                '${tr('has_no_contact_count_prefix')}$noContactCount',
-                style: LocalFonts.poppins(fontSize: 13),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(tr('ok')),
-            ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${tr('repair_failed_prefix')}: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isRepairingAnonymousUsers = false);
-      }
-    }
-  }
-
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  bool _hasActivePro(Map<String, dynamic> data) {
+    final proUntil = data['proUntil'];
+    if (proUntil is Timestamp) {
+      return proUntil.toDate().isAfter(DateTime.now());
+    }
+    if (proUntil is DateTime) {
+      return proUntil.isAfter(DateTime.now());
+    }
+    return false;
   }
 
   Future<void> _showAdminBroadcastDialog({
@@ -4475,8 +4348,9 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
         }).toList();
         final normalizedQuery = _searchQuery.trim().toLowerCase();
         final filteredDocs = memberDocs.where((doc) {
-          if (normalizedQuery.isEmpty) return true;
           final data = doc.data() as Map<String, dynamic>;
+          if (_showProOnly && !_hasActivePro(data)) return false;
+          if (normalizedQuery.isEmpty) return true;
           final searchableFields = [
             _resolveUserName(data),
             data['email'],
@@ -4542,61 +4416,28 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final buttons = [
-                    FilledButton.icon(
-                      onPressed: () =>
-                          _showAdminBroadcastDialog(sendToAll: true),
-                      icon: const Icon(Icons.campaign),
-                      label: Text(
-                        tr('bulk_notification'),
-                        style: LocalFonts.poppins(fontWeight: FontWeight.w600),
-                      ),
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                runSpacing: 8,
+                children: [
+                  FilterChip(
+                    selected: _showProOnly,
+                    avatar: const Icon(Icons.workspace_premium, size: 18),
+                    label: Text(tr('show_pro_members')),
+                    onSelected: (selected) {
+                      setState(() => _showProOnly = selected);
+                    },
+                  ),
+                  FilledButton.icon(
+                    onPressed: () =>
+                        _showAdminBroadcastDialog(sendToAll: true),
+                    icon: const Icon(Icons.campaign),
+                    label: Text(
+                      tr('bulk_notification'),
+                      style: LocalFonts.poppins(fontWeight: FontWeight.w600),
                     ),
-                    FilledButton.icon(
-                      onPressed: _isRepairingAnonymousUsers
-                          ? null
-                          : _repairAnonymousUsers,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
-                      ),
-                      icon: _isRepairingAnonymousUsers
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.auto_fix_high),
-                      label: Text(
-                        tr('repair_anonymous_users'),
-                        style: LocalFonts.poppins(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ];
-
-                  if (constraints.maxWidth < 430) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        buttons[0],
-                        const SizedBox(height: 8),
-                        buttons[1],
-                      ],
-                    );
-                  }
-
-                  return Row(
-                    children: [
-                      Expanded(child: buttons[0]),
-                      const SizedBox(width: 8),
-                      Expanded(child: buttons[1]),
-                    ],
-                  );
-                },
+                  ),
+                ],
               ),
             ),
             Expanded(
