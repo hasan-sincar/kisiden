@@ -509,16 +509,16 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     );
   }
 
-  void _answerDialog(
+  Future<void> _answerDialog(
     String questionId,
     String questionText,
     String askerId,
     String sellerId,
-  ) {
+  ) async {
     final TextEditingController answerController = TextEditingController();
-    showDialog(
+    await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(
           tr('reply'),
           style: LocalFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
@@ -547,7 +547,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: Text(tr('cancel')),
           ),
           ElevatedButton(
@@ -564,9 +564,10 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                   askerId,
                   sellerId,
                 );
-                if (submitted && context.mounted) {
+                if (submitted && dialogContext.mounted) {
+                  FocusScope.of(dialogContext).unfocus();
                   answerController.clear();
-                  Navigator.pop(context);
+                  Navigator.pop(dialogContext);
                 }
               }
             },
@@ -577,7 +578,8 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           ),
         ],
       ),
-    ).whenComplete(answerController.dispose);
+    );
+    answerController.dispose();
   }
 
   String _maskName(String fullName) {
