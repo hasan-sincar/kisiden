@@ -3353,6 +3353,7 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _showProOnly = false;
+  bool _showSearchField = false;
 
   String _resolveUserName(Map<String, dynamic> data) {
     final raw = (data['name'] ?? '').toString().trim();
@@ -4365,81 +4366,73 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
         return Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.blue[50],
-                    child: const Icon(Icons.people, color: Colors.blue),
-                  ),
-                  title: Text(
-                    tr('total_member_count'),
-                    style: LocalFonts.poppins(fontWeight: FontWeight.w600),
-                  ),
-                  trailing: Text(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.people, color: Colors.blue),
+                  const SizedBox(width: 6),
+                  Text(
                     '${memberDocs.length}',
                     style: LocalFonts.poppins(
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: Colors.blue[800],
                     ),
                   ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (value) => setState(() => _searchQuery = value),
-                decoration: InputDecoration(
-                  hintText: tr('member_search_hint'),
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
-                          },
-                        ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-              child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                runSpacing: 8,
-                children: [
-                  FilterChip(
-                    selected: _showProOnly,
-                    avatar: const Icon(Icons.workspace_premium, size: 18),
-                    label: Text(tr('show_pro_members')),
-                    onSelected: (selected) {
-                      setState(() => _showProOnly = selected);
+                  const Spacer(),
+                  IconButton(
+                    tooltip: tr('member_search_hint'),
+                    onPressed: () {
+                      setState(() => _showSearchField = !_showSearchField);
+                      if (!_showSearchField) {
+                        _searchController.clear();
+                        _searchQuery = '';
+                      }
                     },
+                    icon: Icon(_showSearchField ? Icons.close : Icons.search),
                   ),
-                  FilledButton.icon(
-                    onPressed: () =>
-                        _showAdminBroadcastDialog(sendToAll: true),
+                  IconButton(
+                    tooltip: tr('show_pro_members'),
+                    onPressed: () {
+                      setState(() => _showProOnly = !_showProOnly);
+                    },
+                    isSelected: _showProOnly,
+                    color: _showProOnly ? Colors.amber[800] : null,
+                    icon: const Icon(Icons.workspace_premium),
+                  ),
+                  IconButton(
+                    tooltip: tr('bulk_notification'),
+                    onPressed: () => _showAdminBroadcastDialog(sendToAll: true),
                     icon: const Icon(Icons.campaign),
-                    label: Text(
-                      tr('bulk_notification'),
-                      style: LocalFonts.poppins(fontWeight: FontWeight.w600),
-                    ),
                   ),
                 ],
               ),
             ),
+            if (_showSearchField)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  decoration: InputDecoration(
+                    hintText: tr('member_search_hint'),
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
             Expanded(
               child: filteredDocs.isEmpty
                   ? Center(
