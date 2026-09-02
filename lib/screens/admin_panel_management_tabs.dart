@@ -143,6 +143,28 @@ class _AdminPurchasesTab extends StatelessWidget {
     return DateFormat('dd.MM.yyyy HH:mm').format(date);
   }
 
+  double _parsePurchasePrice(dynamic rawPrice) {
+    final value = rawPrice?.toString().trim() ?? '';
+    if (value.isEmpty) return 0;
+
+    final normalized = value.replaceAll(RegExp(r'[^0-9,.-]'), '');
+    if (normalized.contains(',') && normalized.contains('.')) {
+      final lastComma = normalized.lastIndexOf(',');
+      final lastDot = normalized.lastIndexOf('.');
+      if (lastComma > lastDot) {
+        return double.tryParse(
+              normalized.replaceAll('.', '').replaceFirst(',', '.'),
+            ) ??
+            0;
+      }
+      return double.tryParse(normalized.replaceAll(',', '')) ?? 0;
+    }
+    if (normalized.contains(',')) {
+      return double.tryParse(normalized.replaceFirst(',', '.')) ?? 0;
+    }
+    return double.tryParse(normalized) ?? 0;
+  }
+
   String _resolvePackageName(String pId, [String type = '']) {
     if (pId == 'pro_3_ay') {
       return tr('pro_3_months');
@@ -363,11 +385,7 @@ class _AdminPurchasesTab extends StatelessWidget {
           var data = doc.data() as Map<String, dynamic>;
           final date = _purchaseDate(data);
           if (date != null) {
-            double price =
-                double.tryParse(
-                  data['price'].toString().replaceAll(RegExp(r'[^0-9.]'), ''),
-                ) ??
-                0;
+            final price = _parsePurchasePrice(data['price']);
             if (date.isAfter(startOfToday) ||
                 date.isAtSameMomentAs(startOfToday)) {
               dailyTotal += price;
