@@ -36,8 +36,9 @@ class _PhoneSetupScreenState extends State<PhoneSetupScreen> {
     if (user != null) {
       if (user.email != null) _emailController.text = user.email!;
       if (user.phoneNumber != null) _phoneController.text = user.phoneNumber!;
-      if (user.displayName != null && user.displayName != 'İsimsiz')
+      if (user.displayName != null && user.displayName != 'İsimsiz') {
         _nameController.text = user.displayName!;
+      }
     }
   }
 
@@ -114,6 +115,51 @@ class _PhoneSetupScreenState extends State<PhoneSetupScreen> {
       return;
     }
 
+    final normalizedPhone = normalizePhoneNumber(phoneNumber);
+    if (normalizedPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('invalid_phone_format_with_country_code'))),
+      );
+      return;
+    }
+
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final hasPhoneProvider =
+        currentUser?.providerData.any((p) => p.providerId == 'phone') ?? false;
+    final currentPhone = normalizePhoneNumber(currentUser?.phoneNumber ?? '');
+
+    // Phone-auth users are already verified. Do not start a second verification
+    // flow, which can reopen iOS reCAPTCHA and recreate this screen.
+    if (hasPhoneProvider && currentPhone == normalizedPhone) {
+      setState(() => _isLoading = true);
+      try {
+        await _dbService.updatePhoneAndName(
+          currentUser!.uid,
+          normalizedPhone,
+          name,
+          email,
+        );
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
+        );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                tr('operation_failed_with_reason').replaceFirst('%s', '$e'),
+              ),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+      return;
+    }
+
     if (_lastOtpRequestAt != null) {
       final elapsed = DateTime.now().difference(_lastOtpRequestAt!);
       if (elapsed.inSeconds < 60) {
@@ -133,7 +179,6 @@ class _PhoneSetupScreenState extends State<PhoneSetupScreen> {
     _lastOtpRequestAt = DateTime.now();
 
     try {
-      final normalizedPhone = normalizePhoneNumber(phoneNumber);
       final isAlreadyRegistered = await _dbService.isPhoneNumberRegistered(
         normalizedPhone,
       );

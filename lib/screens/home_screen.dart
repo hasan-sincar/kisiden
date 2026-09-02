@@ -42,6 +42,31 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
+  Widget _distanceBadge(String distanceText) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.location_on, color: AppColors.primary, size: 11),
+          const SizedBox(width: 3),
+          Text(
+            distanceText,
+            style: LocalFonts.poppins(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _currentParentId = "";
   String _currentParentName = "";
   String _filterCategoryName = "";
@@ -1539,6 +1564,25 @@ class _HomeScreenState extends State<HomeScreen>
                                                 }
                                                 if (allImages.isEmpty)
                                                   allImages.add('');
+                                                String distanceText = '';
+                                                if (_distance < 30.0 &&
+                                                    _userPosition != null &&
+                                                    data['lat'] is num &&
+                                                    data['lng'] is num) {
+                                                  final distance =
+                                                      Geolocator.distanceBetween(
+                                                        _userPosition!.latitude,
+                                                        _userPosition!
+                                                            .longitude,
+                                                        (data['lat'] as num)
+                                                            .toDouble(),
+                                                        (data['lng'] as num)
+                                                            .toDouble(),
+                                                      ) /
+                                                      1000;
+                                                  distanceText =
+                                                      '${distance.toStringAsFixed(1)} km';
+                                                }
                                                 bool isCatShowcased =
                                                     data['categoryShowcaseUntil'] !=
                                                         null &&
@@ -1668,6 +1712,17 @@ class _HomeScreenState extends State<HomeScreen>
                                                                                     ),
                                                                               ),
                                                                         ),
+                                                                        if (distanceText
+                                                                            .isNotEmpty)
+                                                                          Positioned(
+                                                                            top:
+                                                                                6,
+                                                                            left:
+                                                                                6,
+                                                                            child: _distanceBadge(
+                                                                              distanceText,
+                                                                            ),
+                                                                          ),
                                                                       ],
                                                                     ),
                                                             ),
@@ -1864,6 +1919,25 @@ class _HomeScreenState extends State<HomeScreen>
                                                 }
                                                 if (allImages.isEmpty)
                                                   allImages.add('');
+                                                String gridDistanceText = '';
+                                                if (_distance < 30.0 &&
+                                                    _userPosition != null &&
+                                                    data['lat'] is num &&
+                                                    data['lng'] is num) {
+                                                  final distance =
+                                                      Geolocator.distanceBetween(
+                                                        _userPosition!.latitude,
+                                                        _userPosition!
+                                                            .longitude,
+                                                        (data['lat'] as num)
+                                                            .toDouble(),
+                                                        (data['lng'] as num)
+                                                            .toDouble(),
+                                                      ) /
+                                                      1000;
+                                                  gridDistanceText =
+                                                      '${distance.toStringAsFixed(1)} km';
+                                                }
                                                 bool isCatShowcased =
                                                     data['categoryShowcaseUntil'] !=
                                                         null &&
@@ -1873,12 +1947,15 @@ class _HomeScreenState extends State<HomeScreen>
                                                         .isAfter(
                                                           DateTime.now(),
                                                         );
-                                                final proUntil = data['proUntil'];
+                                                final proUntil =
+                                                    data['proUntil'];
                                                 final bool isPro =
                                                     proUntil is Timestamp &&
-                                                    proUntil
-                                                        .toDate()
-                                                        .isAfter(DateTime.now()) ||
+                                                        proUntil
+                                                            .toDate()
+                                                            .isAfter(
+                                                              DateTime.now(),
+                                                            ) ||
                                                     (proUntil == null &&
                                                         data['isPro'] == true);
                                                 return InkWell(
@@ -2072,6 +2149,20 @@ class _HomeScreenState extends State<HomeScreen>
                                                                             .w500,
                                                                   ),
                                                                 ),
+                                                                if (gridDistanceText
+                                                                    .isNotEmpty)
+                                                                  Text(
+                                                                    gridDistanceText,
+                                                                    style: LocalFonts.poppins(
+                                                                      fontSize:
+                                                                          10,
+                                                                      color: AppColors
+                                                                          .primary,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w600,
+                                                                    ),
+                                                                  ),
                                                                 const SizedBox(
                                                                   height: 4,
                                                                 ),

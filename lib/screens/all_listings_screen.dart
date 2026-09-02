@@ -29,6 +29,31 @@ class AllListingsScreen extends StatefulWidget {
 }
 
 class _AllListingsScreenState extends State<AllListingsScreen> {
+  Widget _distanceBadge(String distanceText) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.location_on, color: Colors.blue[800], size: 11),
+          const SizedBox(width: 3),
+          Text(
+            distanceText,
+            style: LocalFonts.poppins(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Colors.blue[800],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _filterCategoryName = "Tümü";
   String _currentParentId = "";
   String _currentParentName = "Tümü";
@@ -902,6 +927,22 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                   }
                                 }
                                 if (allImages.isEmpty) allImages.add('');
+                                String distanceText = '';
+                                if (_distance < 30.0 &&
+                                    _userPosition != null &&
+                                    data['lat'] is num &&
+                                    data['lng'] is num) {
+                                  final distance =
+                                      Geolocator.distanceBetween(
+                                        _userPosition!.latitude,
+                                        _userPosition!.longitude,
+                                        (data['lat'] as num).toDouble(),
+                                        (data['lng'] as num).toDouble(),
+                                      ) /
+                                      1000;
+                                  distanceText =
+                                      '${distance.toStringAsFixed(1)} km';
+                                }
 
                                 return InkWell(
                                   onTap: () => Navigator.push(
@@ -946,10 +987,24 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                       color: Colors.grey,
                                                     ),
                                                   )
-                                                : Image.network(
-                                                    allImages.first,
-                                                    width: double.infinity,
-                                                    fit: BoxFit.cover,
+                                                : Stack(
+                                                    fit: StackFit.expand,
+                                                    children: [
+                                                      Image.network(
+                                                        allImages.first,
+                                                        width: double.infinity,
+                                                        fit: BoxFit.cover,
+                                                      ),
+                                                      if (distanceText
+                                                          .isNotEmpty)
+                                                        Positioned(
+                                                          top: 6,
+                                                          left: 6,
+                                                          child: _distanceBadge(
+                                                            distanceText,
+                                                          ),
+                                                        ),
+                                                    ],
                                                   ),
                                           ),
                                         ),
@@ -991,6 +1046,22 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                   maxLines: 1,
                                                   overflow:
                                                       TextOverflow.ellipsis,
+                                                ),
+                                              if (distanceText.isNotEmpty)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 2,
+                                                      ),
+                                                  child: Text(
+                                                    distanceText,
+                                                    style: LocalFonts.poppins(
+                                                      fontSize: 10,
+                                                      color: Colors.blue[700],
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
                                                 ),
                                             ],
                                           ),
@@ -1041,7 +1112,6 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                     data['isUrgent'] == true &&
                                     ts != null &&
                                     ts.toDate().isAfter(DateTime.now());
-
                                 return InkWell(
                                   onTap: () => Navigator.push(
                                     context,
