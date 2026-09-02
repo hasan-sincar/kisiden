@@ -256,7 +256,8 @@ class DatabaseService {
         if (profileName.isNotEmpty) {
           sellerName = profileName;
         }
-        extraRightsBalance = (uData['adminExtraListingLimit'] as num?)?.toInt() ?? 0;
+        extraRightsBalance =
+            (uData['adminExtraListingLimit'] as num?)?.toInt() ?? 0;
       }
       String listingNo = (Random().nextInt(90000000) + 10000000).toString();
       final now = DateTime.now();
@@ -271,16 +272,21 @@ class DatabaseService {
           final freshUserSnap = await transaction.get(userRef);
           if (!freshUserSnap.exists) return;
           final freshUser = freshUserSnap.data() as Map<String, dynamic>? ?? {};
-          final freshExtraRights = (freshUser['adminExtraListingLimit'] as num?)?.toInt() ?? 0;
+          final freshExtraRights =
+              (freshUser['adminExtraListingLimit'] as num?)?.toInt() ?? 0;
           if (freshExtraRights <= 0) return;
 
           final proUntil = freshUser['proUntil'];
           final hasActivePro =
-              proUntil is Timestamp && proUntil.toDate().isAfter(DateTime.now());
-          final proLimit = (freshUser['proListingLimit'] as num?)?.toInt() ?? 10;
+              proUntil is Timestamp &&
+              proUntil.toDate().isAfter(DateTime.now());
+          final proLimit =
+              (freshUser['proListingLimit'] as num?)?.toInt() ?? 10;
           final baseLimit = hasActivePro ? max(10, proLimit) : 10;
-          final currentAdminLimit = (freshUser['adminListingLimit'] as num?)?.toInt();
-          final currentTotalLimit = currentAdminLimit ?? (baseLimit + freshExtraRights);
+          final currentAdminLimit = (freshUser['adminListingLimit'] as num?)
+              ?.toInt();
+          final currentTotalLimit =
+              currentAdminLimit ?? (baseLimit + freshExtraRights);
           final nextExtraBalance = freshExtraRights - 1;
           final nextTotalLimit = max(baseLimit, currentTotalLimit - 1);
 
@@ -307,6 +313,7 @@ class DatabaseService {
         'sellerName': sellerName,
         'sellerPhone': userDoc.data()?['phoneNumber'] ?? '',
         'isPro': isPro,
+        'proUntil': isPro ? uData['proUntil'] : null,
         'isDiscountedForAlarms': isDiscountedForAlarms,
         'isUrgent': isUrgent,
         'createdAt': FieldValue.serverTimestamp(),
@@ -527,16 +534,19 @@ class DatabaseService {
     if (isUrgent != null) data['isUrgent'] = isUrgent;
 
     // YENI: Vitrin alanlarını koruyun - anasayfa ve kategori vitrini süresi devam etsin
-    if (oldData.containsKey('showcaseUntil') && oldData['showcaseUntil'] != null) {
+    if (oldData.containsKey('showcaseUntil') &&
+        oldData['showcaseUntil'] != null) {
       data['showcaseUntil'] = oldData['showcaseUntil'];
     }
     if (oldData.containsKey('showcasedAt') && oldData['showcasedAt'] != null) {
       data['showcasedAt'] = oldData['showcasedAt'];
     }
-    if (oldData.containsKey('categoryShowcaseUntil') && oldData['categoryShowcaseUntil'] != null) {
+    if (oldData.containsKey('categoryShowcaseUntil') &&
+        oldData['categoryShowcaseUntil'] != null) {
       data['categoryShowcaseUntil'] = oldData['categoryShowcaseUntil'];
     }
-    if (oldData.containsKey('categoryShowcasedAt') && oldData['categoryShowcasedAt'] != null) {
+    if (oldData.containsKey('categoryShowcasedAt') &&
+        oldData['categoryShowcasedAt'] != null) {
       data['categoryShowcasedAt'] = oldData['categoryShowcasedAt'];
     }
 
@@ -685,10 +695,12 @@ class DatabaseService {
     if (data.containsKey('showcasedAt') && data['showcasedAt'] != null) {
       showcaseData['showcasedAt'] = data['showcasedAt'];
     }
-    if (data.containsKey('categoryShowcaseUntil') && data['categoryShowcaseUntil'] != null) {
+    if (data.containsKey('categoryShowcaseUntil') &&
+        data['categoryShowcaseUntil'] != null) {
       showcaseData['categoryShowcaseUntil'] = data['categoryShowcaseUntil'];
     }
-    if (data.containsKey('categoryShowcasedAt') && data['categoryShowcasedAt'] != null) {
+    if (data.containsKey('categoryShowcasedAt') &&
+        data['categoryShowcasedAt'] != null) {
       showcaseData['categoryShowcasedAt'] = data['categoryShowcasedAt'];
     }
 
@@ -706,9 +718,12 @@ class DatabaseService {
         }
 
         final userData = userSnap.data() as Map<String, dynamic>? ?? {};
-        final extraRightsBalance = (userData['adminExtraListingLimit'] as num?)?.toInt() ?? 0;
+        final extraRightsBalance =
+            (userData['adminExtraListingLimit'] as num?)?.toInt() ?? 0;
         if (extraRightsBalance <= 0) {
-          throw Exception('Bu ilanı tekrar yayınlamak için yeni ilan hakkı satın almanız gerekir.');
+          throw Exception(
+            'Bu ilanı tekrar yayınlamak için yeni ilan hakkı satın almanız gerekir.',
+          );
         }
 
         final proUntil = userData['proUntil'];
@@ -716,8 +731,10 @@ class DatabaseService {
             proUntil is Timestamp && proUntil.toDate().isAfter(DateTime.now());
         final proLimit = (userData['proListingLimit'] as num?)?.toInt() ?? 10;
         final baseLimit = hasActivePro ? max(10, proLimit) : 10;
-        final currentAdminLimit = (userData['adminListingLimit'] as num?)?.toInt();
-        final currentTotalLimit = currentAdminLimit ?? (baseLimit + extraRightsBalance);
+        final currentAdminLimit = (userData['adminListingLimit'] as num?)
+            ?.toInt();
+        final currentTotalLimit =
+            currentAdminLimit ?? (baseLimit + extraRightsBalance);
         final nextExtraBalance = extraRightsBalance - 1;
         final nextTotalLimit = max(baseLimit, currentTotalLimit - 1);
 
@@ -736,7 +753,7 @@ class DatabaseService {
           'listingRightSource': 'extra',
         };
         listingUpdate.addAll(showcaseData);
-        
+
         transaction.update(listingRef, listingUpdate);
       });
       return;
@@ -1736,7 +1753,10 @@ class DatabaseService {
         .where('sellerId', isEqualTo: uid)
         .get();
     for (var doc in listings.docs) {
-      batch.update(doc.reference, {'isPro': true});
+      batch.update(doc.reference, {
+        'isPro': true,
+        'proUntil': Timestamp.fromDate(proUntil),
+      });
     }
 
     if (packageId != null && price != null) {
@@ -1889,8 +1909,10 @@ class DatabaseService {
       }),
       ...?listings?.docs.map(
         (listing) =>
-            (WriteBatch batch) =>
-                batch.update(listing.reference, {'isPro': true}),
+            (WriteBatch batch) => batch.update(listing.reference, {
+              'isPro': true,
+              'proUntil': proUntil,
+            }),
       ),
     ];
 

@@ -1873,8 +1873,14 @@ class _HomeScreenState extends State<HomeScreen>
                                                         .isAfter(
                                                           DateTime.now(),
                                                         );
-                                                bool isPro =
-                                                    data['isPro'] ?? false;
+                                                final proUntil = data['proUntil'];
+                                                final bool isPro =
+                                                    proUntil is Timestamp &&
+                                                    proUntil
+                                                        .toDate()
+                                                        .isAfter(DateTime.now()) ||
+                                                    (proUntil == null &&
+                                                        data['isPro'] == true);
                                                 return InkWell(
                                                   onTap: () {
                                                     FocusScope.of(

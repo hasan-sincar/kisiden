@@ -599,6 +599,48 @@ exports.checkProRenewals = onSchedule({
   }
 });
 
+// Pro süresi biten kullanıcıların ilanlarındaki eski Pro işaretini temizler.
+// Ekranlar yine proUntil tarihini esas alır; bu görev yalnızca denormalize alanı
+// güncel tutar.
+exports.cleanupExpiredProListings = onSchedule({
+  schedule: "every day 01:00",
+  timeZone: "Europe/Istanbul",
+}, async () => {
+  const now = admin.firestore.Timestamp.now();
+
+  try {
+    const expiredUsers = await db.collection("users")
+      .where("proUntil", "<=", now)
+      .get();
+
+    let updatedListings = 0;
+    for (const userDoc of expiredUsers.docs) {
+      const listings = await db.collection("listings")
+        .where("sellerId", "==", userDoc.id)
+        .where("isPro", "==", true)
+        .get();
+
+      for (let start = 0; start < listings.docs.length; start += 450) {
+        const batch = db.batch();
+        const chunk = listings.docs.slice(start, start + 450);
+        chunk.forEach((listingDoc) => {
+          batch.update(listingDoc.ref, { isPro: false });
+        });
+        await batch.commit();
+        updatedListings += chunk.length;
+      }
+    }
+
+    logger.info("Süresi biten Pro ilanları temizlendi.", {
+      expiredUsers: expiredUsers.size,
+      updatedListings,
+    });
+  } catch (error) {
+    logger.error("Süresi biten Pro ilanları temizlenemedi.", error);
+    throw error;
+  }
+});
+
 async function deleteDocsByQuery(query, pageSize = 300) {
   while (true) {
     const snap = await query.limit(pageSize).get();
