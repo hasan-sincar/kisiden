@@ -252,19 +252,22 @@ class _AdminPurchasesTab extends StatelessWidget {
                   ),
                   child: Icon(icon, color: Colors.white, size: 16),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: LocalFonts.poppins(
+                      fontSize: 11,
+                      color: Colors.white.withOpacity(0.92),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
-            Text(
-              title,
-              style: LocalFonts.poppins(
-                fontSize: 11,
-                color: Colors.white.withOpacity(0.92),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 4),
             Text(
               value,
               style: LocalFonts.poppins(
