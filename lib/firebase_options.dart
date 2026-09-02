@@ -64,15 +64,15 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDPApBpQRZHkHowuBfh-fD6O8IgHMvQfJw',
-    appId: '1:610548128900:ios:c373af029eaad5a8cb76d1',
+    apiKey: 'AIzaSyAa8mE6VvRWkxAOFwf-nLZ1b3STRtnCI3M',
+    appId: '1:610548128900:ios:601a9c9b8fe51856cb76d1',
     messagingSenderId: '610548128900',
     projectId: 'kisiden-projesi',
     storageBucket: 'kisiden-projesi.firebasestorage.app',
     androidClientId:
-        '610548128900-tgkl7jlr8s5r4juqkfsp736dt277kdoa.apps.googleusercontent.com',
+        '610548128900-75bh9rk7qhioc91esv0315ie0uepb64o.apps.googleusercontent.com',
     iosClientId:
-        '610548128900-u2qp6usl106q2iq2achqh49nrbctu8fo.apps.googleusercontent.com',
-    iosBundleId: 'com.kisiden.appim',
+        '610548128900-f6b9jbpdhh9neule81cvuark997knojj.apps.googleusercontent.com',
+    iosBundleId: 'com.kisidencom.appim',
   );
 }

@@ -658,7 +658,7 @@ const Map<String, Map<String, String>> _dict = {
     'adsense_placeholder_area': 'Reklam (AdSense) Alanı',
     'no_banned_words': 'Yasaklı kelime bulunmuyor.',
     'today': 'Bugün',
-    'last_7_days': 'Son 7 Gün',
+    'last_7_days': '7 Gün',
     'this_month': 'Bu Ay',
     'package': 'Paket',
     'purchase_limit_listing': '%s İlan',

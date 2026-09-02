@@ -144,27 +144,44 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _loginWithGoogle() async {
+  Future<void> _loginWithGoogle() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
-    var user = await _authService.signInWithGoogle();
-    if (user != null && mounted) {
-      await GuestSessionService.end();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const RootScreen()),
-        (route) => false,
+    try {
+      final user = await _authService.signInWithGoogle();
+      if (user != null && mounted) {
+        await GuestSessionService.end();
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const RootScreen()),
+          (route) => false,
+        );
+      } else if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message ?? tr('generic_try_again_error'))),
       );
-    } else {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${tr('generic_try_again_error')}: $error')),
+      );
     }
   }
 
   // YENİ: Apple ile Giriş Yönlendirmesi
-  void _loginWithApple() async {
+  Future<void> _loginWithApple() async {
     setState(() => _isLoading = true);
     var user = await _authService.signInWithApple();
     if (user != null && mounted) {
       await GuestSessionService.end();
+      if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const RootScreen()),
@@ -235,14 +252,30 @@ class _LoginScreenState extends State<LoginScreen> {
       await _authService.verifyPhoneNumber(
         phoneNumber: normalized,
         verificationCompleted: (credential) async {
-          await FirebaseAuth.instance.signInWithCredential(credential);
-          await GuestSessionService.end();
-          if (!mounted) return;
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const RootScreen()),
-            (route) => false,
-          );
+          try {
+            await FirebaseAuth.instance.signInWithCredential(credential);
+            await GuestSessionService.end();
+            if (!mounted) return;
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const RootScreen()),
+              (route) => false,
+            );
+          } on FirebaseAuthException catch (error) {
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(_friendlyPhoneAuthError(error))),
+            );
+          } catch (error) {
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('${tr('generic_try_again_error')}: $error'),
+              ),
+            );
+          }
         },
         verificationFailed: (error) {
           if (!mounted) return;
