@@ -236,7 +236,7 @@ extension DatabaseServiceCommunity on DatabaseService {
     return true;
   }
 
-  Future<void> answerQuestion(
+  Future<bool> answerQuestion(
     String listingId,
     String questionId,
     String answer,
@@ -253,7 +253,7 @@ extension DatabaseServiceCommunity on DatabaseService {
           ),
         );
       }
-      return;
+      return false;
     }
     final user = _auth.currentUser!;
     await _firestore
@@ -282,14 +282,19 @@ extension DatabaseServiceCommunity on DatabaseService {
     String listingTitle = listingDoc.exists
         ? (listingDoc.data() as Map<String, dynamic>)['title'] ?? ''
         : '';
-    await sendNotification(
-      receiverId,
-      titleKey,
-      'notif_msg_new_reply',
-      messageArgs: [listingTitle, answer],
-      type: 'listing',
-      targetId: listingId,
-    );
+    try {
+      await sendNotification(
+        receiverId,
+        titleKey,
+        'notif_msg_new_reply',
+        messageArgs: [listingTitle, answer],
+        type: 'listing',
+        targetId: listingId,
+      );
+    } catch (e) {
+      print('Cevap bildirimi gönderilemedi: $e');
+    }
+    return true;
   }
 
   Future<void> markAsSoldAndGrantReviewPermission(

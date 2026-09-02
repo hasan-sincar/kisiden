@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../services/database_service.dart';
 import 'chat_screen.dart';
 import '../utils/auth_gate.dart';
+import '../utils/theme_colors.dart';
 import 'seller_profile_screen.dart';
 import 'package:flutter/foundation.dart'; // YENİ: Web platform kontrolü için
 import 'package:meta_seo/meta_seo.dart'; // YENİ: SEO Meta etiketleri için
@@ -550,16 +551,23 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
             child: Text(tr('cancel')),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
               if (answerController.text.trim().isNotEmpty) {
-                await _dbService.answerQuestion(
+                final submitted = await _dbService.answerQuestion(
                   widget.listingId,
                   questionId,
                   answerController.text.trim(),
                   askerId,
                   sellerId,
                 );
-                if (context.mounted) Navigator.pop(context);
+                if (submitted && context.mounted) {
+                  answerController.clear();
+                  Navigator.pop(context);
+                }
               }
             },
             child: Text(
@@ -569,7 +577,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           ),
         ],
       ),
-    );
+    ).whenComplete(answerController.dispose);
   }
 
   String _maskName(String fullName) {
