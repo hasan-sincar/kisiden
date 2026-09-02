@@ -515,71 +515,19 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     String askerId,
     String sellerId,
   ) async {
-    final TextEditingController answerController = TextEditingController();
     await showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          tr('reply'),
-          style: LocalFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
+      builder: (dialogContext) => _AnswerDialog(
+        questionText: questionText,
+        onSubmit: (answer) => _dbService.answerQuestion(
+          widget.listingId,
+          questionId,
+          answer,
+          askerId,
+          sellerId,
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${tr('question')}: $questionText',
-              style: LocalFonts.poppins(
-                fontWeight: FontWeight.w600,
-                color: Colors.blue[800],
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: answerController,
-              decoration: InputDecoration(
-                hintText: tr('answer_hint'),
-                border: const OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(tr('cancel')),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              if (answerController.text.trim().isNotEmpty) {
-                final submitted = await _dbService.answerQuestion(
-                  widget.listingId,
-                  questionId,
-                  answerController.text.trim(),
-                  askerId,
-                  sellerId,
-                );
-                if (submitted && dialogContext.mounted) {
-                  FocusScope.of(dialogContext).unfocus();
-                  answerController.clear();
-                  Navigator.pop(dialogContext);
-                }
-              }
-            },
-            child: Text(
-              tr('reply'),
-              style: const TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
       ),
     );
-    answerController.dispose();
   }
 
   String _maskName(String fullName) {
@@ -2280,6 +2228,97 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _AnswerDialog extends StatefulWidget {
+  final String questionText;
+  final Future<bool> Function(String answer) onSubmit;
+
+  const _AnswerDialog({required this.questionText, required this.onSubmit});
+
+  @override
+  State<_AnswerDialog> createState() => _AnswerDialogState();
+}
+
+class _AnswerDialogState extends State<_AnswerDialog> {
+  final _controller = TextEditingController();
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final answer = _controller.text.trim();
+    if (answer.isEmpty || _isSubmitting) return;
+    setState(() => _isSubmitting = true);
+    try {
+      if (await widget.onSubmit(answer) && mounted) {
+        FocusScope.of(context).unfocus();
+        _controller.clear();
+        Navigator.pop(context);
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        tr('reply'),
+        style: LocalFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${tr('question')}: ${widget.questionText}',
+            style: LocalFonts.poppins(
+              fontWeight: FontWeight.w600,
+              color: Colors.blue[800],
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            decoration: InputDecoration(
+              hintText: tr('answer_hint'),
+              border: const OutlineInputBorder(),
+            ),
+            maxLines: 3,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+          child: Text(tr('cancel')),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _isSubmitting ? null : _submit,
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(tr('reply'), style: const TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 }
