@@ -415,7 +415,7 @@ class _AdminPurchasesTab extends StatelessWidget {
                       Expanded(
                         child: _summaryCard(
                           title: tr('today'),
-                          value: '₺${dailyTotal.toStringAsFixed(0)}',
+                          value: '₺${dailyTotal.toStringAsFixed(2)}',
                           icon: Icons.today_outlined,
                           colors: [
                             const Color(0xFF1D4ED8),
@@ -423,11 +423,17 @@ class _AdminPurchasesTab extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 1,
+                        height: 58,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _summaryCard(
                           title: tr('last_7_days'),
-                          value: '₺${weeklyTotal.toStringAsFixed(0)}',
+                          value: '₺${weeklyTotal.toStringAsFixed(2)}',
                           icon: Icons.date_range_outlined,
                           colors: [
                             const Color(0xFFEA580C),
@@ -435,11 +441,17 @@ class _AdminPurchasesTab extends StatelessWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 1,
+                        height: 58,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _summaryCard(
                           title: tr('this_month'),
-                          value: '₺${monthlyTotal.toStringAsFixed(0)}',
+                          value: '₺${monthlyTotal.toStringAsFixed(2)}',
                           icon: Icons.calendar_month_outlined,
                           colors: [
                             const Color(0xFF047857),
