@@ -129,13 +129,21 @@ class _AdminProfanityTabState extends State<_AdminProfanityTab> {
 class _AdminPurchasesTab extends StatelessWidget {
   const _AdminPurchasesTab();
 
-  String _formatPurchaseDate(Timestamp? timestamp) {
-    if (timestamp == null) return '-';
-    final date = timestamp.toDate();
+  DateTime? _purchaseDate(Map<String, dynamic> data) {
+    final raw = data['timestamp'] ?? data['createdAt'] ?? data['purchaseDate'];
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is DateTime) return raw;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
+  }
+
+  String _formatPurchaseDate(Map<String, dynamic> data) {
+    final date = _purchaseDate(data);
+    if (date == null) return '-';
     return DateFormat('dd.MM.yyyy HH:mm').format(date);
   }
 
-  String _resolvePackageName(String pId) {
+  String _resolvePackageName(String pId, [String type = '']) {
     if (pId == 'pro_3_ay') {
       return tr('pro_3_months');
     } else if (pId == 'pro_6_ay') {
@@ -169,7 +177,8 @@ class _AdminPurchasesTab extends StatelessWidget {
     } else if (pId == 'rewarded_ad_1') {
       return 'Reklam Odulu (+1 Hak)';
     }
-    return pId;
+    if (pId == 'admin_manual' && type.isNotEmpty) return type;
+    return pId.isEmpty ? (type.isEmpty ? 'Satın alma' : type) : pId;
   }
 
   String _resolveLimitText(Map<String, dynamic> data) {
@@ -319,15 +328,22 @@ class _AdminPurchasesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('purchases')
-          .orderBy('timestamp', descending: true)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('purchases').snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        var docs = snapshot.data!.docs;
+        final docs = [...snapshot.data!.docs]
+          ..sort((a, b) {
+            final aData = a.data() as Map<String, dynamic>;
+            final bData = b.data() as Map<String, dynamic>;
+            final aDate = _purchaseDate(aData);
+            final bDate = _purchaseDate(bData);
+            if (aDate == null && bDate == null) return 0;
+            if (aDate == null) return 1;
+            if (bDate == null) return -1;
+            return bDate.compareTo(aDate);
+          });
 
         double dailyTotal = 0;
         double weeklyTotal = 0;
@@ -345,9 +361,7 @@ class _AdminPurchasesTab extends StatelessWidget {
 
         for (var doc in docs) {
           var data = doc.data() as Map<String, dynamic>;
-          DateTime? date = data['timestamp'] != null
-              ? (data['timestamp'] as Timestamp).toDate()
-              : null;
+          final date = _purchaseDate(data);
           if (date != null) {
             double price =
                 double.tryParse(
@@ -367,7 +381,8 @@ class _AdminPurchasesTab extends StatelessWidget {
               monthlyTotal += price;
             }
 
-            final packageId = (data['packageId'] ?? '').toString();
+            final packageId = (data['packageId'] ?? data['productId'] ?? '')
+                .toString();
             final addedLimit =
                 (data['addedListingLimit'] as num?)?.toInt() ?? 0;
             if (packageId.startsWith('ilan_hakki_')) {
@@ -503,15 +518,15 @@ class _AdminPurchasesTab extends StatelessWidget {
                     itemCount: docs.length,
                     itemBuilder: (context, index) {
                       final data = docs[index].data() as Map<String, dynamic>;
-                      final pId = (data['packageId'] ?? '').toString();
-                      final packageName = _resolvePackageName(pId);
+                      final pId = (data['packageId'] ?? data['productId'] ?? '')
+                          .toString();
+                      final type = (data['type'] ?? '').toString();
+                      final packageName = _resolvePackageName(pId, type);
                       final limitText = _resolveLimitText(data);
                       final userName = (data['userName'] ?? '').toString();
                       final userEmail = (data['userEmail'] ?? '').toString();
                       final price = (data['price'] ?? '').toString();
-                      final dateStr = _formatPurchaseDate(
-                        data['timestamp'] as Timestamp?,
-                      );
+                      final dateStr = _formatPurchaseDate(data);
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
