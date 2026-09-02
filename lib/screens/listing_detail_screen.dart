@@ -2334,7 +2334,7 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
     final isZoomed = controller.value.getMaxScaleOnAxis() > 1.01;
     controller.value = isZoomed
         ? Matrix4.identity()
-        : (Matrix4.identity()..scale(2.5));
+        : (Matrix4.identity()..scaleByDouble(2.5, 2.5, 2.5, 1));
   }
 
   @override
