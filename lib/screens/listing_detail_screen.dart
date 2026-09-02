@@ -2282,14 +2282,61 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 }
 
-class FullScreenGallery extends StatelessWidget {
+class FullScreenGallery extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
+
   const FullScreenGallery({
     super.key,
     required this.images,
     required this.initialIndex,
   });
+
+  @override
+  State<FullScreenGallery> createState() => _FullScreenGalleryState();
+}
+
+class _FullScreenGalleryState extends State<FullScreenGallery> {
+  late final PageController _pageController;
+  late final List<TransformationController> _transformationControllers;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+    _transformationControllers = List.generate(
+      widget.images.length,
+      (_) => TransformationController(),
+    );
+    for (final controller in _transformationControllers) {
+      controller.addListener(_onTransformationChanged);
+    }
+  }
+
+  void _onTransformationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    for (final controller in _transformationControllers) {
+      controller.removeListener(_onTransformationChanged);
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _toggleZoom(int index) {
+    final controller = _transformationControllers[index];
+    final isZoomed = controller.value.getMaxScaleOnAxis() > 1.01;
+    controller.value = isZoomed
+        ? Matrix4.identity()
+        : (Matrix4.identity()..scale(2.5));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2300,25 +2347,50 @@ class FullScreenGallery extends StatelessWidget {
         elevation: 0,
       ),
       body: PageView.builder(
-        itemCount: images.length,
-        controller: PageController(initialPage: initialIndex),
+        itemCount: widget.images.length,
+        controller: _pageController,
+        onPageChanged: (index) => setState(() => _currentIndex = index),
         itemBuilder: (context, index) {
-          return InteractiveViewer(
-            child: Center(
-              child: Image.network(
-                images[index],
-                fit: BoxFit.contain,
-                width: double.infinity,
-                errorBuilder: (c, e, s) => const Icon(
-                  Icons.image_not_supported,
-                  color: Colors.white,
-                  size: 50,
+          final transformationController = _transformationControllers[index];
+          return GestureDetector(
+            onDoubleTap: () => _toggleZoom(index),
+            child: InteractiveViewer(
+              transformationController: transformationController,
+              minScale: 1,
+              maxScale: 4,
+              panEnabled:
+                  transformationController.value.getMaxScaleOnAxis() > 1.01,
+              boundaryMargin: const EdgeInsets.all(80),
+              clipBehavior: Clip.none,
+              child: Center(
+                child: Image.network(
+                  widget.images[index],
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                  errorBuilder: (c, e, s) => const Icon(
+                    Icons.image_not_supported,
+                    color: Colors.white,
+                    size: 50,
+                  ),
                 ),
               ),
             ),
           );
         },
       ),
+      bottomNavigationBar: widget.images.length > 1
+          ? SafeArea(
+              child: Container(
+                color: Colors.black,
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '${_currentIndex + 1} / ${widget.images.length}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }
