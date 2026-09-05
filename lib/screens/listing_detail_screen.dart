@@ -174,10 +174,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     return double.tryParse(value?.toString() ?? '');
   }
 
-  double? _listingCoordinate(
-    Map<String, dynamic> listingData,
-    String key,
-  ) {
+  double? _listingCoordinate(Map<String, dynamic> listingData, String key) {
     final direct = listingData[key];
     if (direct != null) {
       if (direct is GeoPoint) {
@@ -262,7 +259,6 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text(tr('cannot_open_link'))));
       }
-
     }
   }
 
@@ -280,14 +276,14 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     try {
       await _dbService.sendOffer(sellerId, listingTitle, listingId, amount);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('offer_sent'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('offer_sent'))));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${tr('error')}$e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${tr('error')}$e')));
     }
   }
 
@@ -470,6 +466,51 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                 : <String, dynamic>{};
             final before = value['before']?.toString() ?? '-';
             final after = value['after']?.toString() ?? '-';
+            final isPhotoChange = entry.key.toLowerCase().contains('fotoğraf');
+
+            Widget changeValue(String label, String imageUrl, Color color) {
+              if (!isPhotoChange || imageUrl.isEmpty || imageUrl == '-') {
+                return Text(
+                  '$label: $imageUrl',
+                  style: LocalFonts.poppins(fontSize: 11, color: color),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.network(
+                      imageUrl,
+                      width: 54,
+                      height: 54,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 54,
+                        height: 54,
+                        color: Colors.grey.shade200,
+                        child: const Icon(
+                          Icons.broken_image_outlined,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: LocalFonts.poppins(fontSize: 11, color: color),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              );
+            }
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Column(
@@ -484,25 +525,9 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    'Önce: $before',
-                    style: LocalFonts.poppins(
-                      fontSize: 11,
-                      color: Colors.grey[700],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    'Sonra: $after',
-                    style: LocalFonts.poppins(
-                      fontSize: 11,
-                      color: Colors.deepOrange[900],
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  changeValue('Önce: $before', before, Colors.grey[700]!),
+                  const SizedBox(height: 4),
+                  changeValue('Sonra: $after', after, Colors.deepOrange[900]!),
                 ],
               ),
             );
@@ -2053,7 +2078,9 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                                                           data['district'] !=
                                                               null)
                                                         Text(
-                                                          _listingLocationText(data),
+                                                          _listingLocationText(
+                                                            data,
+                                                          ),
                                                           style:
                                                               LocalFonts.poppins(
                                                                 fontSize: 10,
@@ -2233,7 +2260,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                                         sellerId: sellerId,
                                         listingTitle:
                                             listingData['title']?.toString() ??
-                                                '',
+                                            '',
                                         listingId: widget.listingId,
                                         listingPrice: price,
                                       );
@@ -2469,9 +2496,7 @@ class _OfferAmountDialogState extends State<_OfferAmountDialog> {
   }
 
   void _submit() {
-    final value = double.tryParse(
-      _controller.text.trim().replaceAll(',', '.'),
-    );
+    final value = double.tryParse(_controller.text.trim().replaceAll(',', '.'));
     if (value == null || value <= 0) return;
     Navigator.of(context).pop(value);
   }
@@ -2502,10 +2527,7 @@ class _OfferAmountDialogState extends State<_OfferAmountDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(tr('cancel')),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text(tr('send_offer')),
-        ),
+        FilledButton(onPressed: _submit, child: Text(tr('send_offer'))),
       ],
     );
   }

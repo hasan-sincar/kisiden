@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:appim/utils/local_fonts.dart';
 import '../services/database_service.dart';
+import '../utils/turkey_locations.dart';
 import '../utils/translations.dart';
+import '../utils/theme_colors.dart';
+import 'all_listings_screen.dart';
 import 'listing_detail_screen.dart';
 
 class UrgentListingsScreen extends StatelessWidget {
@@ -25,11 +29,15 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
   Map<String, String> _categoryNameMap = {};
   String _categoryMapLang = '';
   String _sortBy = 'date_desc';
-  bool _isGridView = false;
   String _categoryFilter = '';
   String _categoryDisplay = '';
   double? _minPrice;
   double? _maxPrice;
+  String? _cityFilter;
+  String? _districtFilter;
+  String _neighborhoodFilter = '';
+  String _searchFilter = '';
+  Timer? _expiryRefreshTimer;
 
   @override
   void didChangeDependencies() {
@@ -39,6 +47,88 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
       _categoryMapLang = lang;
       _loadCategoryNameMap();
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _expiryRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _expiryRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  String _normalizeText(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll('ı', 'i')
+        .replaceAll('İ', 'i')
+        .replaceAll('ş', 's')
+        .replaceAll('Ş', 's')
+        .replaceAll('ğ', 'g')
+        .replaceAll('Ğ', 'g')
+        .replaceAll('ü', 'u')
+        .replaceAll('Ü', 'u')
+        .replaceAll('ö', 'o')
+        .replaceAll('Ö', 'o')
+        .replaceAll('ç', 'c')
+        .replaceAll('Ç', 'c')
+        .trim();
+  }
+
+  bool _matchesFilters(Map<String, dynamic> data) {
+    final search = _normalizeText(_searchFilter);
+    if (search.isNotEmpty) {
+      final haystack = _normalizeText(
+        '${data['title'] ?? ''} ${data['description'] ?? ''} '
+        '${data['city'] ?? ''} ${data['district'] ?? ''} '
+        '${data['categoryPath'] ?? ''} ${data['category'] ?? ''}',
+      );
+      if (!haystack.contains(search)) return false;
+    }
+
+    final category = _normalizeText(
+      '${data['categoryPath'] ?? ''} ${data['category'] ?? ''}',
+    );
+    if (_categoryFilter.isNotEmpty &&
+        !category.contains(_normalizeText(_categoryFilter))) {
+      return false;
+    }
+
+    if (_cityFilter != null &&
+        _normalizeText(data['city']?.toString() ?? '') !=
+            _normalizeText(_cityFilter!)) {
+      return false;
+    }
+    if (_districtFilter != null &&
+        _normalizeText(data['district']?.toString() ?? '') !=
+            _normalizeText(_districtFilter!)) {
+      return false;
+    }
+    if (_neighborhoodFilter.trim().isNotEmpty) {
+      final features = data['features'];
+      final neighborhood = features is Map
+          ? (features['Mahalle'] ??
+                        features['mahalle'] ??
+                        features['neighborhood'])
+                    ?.toString() ??
+                ''
+          : '';
+      if (!_normalizeText(
+        neighborhood,
+      ).contains(_normalizeText(_neighborhoodFilter))) {
+        return false;
+      }
+    }
+
+    final price = (data['price'] as num?)?.toDouble() ?? 0;
+    return (_minPrice == null || price >= _minPrice!) &&
+        (_maxPrice == null || price <= _maxPrice!);
   }
 
   Future<void> _loadCategoryNameMap() async {
@@ -196,8 +286,10 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
                               if (children.docs.isEmpty) {
                                 setState(() {
                                   _categoryFilter = rawName;
-                                  _categoryDisplay =
-                                      [...displayPath, name].join(' > ');
+                                  _categoryDisplay = [
+                                    ...displayPath,
+                                    name,
+                                  ].join(' > ');
                                 });
                                 if (context.mounted) {
                                   Navigator.pop(sheetContext);
@@ -223,7 +315,14 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
     );
   }
 
+  // Kept for compatibility with existing filter state while the filter action
+  // is intentionally hidden from the urgent listings toolbar.
+  // ignore: unused_element
   void _showUrgentControls() {
+    final searchController = TextEditingController(text: _searchFilter);
+    final neighborhoodController = TextEditingController(
+      text: _neighborhoodFilter,
+    );
     final minController = TextEditingController(
       text: _minPrice?.toStringAsFixed(0) ?? '',
     );
@@ -233,93 +332,267 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            20,
-            20,
-            MediaQuery.viewInsetsOf(context).bottom + 20,
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              24,
+              24,
+              MediaQuery.viewInsetsOf(context).bottom + 110,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        tr('filter'),
+                        style: LocalFonts.poppins(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(sheetContext),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: searchController,
+                    decoration: InputDecoration(
+                      labelText: tr('search_hint'),
+                      prefixIcon: const Icon(Icons.search),
+                    ),
+                    onChanged: (value) =>
+                        setSheetState(() => _searchFilter = value),
+                  ),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.category_outlined),
+                    title: Text(
+                      _categoryDisplay.isEmpty
+                          ? tr('select_category')
+                          : _categoryDisplay,
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: _showCategoryPicker,
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: _cityFilter,
+                          decoration: InputDecoration(labelText: tr('city')),
+                          items: [
+                            DropdownMenuItem(
+                              value: null,
+                              child: Text(tr('all')),
+                            ),
+                            ...turkeyLocations.keys.map(
+                              (city) => DropdownMenuItem(
+                                value: city,
+                                child: Text(
+                                  city,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setSheetState(() {
+                              _cityFilter = value;
+                              _districtFilter = null;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: _districtFilter,
+                          decoration: InputDecoration(
+                            labelText: tr('district'),
+                          ),
+                          items: [
+                            DropdownMenuItem(
+                              value: null,
+                              child: Text(tr('all')),
+                            ),
+                            if (_cityFilter != null)
+                              ...turkeyLocations[_cityFilter]!.map(
+                                (district) => DropdownMenuItem(
+                                  value: district,
+                                  child: Text(
+                                    district,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                          ],
+                          onChanged: _cityFilter == null
+                              ? null
+                              : (value) => setSheetState(
+                                  () => _districtFilter = value,
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  TextField(
+                    decoration: InputDecoration(
+                      labelText: tr('neighborhood_optional'),
+                      prefixIcon: const Icon(Icons.location_on_outlined),
+                    ),
+                    controller: neighborhoodController,
+                    onChanged: (value) =>
+                        setSheetState(() => _neighborhoodFilter = value),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: minController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: tr('min_price'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: maxController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: tr('max_price'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _searchFilter = searchController.text.trim();
+                        _minPrice = double.tryParse(minController.text);
+                        _maxPrice = double.tryParse(maxController.text);
+                        _neighborhoodFilter = neighborhoodController.text
+                            .trim();
+                      });
+                      Navigator.pop(sheetContext);
+                    },
+                    child: Text(tr('apply_filter')),
+                  ),
+                ],
+              ),
+            ),
           ),
-          child: Wrap(
-            runSpacing: 12,
+        ),
+      ),
+    );
+  }
+
+  void _showUrgentSortModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                tr('filter'),
+                tr('sort_criteria'),
                 style: LocalFonts.poppins(
-                  fontSize: 19,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.category_outlined),
-                title: Text(
-                  _categoryDisplay.isEmpty
-                      ? tr('select_category')
-                      : _categoryDisplay,
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _showCategoryPicker,
+              const SizedBox(height: 16),
+              _sortOption(
+                sheetContext,
+                'date_desc',
+                Icons.access_time,
+                tr('newest_listings'),
               ),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: minController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(labelText: tr('min_price')),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: maxController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(labelText: tr('max_price')),
-                    ),
-                  ),
-                ],
+              _sortOption(
+                sheetContext,
+                'date_asc',
+                Icons.history,
+                tr('oldest_listings'),
               ),
-              DropdownButtonFormField<String>(
-                initialValue: _sortBy,
-                decoration: InputDecoration(labelText: tr('sort_criteria')),
-                items: [
-                  DropdownMenuItem(
-                    value: 'date_desc',
-                    child: Text(tr('newest_listings')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'expiry_asc',
-                    child: Text('Süresi en az kalanlar'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'price_asc',
-                    child: Text(tr('price_low_to_high')),
-                  ),
-                  DropdownMenuItem(
-                    value: 'price_desc',
-                    child: Text(tr('price_high_to_low')),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value != null) setSheetState(() => _sortBy = value);
-                },
+              _sortOption(
+                sheetContext,
+                'expiry_asc',
+                Icons.timer_outlined,
+                'Süresi en az kalanlar',
               ),
-              FilledButton(
-                onPressed: () {
-                  setState(() {
-                    _minPrice = double.tryParse(minController.text);
-                    _maxPrice = double.tryParse(maxController.text);
-                  });
-                  Navigator.pop(sheetContext);
-                },
-                child: Text(tr('apply_filter')),
+              _sortOption(
+                sheetContext,
+                'price_asc',
+                Icons.arrow_upward,
+                tr('price_low_to_high'),
+              ),
+              _sortOption(
+                sheetContext,
+                'price_desc',
+                Icons.arrow_downward,
+                tr('price_high_to_low'),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _sortOption(
+    BuildContext sheetContext,
+    String value,
+    IconData icon,
+    String label,
+  ) {
+    final selected = _sortBy == value;
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(
+        label,
+        style: LocalFonts.poppins(
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      trailing: selected
+          ? const Icon(Icons.check, color: Color(0xFF1565C0))
+          : null,
+      onTap: () {
+        setState(() => _sortBy = value);
+        Navigator.pop(sheetContext);
+      },
     );
   }
 
@@ -331,25 +604,13 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
         automaticallyImplyLeading: false,
         title: Text(
           tr('urgent_listings_title'),
-          style: LocalFonts.poppins(
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
+          style: LocalFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
           IconButton(
-            tooltip: tr('filter'),
-            icon: const Icon(Icons.tune_rounded),
-            onPressed: _showUrgentControls,
-          ),
-          IconButton(
-            tooltip: _isGridView ? tr('list_view') : tr('grid_view'),
-            icon: Icon(
-              _isGridView
-                  ? Icons.view_list_rounded
-                  : Icons.grid_view_rounded,
-            ),
-            onPressed: () => setState(() => _isGridView = !_isGridView),
+            tooltip: tr('sort_criteria'),
+            icon: const Icon(Icons.sort_rounded, color: Colors.black87),
+            onPressed: _showUrgentSortModal,
           ),
         ],
       ),
@@ -369,14 +630,7 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
               final ts = data['urgentUntil'] as Timestamp?;
               if (data['isUrgent'] != true || ts == null) return false;
               if (!ts.toDate().isAfter(DateTime.now())) return false;
-              final price = (data['price'] as num?)?.toDouble() ?? 0;
-              final category =
-                  '${data['categoryPath'] ?? ''} ${data['category'] ?? ''}'
-                      .toLowerCase();
-              return (_categoryFilter.isEmpty ||
-                      category.contains(_categoryFilter.toLowerCase())) &&
-                  (_minPrice == null || price >= _minPrice!) &&
-                  (_maxPrice == null || price <= _maxPrice!);
+              return _matchesFilters(data);
             }).toList();
 
             if (urgentDocs.isEmpty) {
@@ -473,7 +727,7 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
             return CustomScrollView(
               slivers: [
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
                       final entry = groupedEntries[index];
@@ -488,7 +742,7 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
                         translateCategoryPath: _translateCategoryPath,
                         translateCategoryToken: _translateCategoryToken,
                         formatPrice: _formatPrice,
-                        isGridView: _isGridView,
+                        isGridView: false,
                       );
                     }, childCount: groupedEntries.length),
                   ),
@@ -500,7 +754,6 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
       ),
     );
   }
-
 }
 
 class _CategorySection extends StatelessWidget {
@@ -557,36 +810,29 @@ class _CategorySection extends StatelessWidget {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
+              TextButton(
+                style: TextButton.styleFrom(
+                  minimumSize: Size.zero,
+                  padding: EdgeInsets.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.25)),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AllListingsScreen(
+                      initialFilters: {'categoryName': topCategory},
+                      urgentOnly: true,
+                      customTitle: '$categoryName ${tr('listings_suffix')}',
+                    ),
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.inventory_2_outlined,
-                      size: 13,
-                      color: Colors.red,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      tr(
-                        'listing_count',
-                      ).replaceFirst('%s', '${listings.length}'),
-                      style: LocalFonts.poppins(
-                        color: Colors.red[800],
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  tr('see_all'),
+                  style: LocalFonts.poppins(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -609,7 +855,7 @@ class _CategorySection extends StatelessWidget {
             )
           else
             SizedBox(
-              height: 184,
+              height: 215,
               child: ListView.separated(
                 reverse: false,
                 scrollDirection: Axis.horizontal,
@@ -691,115 +937,101 @@ class _UrgentListingCard extends StatelessWidget {
       if (district.isNotEmpty) district,
       if (neighborhood.isNotEmpty) neighborhood,
     ];
-    return parts.isNotEmpty ? parts.join(' / ') : tr('no_location');
+    return parts.isNotEmpty ? parts.join(', ') : tr('no_location');
   }
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              ListingDetailScreen(data: data, listingId: listingId),
+    final image = images.isEmpty ? '' : images.first;
+    final price = priceText.replaceFirst('₺', '');
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) =>
+                ListingDetailScreen(data: data, listingId: listingId),
+          ),
         ),
-      ),
-      child: Container(
-        width: 126,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ],
-          border: Border.all(color: Colors.red.withValues(alpha: 0.12)),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: images.isEmpty
-                    ? Container(
-                        color: const Color(0xFFF2F3F7),
-                        child: const Icon(
-                          Icons.image_outlined,
-                          color: Colors.grey,
-                          size: 38,
-                        ),
-                      )
-                    : PageView.builder(
-                        itemCount: images.length,
-                        itemBuilder: (context, imgIndex) {
-                          return Image.network(
-                            images[imgIndex],
-                            fit: BoxFit.cover,
-                          );
-                        },
-                      ),
+        child: Container(
+          width: 155,
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.0),
-                        Colors.black.withValues(alpha: 0.80),
-                      ],
-                    ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(16),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  child: Stack(
+                    fit: StackFit.expand,
                     children: [
-                      Text(
-                        priceText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: LocalFonts.poppins(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
+                      image.isEmpty
+                          ? const Center(child: Icon(Icons.image_outlined))
+                          : Image.network(
+                              image,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => const Center(
+                                child: Icon(Icons.broken_image_outlined),
+                              ),
+                            ),
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: _remainingTimeChip(data['urgentUntil']),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        data['title']?.toString().trim().isNotEmpty == true
-                            ? data['title'].toString().trim()
-                            : tr('no_title'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: LocalFonts.poppins(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white.withValues(alpha: 0.9),
-                          height: 1.08,
-                        ),
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        _locationText(data),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: LocalFonts.poppins(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white.withValues(alpha: 0.92),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      _remainingTimeChip(data['urgentUntil']),
                     ],
                   ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      data['title']?.toString().trim().isNotEmpty == true
+                          ? data['title'].toString().trim()
+                          : tr('no_title'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LocalFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      '$price TL',
+                      style: LocalFonts.poppins(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      _locationText(data),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LocalFonts.poppins(
+                        color: Colors.grey[600],
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -830,6 +1062,7 @@ class _UrgentListingCard extends StatelessWidget {
     required String label,
     required Color color,
     required Color background,
+    IconData? icon,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -837,15 +1070,24 @@ class _UrgentListingCard extends StatelessWidget {
         color: background,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: LocalFonts.poppins(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: color, size: 12),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: LocalFonts.poppins(
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -264,6 +264,56 @@ class NotificationsScreen extends StatelessWidget {
                               ),
                             );
                           }
+                        } else if (context.mounted) {
+                          await showDialog<void>(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              title: Text(
+                                title,
+                                style: LocalFonts.poppins(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              content: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    if (hasImage)
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(10),
+                                        child: Image.network(
+                                          imageUrl,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              const SizedBox.shrink(),
+                                        ),
+                                      ),
+                                    if (hasImage) const SizedBox(height: 12),
+                                    Text(
+                                      message,
+                                      style: LocalFonts.poppins(
+                                        fontSize: 14,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext),
+                                  child: Text(
+                                    tr('close'),
+                                    style: LocalFonts.poppins(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
                         }
                       },
                       child: Padding(

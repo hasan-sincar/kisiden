@@ -57,6 +57,12 @@ service firebase.storage {
       allow write: if isSignedIn() && request.auth.uid == userId && isValidImageUpload5();
     }
 
+    // Images attached to administrator broadcast notifications
+    match /admin_notifications/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidImageUpload10();
+    }
+
     // Default deny
     match /{allPaths=**} {
       allow read, write: if false;

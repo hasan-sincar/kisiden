@@ -114,9 +114,8 @@ class _HomeScreenState extends State<HomeScreen>
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const NearbyListingsScreen(
-                          initialDistance: 20,
-                        ),
+                        builder: (_) =>
+                            const NearbyListingsScreen(initialDistance: 20),
                       ),
                     ),
                     child: Text(
@@ -141,7 +140,8 @@ class _HomeScreenState extends State<HomeScreen>
                   final doc = previewDocs[index];
                   final data = doc.data() as Map<String, dynamic>;
                   final image = data['imageUrl']?.toString() ?? '';
-                  final price = data['price']?.toString().split('.').first ?? '';
+                  final price =
+                      data['price']?.toString().split('.').first ?? '';
                   final distance = Geolocator.distanceBetween(
                     position.latitude,
                     position.longitude,
@@ -152,10 +152,8 @@ class _HomeScreenState extends State<HomeScreen>
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ListingDetailScreen(
-                          data: data,
-                          listingId: doc.id,
-                        ),
+                        builder: (_) =>
+                            ListingDetailScreen(data: data, listingId: doc.id),
                       ),
                     ),
                     child: Container(
@@ -350,8 +348,7 @@ class _HomeScreenState extends State<HomeScreen>
     final neighborhood = features is Map
         ? features['Mahalle']?.toString().trim()
         : null;
-    final base =
-        '${_formatLocation(city)}, ${_formatLocation(district)}';
+    final base = '${_formatLocation(city)}, ${_formatLocation(district)}';
     return neighborhood == null || neighborhood.isEmpty
         ? base
         : '$base, ${_formatLocation(neighborhood)}';
@@ -560,6 +557,73 @@ class _HomeScreenState extends State<HomeScreen>
     FocusManager.instance.primaryFocus?.unfocus();
   }
 
+  bool _hasActiveFilters() {
+    return _searchText.trim().isNotEmpty ||
+        _filterCategoryName != tr('all') ||
+        _filterCity != null ||
+        _filterDistrict != null ||
+        (_filterNeighborhood?.trim().isNotEmpty ?? false) ||
+        _minPriceController.text.trim().isNotEmpty ||
+        _maxPriceController.text.trim().isNotEmpty ||
+        _distance < 30.0 ||
+        _featureDropdownValues.values.any(
+          (value) => value != null && value.isNotEmpty,
+        );
+  }
+
+  Future<void> _resetHomeFilters() async {
+    _dismissSearchFocus();
+    setState(() {
+      _searchController.clear();
+      _searchText = '';
+      _filterCategoryName = tr('all');
+      _filterCategoryDisplayName = tr('all');
+      _currentParentId = '';
+      _currentParentName = tr('all');
+      _currentParentDisplayName = tr('all');
+      _filterCity = null;
+      _filterDistrict = null;
+      _filterNeighborhood = null;
+      _neighborhoodController.clear();
+      _minPriceController.clear();
+      _maxPriceController.clear();
+      _distance = 30.0;
+      for (final key in _featureDropdownValues.keys) {
+        _featureDropdownValues[key] = null;
+      }
+    });
+    await _savePreferences();
+    await _fetchCategoryFeatures('');
+  }
+
+  Future<bool> _confirmResetFilters() async {
+    final shouldReset = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('clear_filters'), style: LocalFonts.poppins()),
+        content: Text(
+          tr('clear_filters_confirmation'),
+          style: LocalFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(tr('cancel'), style: LocalFonts.poppins()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(tr('confirm'), style: LocalFonts.poppins()),
+          ),
+        ],
+      ),
+    );
+    if (shouldReset == true) {
+      await _resetHomeFilters();
+      return true;
+    }
+    return false;
+  }
+
   Widget _buildUrgentNavIcon({required bool active}) {
     return AnimatedBuilder(
       animation: _urgentPulseController,
@@ -614,6 +678,11 @@ class _HomeScreenState extends State<HomeScreen>
       final String rawSearch = _searchText.trim();
       final bool hasCategoryFilter =
           !isSearchMode && _filterCategoryName != tr('all');
+      final bool hasLocationFilter =
+          !isSearchMode &&
+          (_filterCity != null ||
+              _filterDistrict != null ||
+              (_filterNeighborhood?.trim().isNotEmpty ?? false));
       final bool isExactListingNoSearch = RegExp(
         r'^\d{8,}$',
       ).hasMatch(rawSearch);
@@ -629,14 +698,6 @@ class _HomeScreenState extends State<HomeScreen>
       Query query = FirebaseFirestore.instance
           .collection('listings')
           .where('status', isEqualTo: 'active');
-
-      // Konum filtresi
-      if (!isSearchMode && _filterCity != null) {
-        query = query.where('city', isEqualTo: _filterCity);
-      }
-      if (!isSearchMode && _filterDistrict != null) {
-        query = query.where('district', isEqualTo: _filterDistrict);
-      }
 
       // Fiyat filtresi
       double? minP = isSearchMode
@@ -663,7 +724,10 @@ class _HomeScreenState extends State<HomeScreen>
 
       // Arama sırasında sonuç kaçırmamak için daha geniş pencere getir.
       final int effectiveLimit =
-          (isSearchMode || hasCategoryFilter || _distance < 30.0)
+          (isSearchMode ||
+              hasCategoryFilter ||
+              hasLocationFilter ||
+              _distance < 30.0)
           ? 1000
           : _documentLimit;
       return query.limit(effectiveLimit);
@@ -715,21 +779,19 @@ class _HomeScreenState extends State<HomeScreen>
 
         return WillPopScope(
           onWillPop: () async {
-            // Arama veya Kategori filtresi varsa geri tuşuyla bunları sıfırla
-            if (_searchText.isNotEmpty || _filterCategoryName != tr('all')) {
-              setState(() {
-                _searchController.clear();
-                _searchText = "";
-                _filterCategoryName = tr('all');
-                _filterCategoryDisplayName = tr('all');
-                _currentParentId = "";
-                _currentParentName = tr('all');
-                _currentParentDisplayName = tr('all');
-              });
-              _savePreferences();
-              _fetchCategoryFeatures("");
+            if (_hasActiveFilters()) {
+              await _confirmResetFilters();
               return false;
             }
+
+            // Arama metni zaten temizse, açık kalan klavyeyi kapatmadan
+            // ana sayfadan çıkılmasına izin verme.
+            if (_searchFocusNode.hasFocus ||
+                FocusManager.instance.primaryFocus != null) {
+              _dismissSearchFocus();
+              return false;
+            }
+
             return true; // En başa döndüyse uygulamadan çıkmaya izin ver
           },
           child: Scaffold(
@@ -961,6 +1023,11 @@ class _HomeScreenState extends State<HomeScreen>
                                                   color: Colors.grey,
                                                 ),
                                                 onPressed: () {
+                                                  _searchFocusNode.unfocus();
+                                                  FocusManager
+                                                      .instance
+                                                      .primaryFocus
+                                                      ?.unfocus();
                                                   setState(() {
                                                     _searchController.clear();
                                                     _searchText = "";
@@ -1296,7 +1363,9 @@ class _HomeScreenState extends State<HomeScreen>
                                                             data['district'] !=
                                                                 null)
                                                           Text(
-                                                            _listingLocationText(data),
+                                                            _listingLocationText(
+                                                              data,
+                                                            ),
                                                             style:
                                                                 LocalFonts.poppins(
                                                                   fontSize: 10,
@@ -1324,11 +1393,29 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
 
                           if (_filterCategoryName == tr('all') &&
-                              _searchText.isEmpty)
+                              _searchText.isEmpty &&
+                              _filterCity == null &&
+                              _filterDistrict == null &&
+                              (_filterNeighborhood?.trim().isEmpty ?? true) &&
+                              _minPriceController.text.isEmpty &&
+                              _maxPriceController.text.isEmpty &&
+                              _distance >= 30.0 &&
+                              !_featureDropdownValues.values.any(
+                                (value) => value != null && value.isNotEmpty,
+                              ))
                             _buildAuctionShowcase(), // MÜZAYEDE VİTRİNİ
 
                           if (_filterCategoryName == tr('all') &&
-                              _searchText.isEmpty)
+                              _searchText.isEmpty &&
+                              _filterCity == null &&
+                              _filterDistrict == null &&
+                              (_filterNeighborhood?.trim().isEmpty ?? true) &&
+                              _minPriceController.text.isEmpty &&
+                              _maxPriceController.text.isEmpty &&
+                              _distance >= 30.0 &&
+                              !_featureDropdownValues.values.any(
+                                (value) => value != null && value.isNotEmpty,
+                              ))
                             _buildNearbyListingsPreview(hiddenUsers),
 
                           Padding(
@@ -1416,6 +1503,31 @@ class _HomeScreenState extends State<HomeScreen>
                                             final bool isSearchMode =
                                                 _searchText.trim().isNotEmpty;
 
+                                            bool matchLocation = true;
+                                            if (!isSearchMode &&
+                                                _filterCity != null) {
+                                              matchLocation =
+                                                  _normalizeText(
+                                                    data['city']?.toString() ??
+                                                        '',
+                                                  ) ==
+                                                  _normalizeText(_filterCity!);
+                                            }
+                                            if (matchLocation &&
+                                                !isSearchMode &&
+                                                _filterDistrict != null) {
+                                              matchLocation =
+                                                  _normalizeText(
+                                                    data['district']
+                                                            ?.toString() ??
+                                                        '',
+                                                  ) ==
+                                                  _normalizeText(
+                                                    _filterDistrict!,
+                                                  );
+                                            }
+                                            if (!matchLocation) return false;
+
                                             // YENİ: AKILLI ARAMA MANTIĞI (Çoklu kelime, Türkçe karakter duyarsız, açıklama içi arama)
                                             bool matchSearch = true;
                                             if (_searchText.isNotEmpty) {
@@ -1485,8 +1597,10 @@ class _HomeScreenState extends State<HomeScreen>
                                             if (!isSearchMode &&
                                                 _distance < 30.0 &&
                                                 _userPosition != null) {
-                                              final num? lat = data['lat'] as num?;
-                                              final num? lng = data['lng'] as num?;
+                                              final num? lat =
+                                                  data['lat'] as num?;
+                                              final num? lng =
+                                                  data['lng'] as num?;
                                               if (lat != null && lng != null) {
                                                 double dist =
                                                     Geolocator.distanceBetween(
@@ -1564,6 +1678,10 @@ class _HomeScreenState extends State<HomeScreen>
                                                   tr('all') ||
                                               _filterCity != null ||
                                               _filterDistrict != null ||
+                                              (_filterNeighborhood
+                                                      ?.trim()
+                                                      .isNotEmpty ??
+                                                  false) ||
                                               _minPriceController
                                                   .text
                                                   .isNotEmpty ||
@@ -1760,15 +1878,28 @@ class _HomeScreenState extends State<HomeScreen>
                                               _searchText.isEmpty &&
                                               _filterCity == null &&
                                               _filterDistrict == null &&
+                                              (_filterNeighborhood
+                                                      ?.trim()
+                                                      .isEmpty ??
+                                                  true) &&
                                               _minPriceController
                                                   .text
                                                   .isEmpty &&
-                                              _maxPriceController.text.isEmpty;
+                                              _maxPriceController
+                                                  .text
+                                                  .isEmpty &&
+                                              _distance >= 30.0 &&
+                                              !_featureDropdownValues.values
+                                                  .any(
+                                                    (value) =>
+                                                        value != null &&
+                                                        value.isNotEmpty,
+                                                  );
 
                                           Widget allListingsHeader =
                                               const SizedBox();
                                           final visibleDefaultDocs =
-                                              filteredDocs.take(12).toList();
+                                              filteredDocs.take(20).toList();
                                           if (isDefaultView &&
                                               filteredDocs.isNotEmpty) {
                                             allListingsHeader = Column(
@@ -1840,12 +1971,22 @@ class _HomeScreenState extends State<HomeScreen>
                                               _searchText.isNotEmpty ||
                                               _filterCity != null ||
                                               _filterDistrict != null ||
+                                              (_filterNeighborhood
+                                                      ?.trim()
+                                                      .isNotEmpty ??
+                                                  false) ||
                                               _minPriceController
                                                   .text
                                                   .isNotEmpty ||
                                               _maxPriceController
                                                   .text
-                                                  .isNotEmpty;
+                                                  .isNotEmpty ||
+                                              _distance < 30.0 ||
+                                              _featureDropdownValues.values.any(
+                                                (value) =>
+                                                    value != null &&
+                                                    value.isNotEmpty,
+                                              );
 
                                           Widget resultsWidget;
                                           if (isFiltered) {
@@ -2153,7 +2294,9 @@ class _HomeScreenState extends State<HomeScreen>
                                                                       data['district'] !=
                                                                           null)
                                                                     Text(
-                                                                      _listingLocationText(data),
+                                                                      _listingLocationText(
+                                                                        data,
+                                                                      ),
                                                                       style: LocalFonts.poppins(
                                                                         fontSize:
                                                                             11,
@@ -2196,7 +2339,7 @@ class _HomeScreenState extends State<HomeScreen>
                                               itemBuilder: (context, index) {
                                                 var data =
                                                     visibleDefaultDocs[index]
-                                                        .data()
+                                                            .data()
                                                         as Map<String, dynamic>;
                                                 String
                                                 formattedPrice = data['price']
@@ -2458,7 +2601,9 @@ class _HomeScreenState extends State<HomeScreen>
                                                                     data['district'] !=
                                                                         null)
                                                                   Text(
-                                                                    _listingLocationText(data),
+                                                                    _listingLocationText(
+                                                                      data,
+                                                                    ),
                                                                     style: LocalFonts.poppins(
                                                                       fontSize:
                                                                           10,
@@ -2513,8 +2658,8 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                           ),
                           const SizedBox(
-                            height: 90,
-                          ), // Şeffaf alt menü yüzünden son ilanların altta gizli kalmasını önler
+                            height: 0,
+                          ), // Alt menü ile son ilanlar arasında küçük bir güvenli alan
                         ],
                       ),
                     ),

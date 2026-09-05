@@ -529,121 +529,122 @@ class ProfileScreen extends StatelessWidget {
                     // YENİ: Kullanıcı Pro olsa bile süresini uzatabilmesi için menüyü gizlemiyoruz
                     _buildMenuSection(
                       title: tr('account_features'),
-                      icon: Icons.dashboard_customize_outlined,
                       color: AppColors.primary,
                       children: [
-                    _buildMenuTile(
-                      Icons.workspace_premium,
-                      isPro ? 'Pro Paketini Uzat / Yenile' : tr('upgrade_pro'),
-                      AppColors.secondary,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ProPurchaseScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuTile(
-                      Icons.storefront_rounded,
-                      tr('seller_profile'),
-                      AppColors.primary,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                SellerProfileScreen(sellerId: user.uid),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuTile(
-                      Icons.favorite,
-                      tr('favorite_listings'),
-                      Colors.red,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const FavoritesScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuTile(
-                      Icons.notifications_active,
-                      tr('search_alarms'),
-                      AppColors.secondary,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SearchAlarmsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuTile(
-                      Icons.support_agent,
-                      tr('support_tickets'),
-                      Colors.blue,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const UserTicketsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuTile(
-                      Icons.quiz_outlined,
-                      tr('faq_title'),
-                      const Color(0xFF0F766E),
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const FaqScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuTile(
-                      Icons.list_alt,
-                      tr('my_listings'),
-                      AppColors.primary,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const MyListingsScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildMenuTile(
-                      Icons.block,
-                      tr('blocked_users'),
-                      Colors.red[400]!,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const BlockedUsersScreen(),
-                          ),
-                        );
-                      },
-                    ),
+                        _buildMenuTile(
+                          Icons.workspace_premium,
+                          isPro
+                              ? 'Pro Paketini Uzat / Yenile'
+                              : tr('upgrade_pro'),
+                          AppColors.secondary,
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const ProPurchaseScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuTile(
+                          Icons.storefront_rounded,
+                          tr('seller_profile'),
+                          AppColors.primary,
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    SellerProfileScreen(sellerId: user.uid),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuTile(
+                          Icons.favorite,
+                          tr('favorite_listings'),
+                          Colors.red,
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const FavoritesScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuTile(
+                          Icons.notifications_active,
+                          tr('search_alarms'),
+                          AppColors.secondary,
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const SearchAlarmsScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuTile(
+                          Icons.support_agent,
+                          tr('support_tickets'),
+                          Colors.blue,
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const UserTicketsScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuTile(
+                          Icons.quiz_outlined,
+                          tr('faq_title'),
+                          const Color(0xFF0F766E),
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const FaqScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuTile(
+                          Icons.list_alt,
+                          tr('my_listings'),
+                          AppColors.primary,
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const MyListingsScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        _buildMenuTile(
+                          Icons.block,
+                          tr('blocked_users'),
+                          Colors.red[400]!,
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const BlockedUsersScreen(),
+                              ),
+                            );
+                          },
+                        ),
                       ],
                     ),
 
-                    const SizedBox(height: 20),
                     _buildMenuSection(
                       title: tr('preferences'),
-                      icon: Icons.tune,
                       color: Colors.teal,
                       children: [
                         _buildMenuTile(
@@ -658,7 +659,6 @@ class ProfileScreen extends StatelessWidget {
                     if (isAdmin) ...[
                       _buildMenuSection(
                         title: tr('administration'),
-                        icon: Icons.admin_panel_settings,
                         color: Colors.purple,
                         children: [
                           _buildMenuTile(
@@ -676,10 +676,8 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ],
 
-                    const SizedBox(height: 20),
                     _buildMenuSection(
                       title: tr('information_and_legal'),
-                      icon: Icons.info_outline,
                       color: AppColors.primary,
                       children: [
                         _buildMenuTile(
@@ -703,10 +701,8 @@ class ProfileScreen extends StatelessWidget {
                       ],
                     ),
 
-                    const SizedBox(height: 20),
                     _buildMenuSection(
                       title: tr('account_actions'),
-                      icon: Icons.manage_accounts_outlined,
                       color: Colors.orange,
                       children: [
                         _buildMenuTile(
@@ -740,27 +736,29 @@ class ProfileScreen extends StatelessWidget {
     Color iconColor,
     VoidCallback onTap,
   ) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: iconColor.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: iconColor),
         ),
-        child: Icon(icon, color: iconColor),
+        title: Text(
+          title,
+          style: LocalFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
+        ),
+        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+        onTap: onTap,
       ),
-      title: Text(
-        title,
-        style: LocalFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
-      ),
-      trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-      onTap: onTap,
     );
   }
 
   Widget _buildMenuSection({
     required String title,
-    required IconData icon,
     required Color color,
     required List<Widget> children,
   }) {
@@ -785,8 +783,6 @@ class ProfileScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
             child: Row(
               children: [
-                Icon(icon, color: color, size: 20),
-                const SizedBox(width: 8),
                 Expanded(
                   child: Center(
                     child: Text(

@@ -10,6 +10,7 @@ import '../main.dart';
 import '../utils/translations.dart';
 import '../utils/theme_colors.dart';
 import 'legal_document_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -144,6 +145,19 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _openSupportPage() async {
+    final uri = Uri.parse('https://kisiden.com/support');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Destek sayfası açılamadı.')));
+  }
+
   Future<void> _loginWithGoogle() async {
     if (_isLoading) return;
     setState(() => _isLoading = true);
@@ -196,9 +210,9 @@ class _LoginScreenState extends State<LoginScreen> {
     } on FirebaseAuthException catch (error) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_friendlyAppleAuthError(error))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyAppleAuthError(error))));
     } catch (error) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -648,6 +662,20 @@ class _LoginScreenState extends State<LoginScreen> {
                               onPressed: () => _openLegalPage('terms'),
                               child: Text(
                                 tr('terms_of_use'),
+                                style: LocalFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            const Text(
+                              "•",
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                            TextButton(
+                              onPressed: _openSupportPage,
+                              child: Text(
+                                tr('contact_us'),
                                 style: LocalFonts.poppins(
                                   color: Colors.white,
                                   fontSize: 12,

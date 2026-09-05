@@ -101,7 +101,7 @@ service cloud.firestore {
       allow read, update, delete: if isOwner(userId) || isAdmin();
       allow create: if (isOwner(userId) || isAdmin())
         && request.resource.data.keys().hasOnly([
-          'title', 'message', 'isRead', 'timestamp', 'type', 'targetId', 'reason', 'source', 'imageUrl'
+          'title', 'message', 'isRead', 'timestamp', 'type', 'targetId', 'reason', 'source', 'imageUrl', 'createdBy'
         ])
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
@@ -115,7 +115,8 @@ service cloud.firestore {
         && (!('targetId' in request.resource.data) || request.resource.data.targetId is string)
         && (!('reason' in request.resource.data) || request.resource.data.reason is string)
         && (!('source' in request.resource.data) || request.resource.data.source is string)
-        && (!('imageUrl' in request.resource.data) || request.resource.data.imageUrl is string);
+        && (!('imageUrl' in request.resource.data) || request.resource.data.imageUrl is string)
+        && (!('createdBy' in request.resource.data) || request.resource.data.createdBy is string);
     }
 
     match /users/{userId}/review_permissions/{reviewerId} {

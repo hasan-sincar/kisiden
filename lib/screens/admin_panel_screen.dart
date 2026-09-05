@@ -15,6 +15,8 @@ import 'package:cached_network_image/cached_network_image.dart'; // YENİ: Cache
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:translator/translator.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../utils/theme_colors.dart';
 import '../services/auth_service.dart';
 
@@ -3438,8 +3440,10 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
     final messageController = TextEditingController();
     final targetIdController = TextEditingController();
     final imageUrlController = TextEditingController();
+    final imagePicker = ImagePicker();
     var selectedType = 'announcement';
     var isSending = false;
+    var isUploadingImage = false;
 
     Future<void> applyTemplate(
       String type,
@@ -3528,7 +3532,7 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
                   enabled: !isSending,
                   minLines: 2,
                   maxLines: 4,
-                  maxLength: 220,
+                  maxLength: 600,
                   decoration: const InputDecoration(
                     labelText: 'Mesaj',
                     border: OutlineInputBorder(),
@@ -3549,15 +3553,76 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: imageUrlController,
-                  enabled: !isSending,
-                  decoration: InputDecoration(
-                    labelText: tr('image_url_optional_label'),
-                    helperText: tr('campaign_banner_https_helper'),
-                    border: OutlineInputBorder(),
+                OutlinedButton.icon(
+                  onPressed: isSending || isUploadingImage
+                      ? null
+                      : () async {
+                          final picked = await imagePicker.pickImage(
+                            source: ImageSource.gallery,
+                            imageQuality: 85,
+                          );
+                          if (picked == null) return;
+                          setStateDialog(() => isUploadingImage = true);
+                          try {
+                            final bytes = await picked.readAsBytes();
+                            final storageRef = FirebaseStorage.instance.ref().child(
+                              'admin_notifications/${DateTime.now().millisecondsSinceEpoch}_${picked.name}',
+                            );
+                            final uploadTask = await storageRef.putData(
+                              bytes,
+                              SettableMetadata(
+                                contentType: picked.mimeType ?? 'image/jpeg',
+                              ),
+                            );
+                            final downloadUrl = await uploadTask.ref
+                                .getDownloadURL();
+                            setStateDialog(
+                              () => imageUrlController.text = downloadUrl,
+                            );
+                          } on FirebaseException catch (error) {
+                            if (dialogBuildContext.mounted) {
+                              ScaffoldMessenger.of(
+                                dialogBuildContext,
+                              ).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Görsel yüklenemedi: ${error.message ?? error.code}',
+                                  ),
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (dialogBuildContext.mounted) {
+                              setStateDialog(() => isUploadingImage = false);
+                            }
+                          }
+                        },
+                  icon: isUploadingImage
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.photo_library_outlined),
+                  label: Text(
+                    imageUrlController.text.isEmpty
+                        ? 'Görsel seç'
+                        : 'Görsel seçildi',
+                    style: LocalFonts.poppins(),
                   ),
                 ),
+                if (imageUrlController.text.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      imageUrlController.text,
+                      height: 90,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

@@ -45,6 +45,7 @@ extension _HomeScreenController on _HomeScreenState {
     setModalState(() {});
     await _savePreferences();
   }
+
   Future<void> _checkPendingDeepLink() async {
     if (pendingDeepLink != null) {
       Uri uri = pendingDeepLink!;
@@ -159,18 +160,26 @@ extension _HomeScreenController on _HomeScreenState {
     try {
       final prefs = await SharedPreferences.getInstance();
       updateState(() {
-        _searchText = prefs.getString('searchText') ?? "";
-        if (_searchText.isNotEmpty) _searchController.text = _searchText;
-        _filterCity = prefs.getString('filterCity');
-        _filterDistrict = prefs.getString('filterDistrict');
-        _distance = prefs.getDouble('homeDistance') ?? 30.0;
+        _searchText = "";
+        _filterCity = null;
+        _filterDistrict = null;
+        _distance = 30.0;
         _sortBy = 'date_desc';
-        _minPriceController.text = prefs.getString('minPrice') ?? "";
-        _maxPriceController.text = prefs.getString('maxPrice') ?? "";
-        _filterNeighborhood = prefs.getString('filterNeighborhood');
-        _neighborhoodController.text = _filterNeighborhood ?? "";
+        _minPriceController.clear();
+        _maxPriceController.clear();
+        _filterNeighborhood = null;
+        _neighborhoodController.clear();
       });
-      await prefs.remove('sortBy');
+      await Future.wait([
+        prefs.remove('searchText'),
+        prefs.remove('filterCity'),
+        prefs.remove('filterDistrict'),
+        prefs.remove('homeDistance'),
+        prefs.remove('sortBy'),
+        prefs.remove('minPrice'),
+        prefs.remove('maxPrice'),
+        prefs.remove('filterNeighborhood'),
+      ]);
     } catch (e) {
       print(e);
     }
@@ -179,31 +188,16 @@ extension _HomeScreenController on _HomeScreenState {
   Future<void> _savePreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('searchText', _searchText);
-      if (_filterCity != null) {
-        await prefs.setString('filterCity', _filterCity!);
-      } else {
-        await prefs.remove('filterCity');
-      }
-      if (_filterDistrict != null) {
-        await prefs.setString('filterDistrict', _filterDistrict!);
-      } else {
-        await prefs.remove('filterDistrict');
-      }
-      await prefs.setDouble('homeDistance', _distance);
-      await prefs.remove('sortBy');
-      await prefs.setString('minPrice', _minPriceController.text);
-      await prefs.setString('maxPrice', _maxPriceController.text);
-      if (_filterNeighborhood != null && _filterNeighborhood!.isNotEmpty) {
-        await prefs.setString('filterNeighborhood', _filterNeighborhood!);
-      } else if (_neighborhoodController.text.isNotEmpty) {
-        await prefs.setString(
-          'filterNeighborhood',
-          _neighborhoodController.text,
-        );
-      } else {
-        await prefs.remove('filterNeighborhood');
-      }
+      await Future.wait([
+        prefs.remove('searchText'),
+        prefs.remove('filterCity'),
+        prefs.remove('filterDistrict'),
+        prefs.remove('homeDistance'),
+        prefs.remove('sortBy'),
+        prefs.remove('minPrice'),
+        prefs.remove('maxPrice'),
+        prefs.remove('filterNeighborhood'),
+      ]);
     } catch (e) {
       print(e);
     }

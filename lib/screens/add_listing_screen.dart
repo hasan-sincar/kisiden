@@ -1827,27 +1827,29 @@ class _AddListingScreenState extends State<AddListingScreen> {
               )
             : null,
       ),
-      body: _isLoading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(color: AppColors.primary),
-                  const SizedBox(height: 16),
-                  Text(
-                    _loadingText,
-                    style: LocalFonts.poppins(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
+      body: SafeArea(
+        child: _isLoading
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(color: AppColors.primary),
+                    const SizedBox(height: 16),
+                    Text(
+                      _loadingText,
+                      style: LocalFonts.poppins(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                child: _currentStep == 1 ? _buildStep1() : _buildStep2(),
               ),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: _currentStep == 1 ? _buildStep1() : _buildStep2(),
-            ),
+      ),
     );
   }
 
@@ -2000,8 +2002,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
                   title: Text(tr('offer_settings')),
                   subtitle: Text(tr('offer_settings_desc')),
                   value: _offersEnabled,
-                  onChanged: (value) =>
-                      setState(() => _offersEnabled = value),
+                  onChanged: (value) => setState(() => _offersEnabled = value),
                 ),
                 if (_offersEnabled) ...[
                   DropdownButtonFormField<int>(
@@ -2013,9 +2014,8 @@ class _AddListingScreenState extends State<AddListingScreen> {
                       DropdownMenuItem(value: 24, child: Text('24 saat')),
                       DropdownMenuItem(value: 48, child: Text('48 saat')),
                     ],
-                    onChanged: (value) => setState(
-                      () => _offerValidityHours = value ?? 24,
-                    ),
+                    onChanged: (value) =>
+                        setState(() => _offerValidityHours = value ?? 24),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
@@ -2028,9 +2028,8 @@ class _AddListingScreenState extends State<AddListingScreen> {
                       DropdownMenuItem(value: 80, child: Text('%80')),
                       DropdownMenuItem(value: 90, child: Text('%90')),
                     ],
-                    onChanged: (value) => setState(
-                      () => _offerMinimumPercent = value ?? 70,
-                    ),
+                    onChanged: (value) =>
+                        setState(() => _offerMinimumPercent = value ?? 70),
                   ),
                   const SizedBox(height: 12),
                   TextField(

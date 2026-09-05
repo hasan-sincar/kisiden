@@ -303,6 +303,93 @@ function getTransporter() {
   });
 }
 
+exports.supportRequestEmail = onRequest({
+  region: "europe-west1",
+  secrets: [resendApiKey],
+}, async (request, response) => {
+  const allowedOrigins = new Set([
+    "https://kisiden.com",
+    "https://www.kisiden.com",
+    "https://kisiden-projesi.web.app",
+    "https://kisiden-projesi.firebaseapp.com",
+  ]);
+  const requestOrigin = request.get("origin");
+  if (allowedOrigins.has(requestOrigin)) {
+    response.set("Access-Control-Allow-Origin", requestOrigin);
+    response.set("Vary", "Origin");
+  }
+  response.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  response.set("Access-Control-Allow-Headers", "Content-Type");
+
+  if (request.method === "OPTIONS") {
+    response.status(204).send("");
+    return;
+  }
+  if (request.method !== "POST") {
+    response.status(405).json({error: "Method not allowed"});
+    return;
+  }
+
+  const body = request.body || {};
+  const name = String(body.name || "").trim();
+  const email = String(body.email || "").trim();
+  const topic = String(body.topic || "Genel destek").trim();
+  const message = String(body.message || "").trim();
+  const website = String(body.website || "").trim();
+
+  // Honeypot alanı botların formu kötüye kullanmasını engeller.
+  if (website) {
+    response.status(204).send("");
+    return;
+  }
+  if (
+    name.length < 2 || name.length > 120 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+    topic.length < 2 || topic.length > 120 ||
+    message.length < 5 || message.length > 5000
+  ) {
+    response.status(400).json({error: "Invalid support request"});
+    return;
+  }
+
+  const transporter = getTransporter();
+  if (!transporter) {
+    response.status(503).json({error: "Email service is not configured"});
+    return;
+  }
+
+  try {
+    const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[character]));
+    await transporter.sendMail({
+      from: '"Kisiden Destek" <info@kisiden.com>',
+      to: "info@kisiden.com",
+      replyTo: email,
+      subject: `[Destek] ${topic}`,
+      text: `Ad: ${name}\nE-posta: ${email}\nKonu: ${topic}\n\n${message}`,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#17233d">
+          <h2>Yeni Kisiden destek talebi</h2>
+          <p><b>Ad:</b> ${escapeHtml(name)}</p>
+          <p><b>E-posta:</b> ${escapeHtml(email)}</p>
+          <p><b>Konu:</b> ${escapeHtml(topic)}</p>
+          <hr>
+          <p style="white-space:pre-wrap">${escapeHtml(message)}</p>
+        </div>
+      `,
+    });
+    response.status(200).json({success: true});
+  } catch (error) {
+    logger.error("Support request email failed", error);
+    response.status(500).json({error: "Unable to send support request"});
+  }
+});
+
 const app = express();
 
 // --- GÜVENLİK KALKANI (Express.js Security Headers) ---
