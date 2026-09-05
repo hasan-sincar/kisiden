@@ -73,6 +73,7 @@ dependencies:
   package_info_plus: ^10.2.0
   flutter_html: ^3.0.0-beta.2
   translator: ^1.0.3+1
+  geocoding: ^5.0.0
 
 dev_dependencies:
   flutter_test:

@@ -15,6 +15,10 @@
     ],
     "rewrites": [
       {
+        "source": "/support",
+        "destination": "/support.html"
+      },
+      {
         "source": "/sitemap.xml",
         "function": "seoHandler"
       },

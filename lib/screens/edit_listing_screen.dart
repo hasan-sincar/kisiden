@@ -31,6 +31,7 @@ class _EditListingScreenState extends State<EditListingScreen> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _priceController;
+  late TextEditingController _offerMinimumAmountController;
 
   final DatabaseService _dbService = DatabaseService();
   final ImagePicker _picker = ImagePicker();
@@ -40,6 +41,10 @@ class _EditListingScreenState extends State<EditListingScreen> {
   bool _isLoading = false;
   String _loadingText = "";
   bool _autoRenew = false;
+  bool _offersEnabled = true;
+  bool _tradeEnabled = false;
+  int _offerValidityHours = 24;
+  int _offerMinimumPercent = 70;
   String _selectedCategoryPath = '';
   String? _selectedCategoryId;
   bool _isCategoryTreeLoading = false;
@@ -63,6 +68,11 @@ class _EditListingScreenState extends State<EditListingScreen> {
     _priceController = TextEditingController(
       text: formatter.format(initialPrice).trim(),
     );
+    _offerMinimumAmountController = TextEditingController(
+      text: widget.currentData['offerMinimumAmount'] == null
+          ? ''
+          : (widget.currentData['offerMinimumAmount'] as num).toString(),
+    );
 
     if (widget.currentData['imageUrl'] != null &&
         widget.currentData['imageUrl'].toString().isNotEmpty) {
@@ -75,6 +85,12 @@ class _EditListingScreenState extends State<EditListingScreen> {
     }
 
     _autoRenew = widget.currentData['autoRenew'] ?? false;
+    _offersEnabled = widget.currentData['isOfferEnabled'] as bool? ?? true;
+    _tradeEnabled = widget.currentData['tradeEnabled'] as bool? ?? false;
+    _offerValidityHours =
+        (widget.currentData['offerValidityHours'] as num?)?.toInt() ?? 24;
+    _offerMinimumPercent =
+        (widget.currentData['offerMinimumPercent'] as num?)?.toInt() ?? 70;
     _selectedCategoryPath =
         (widget.currentData['categoryPath'] ??
                 widget.currentData['category'] ??
@@ -479,6 +495,13 @@ class _EditListingScreenState extends State<EditListingScreen> {
         autoRenew: _autoRenew,
         category: categoryLeaf,
         categoryPath: categoryPath,
+        isOfferEnabled: _offersEnabled,
+        offerValidityHours: _offerValidityHours,
+        offerMinimumPercent: _offerMinimumPercent,
+        offerMinimumAmount: double.tryParse(
+          _offerMinimumAmountController.text.trim().replaceAll(',', '.'),
+        ),
+        tradeEnabled: _tradeEnabled,
         isAdmin: widget.isAdminEditor,
       );
 
@@ -505,6 +528,15 @@ class _EditListingScreenState extends State<EditListingScreen> {
           _loadingText = "";
         });
     }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _priceController.dispose();
+    _offerMinimumAmountController.dispose();
+    super.dispose();
   }
 
   @override
@@ -687,6 +719,79 @@ class _EditListingScreenState extends State<EditListingScreen> {
                       ),
                     ),
                   const SizedBox(height: 16),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(tr('offer_settings')),
+                            subtitle: Text(tr('offer_settings_desc')),
+                            value: _offersEnabled,
+                            onChanged: (value) =>
+                                setState(() => _offersEnabled = value),
+                          ),
+                          if (_offersEnabled) ...[
+                            DropdownButtonFormField<int>(
+                              value: _offerValidityHours,
+                              decoration: InputDecoration(
+                                labelText: tr('offer_validity'),
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 24,
+                                  child: Text('24 saat'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 48,
+                                  child: Text('48 saat'),
+                                ),
+                              ],
+                              onChanged: (value) => setState(
+                                () => _offerValidityHours = value ?? 24,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<int>(
+                              value: _offerMinimumPercent,
+                              decoration: InputDecoration(
+                                labelText: tr('offer_minimum_percent'),
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 70, child: Text('%70')),
+                                DropdownMenuItem(value: 80, child: Text('%80')),
+                                DropdownMenuItem(value: 90, child: Text('%90')),
+                              ],
+                              onChanged: (value) => setState(
+                                () => _offerMinimumPercent = value ?? 70,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _offerMinimumAmountController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: tr('offer_minimum_amount'),
+                                prefixText: '₺ ',
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Card(
+                    child: SwitchListTile(
+                      title: Text(tr('trade_settings')),
+                      subtitle: Text(tr('trade_settings_desc')),
+                      value: _tradeEnabled,
+                      onChanged: (value) =>
+                          setState(() => _tradeEnabled = value),
+                    ),
+                  ),
                   TextField(
                     controller: _titleController,
                     onChanged: (_) => setState(() {}),

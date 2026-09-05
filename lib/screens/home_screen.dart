@@ -6,6 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'dart:ui'; // YENİ: Buzlu cam efekti için eklendi
 import 'package:flutter/foundation.dart'; // Web ve platform kontrolü için eklendi
@@ -22,6 +23,8 @@ import 'profile_screen.dart';
 import 'showcase_list_screen.dart';
 import 'notifications_screen.dart';
 import 'all_listings_screen.dart';
+import 'nearby_listings_screen.dart';
+import 'viewed_listings_screen.dart';
 import 'urgent_listings_screen.dart';
 import 'search_alarms_screen.dart';
 import 'favorites_screen.dart';
@@ -31,6 +34,7 @@ import '../utils/auth_gate.dart';
 import '../utils/home_widget_sync.dart';
 import '../main.dart'; // YENİ: pendingDeepLink'e erişmek için
 import '../widgets/app_download_banner.dart'; // YENİ: Akıllı Uygulama İndirme Banner'ı
+import '../services/viewed_listings_service.dart';
 
 part 'home_screen_controller.dart';
 
@@ -42,29 +46,319 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
-  Widget _distanceBadge(String distanceText) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.location_on, color: AppColors.primary, size: 11),
-          const SizedBox(width: 3),
-          Text(
-            distanceText,
-            style: LocalFonts.poppins(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primary,
+  Widget _buildNearbyListingsPreview(List<String> hiddenUsers) {
+    final position = _userPosition;
+    if (position == null) return const SizedBox();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('listings')
+          .where('status', isEqualTo: 'active')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox();
+        final nearbyDocs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final lat = (data['lat'] as num?)?.toDouble();
+          final lng = (data['lng'] as num?)?.toDouble();
+          if (lat == null ||
+              lng == null ||
+              hiddenUsers.contains(data['sellerId'])) {
+            return false;
+          }
+          return Geolocator.distanceBetween(
+                position.latitude,
+                position.longitude,
+                lat,
+                lng,
+              ) <=
+              20000;
+        }).toList();
+
+        nearbyDocs.sort((a, b) {
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          final aDistance = Geolocator.distanceBetween(
+            position.latitude,
+            position.longitude,
+            (aData['lat'] as num).toDouble(),
+            (aData['lng'] as num).toDouble(),
+          );
+          final bDistance = Geolocator.distanceBetween(
+            position.latitude,
+            position.longitude,
+            (bData['lat'] as num).toDouble(),
+            (bData['lng'] as num).toDouble(),
+          );
+          return aDistance.compareTo(bDistance);
+        });
+
+        if (nearbyDocs.isEmpty) return const SizedBox();
+        final previewDocs = nearbyDocs.take(10).toList();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
+                children: [
+                  Text(
+                    tr('nearby_listings'),
+                    style: LocalFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NearbyListingsScreen(
+                          initialDistance: 20,
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      tr('see_all'),
+                      style: LocalFonts.poppins(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            SizedBox(
+              height: 215,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                itemCount: previewDocs.length,
+                itemBuilder: (context, index) {
+                  final doc = previewDocs[index];
+                  final data = doc.data() as Map<String, dynamic>;
+                  final image = data['imageUrl']?.toString() ?? '';
+                  final price = data['price']?.toString().split('.').first ?? '';
+                  final distance = Geolocator.distanceBetween(
+                    position.latitude,
+                    position.longitude,
+                    (data['lat'] as num).toDouble(),
+                    (data['lng'] as num).toDouble(),
+                  );
+                  return InkWell(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ListingDetailScreen(
+                          data: data,
+                          listingId: doc.id,
+                        ),
+                      ),
+                    ),
+                    child: Container(
+                      width: 155,
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(16),
+                              ),
+                              child: image.isEmpty
+                                  ? const Center(
+                                      child: Icon(Icons.image_outlined),
+                                    )
+                                  : CachedNetworkImage(
+                                      imageUrl: image,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  data['title']?.toString() ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: LocalFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  '$price TL',
+                                  style: LocalFonts.poppins(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  '${(distance / 1000).toStringAsFixed(1)} km',
+                                  style: LocalFonts.poppins(
+                                    color: Colors.grey[600],
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildRecentlyViewedSection() {
+    return ValueListenableBuilder<int>(
+      valueListenable: ViewedListingsService.revision,
+      builder: (context, _, __) => FutureBuilder<List<Map<String, dynamic>>>(
+        future: ViewedListingsService.load(),
+        builder: (context, snapshot) {
+          final entries = snapshot.data ?? [];
+          if (entries.isEmpty) return const SizedBox();
+          final preview = entries.take(5).toList();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        tr('recently_viewed'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: LocalFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: Size.zero,
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ViewedListingsScreen(),
+                        ),
+                      ),
+                      child: Text(
+                        tr('see_all'),
+                        style: LocalFonts.poppins(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...preview.map((entry) {
+                final data = Map<String, dynamic>.from(entry['data'] as Map);
+                final image = data['imageUrl']?.toString() ?? '';
+                return Card(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
+                  child: ListTile(
+                    leading: image.isEmpty
+                        ? const Icon(Icons.image_outlined)
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              image,
+                              width: 56,
+                              height: 56,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const Icon(Icons.broken_image_outlined),
+                            ),
+                          ),
+                    title: Text(
+                      data['title']?.toString() ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LocalFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '${data['price'] ?? ''} • ${data['city'] ?? ''}',
+                      style: LocalFonts.poppins(color: Colors.grey[600]),
+                    ),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ListingDetailScreen(
+                          data: data,
+                          listingId: entry['id'].toString(),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  String _listingLocationText(Map<String, dynamic> data) {
+    final city = data['city'];
+    final district = data['district'];
+    if (city == null || district == null) return '';
+    final features = data['features'];
+    final neighborhood = features is Map
+        ? features['Mahalle']?.toString().trim()
+        : null;
+    final base =
+        '${_formatLocation(city)}, ${_formatLocation(district)}';
+    return neighborhood == null || neighborhood.isEmpty
+        ? base
+        : '$base, ${_formatLocation(neighborhood)}';
+  }
+
+  void updateState(VoidCallback callback) {
+    if (mounted) setState(callback);
   }
 
   String _currentParentId = "";
@@ -94,6 +388,7 @@ class _HomeScreenState extends State<HomeScreen>
   int _documentLimit = 20;
   bool _isLoadingMore = false;
   bool _isFiltering = false; // YENİ: Filtreleme animasyonu için state
+  QuerySnapshot? _cachedListingsSnapshot;
   late final AnimationController _urgentPulseController;
   late final Animation<double> _urgentPulseScale;
 
@@ -367,7 +662,8 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       // Arama sırasında sonuç kaçırmamak için daha geniş pencere getir.
-      final int effectiveLimit = (isSearchMode || hasCategoryFilter)
+      final int effectiveLimit =
+          (isSearchMode || hasCategoryFilter || _distance < 30.0)
           ? 1000
           : _documentLimit;
       return query.limit(effectiveLimit);
@@ -773,6 +1069,15 @@ class _HomeScreenState extends State<HomeScreen>
                                           ),
                                           const Spacer(),
                                           TextButton(
+                                            style: TextButton.styleFrom(
+                                              minimumSize: Size.zero,
+                                              padding: EdgeInsets.zero,
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                            ),
                                             onPressed: () {
                                               FocusScope.of(context).unfocus();
                                               Navigator.push(
@@ -951,12 +1256,16 @@ class _HomeScreenState extends State<HomeScreen>
                                                       children: [
                                                         Text(
                                                           '₺$formattedPrice',
+                                                          maxLines: 1,
+                                                          softWrap: false,
+                                                          overflow:
+                                                              TextOverflow.clip,
                                                           style:
                                                               LocalFonts.poppins(
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .bold,
-                                                                fontSize: 15,
+                                                                fontSize: 17,
                                                                 color: AppColors
                                                                     .primary,
                                                               ),
@@ -987,7 +1296,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                             data['district'] !=
                                                                 null)
                                                           Text(
-                                                            '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                                            _listingLocationText(data),
                                                             style:
                                                                 LocalFonts.poppins(
                                                                   fontSize: 10,
@@ -1017,6 +1326,10 @@ class _HomeScreenState extends State<HomeScreen>
                           if (_filterCategoryName == tr('all') &&
                               _searchText.isEmpty)
                             _buildAuctionShowcase(), // MÜZAYEDE VİTRİNİ
+
+                          if (_filterCategoryName == tr('all') &&
+                              _searchText.isEmpty)
+                            _buildNearbyListingsPreview(hiddenUsers),
 
                           Padding(
                             padding: const EdgeInsets.fromLTRB(
@@ -1049,6 +1362,7 @@ class _HomeScreenState extends State<HomeScreen>
                                     : StreamBuilder<QuerySnapshot>(
                                         stream: _buildListingsQuery()
                                             .snapshots(),
+                                        initialData: _cachedListingsSnapshot,
                                         builder: (context, snapshot) {
                                           if (snapshot.hasError) {
                                             return Center(
@@ -1084,6 +1398,8 @@ class _HomeScreenState extends State<HomeScreen>
                                               child:
                                                   CircularProgressIndicator(),
                                             );
+                                          _cachedListingsSnapshot =
+                                              snapshot.data;
                                           var filteredDocs = snapshot.data!.docs.where((
                                             doc, // ÖNEMLİ: Arama ve Mesafe gibi karmaşık sorgular Firestore ile doğrudan yapılamaz.
                                             // Bu yüzden bu iki filtreyi mecburen istemci tarafında bırakıyoruz.
@@ -1169,15 +1485,15 @@ class _HomeScreenState extends State<HomeScreen>
                                             if (!isSearchMode &&
                                                 _distance < 30.0 &&
                                                 _userPosition != null) {
-                                              double? lat = data['lat'];
-                                              double? lng = data['lng'];
+                                              final num? lat = data['lat'] as num?;
+                                              final num? lng = data['lng'] as num?;
                                               if (lat != null && lng != null) {
                                                 double dist =
                                                     Geolocator.distanceBetween(
                                                       _userPosition!.latitude,
                                                       _userPosition!.longitude,
-                                                      lat,
-                                                      lng,
+                                                      lat.toDouble(),
+                                                      lng.toDouble(),
                                                     );
                                                 if ((dist / 1000) > _distance)
                                                   matchDistance = false;
@@ -1451,48 +1767,67 @@ class _HomeScreenState extends State<HomeScreen>
 
                                           Widget allListingsHeader =
                                               const SizedBox();
+                                          final visibleDefaultDocs =
+                                              filteredDocs.take(12).toList();
                                           if (isDefaultView &&
                                               filteredDocs.isNotEmpty) {
                                             allListingsHeader = Column(
                                               children: [
                                                 const BannerAdWidget(),
-                                                Row(
-                                                  children: [
-                                                    Text(
-                                                      tr('all_listings'),
-                                                      style: LocalFonts.poppins(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 17,
-                                                      ),
-                                                    ),
-                                                    const Spacer(),
-                                                    TextButton(
-                                                      onPressed: () {
-                                                        FocusScope.of(
-                                                          context,
-                                                        ).unfocus();
-                                                        Navigator.push(
-                                                          context,
-                                                          MaterialPageRoute(
-                                                            builder: (context) =>
-                                                                const AllListingsScreen(),
-                                                          ),
-                                                        );
-                                                      },
-                                                      child: Text(
-                                                        tr('see_all'),
+                                                SizedBox(
+                                                  height: 28,
+                                                  child: Row(
+                                                    children: [
+                                                      Text(
+                                                        tr('all_listings'),
                                                         style:
                                                             LocalFonts.poppins(
-                                                              color: AppColors
-                                                                  .primary,
                                                               fontWeight:
                                                                   FontWeight
                                                                       .bold,
+                                                              fontSize: 17,
                                                             ),
                                                       ),
-                                                    ),
-                                                  ],
+                                                      const Spacer(),
+                                                      TextButton(
+                                                        style: TextButton.styleFrom(
+                                                          minimumSize:
+                                                              Size.zero,
+                                                          padding:
+                                                              EdgeInsets.zero,
+                                                          tapTargetSize:
+                                                              MaterialTapTargetSize
+                                                                  .shrinkWrap,
+                                                          visualDensity:
+                                                              VisualDensity
+                                                                  .compact,
+                                                        ),
+                                                        onPressed: () {
+                                                          FocusScope.of(
+                                                            context,
+                                                          ).unfocus();
+                                                          Navigator.push(
+                                                            context,
+                                                            MaterialPageRoute(
+                                                              builder: (context) =>
+                                                                  const AllListingsScreen(),
+                                                            ),
+                                                          );
+                                                        },
+                                                        child: Text(
+                                                          tr('see_all'),
+                                                          style:
+                                                              LocalFonts.poppins(
+                                                                color: AppColors
+                                                                    .primary,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
                                                 const SizedBox(height: 8),
                                               ],
@@ -1564,25 +1899,6 @@ class _HomeScreenState extends State<HomeScreen>
                                                 }
                                                 if (allImages.isEmpty)
                                                   allImages.add('');
-                                                String distanceText = '';
-                                                if (_distance < 30.0 &&
-                                                    _userPosition != null &&
-                                                    data['lat'] is num &&
-                                                    data['lng'] is num) {
-                                                  final distance =
-                                                      Geolocator.distanceBetween(
-                                                        _userPosition!.latitude,
-                                                        _userPosition!
-                                                            .longitude,
-                                                        (data['lat'] as num)
-                                                            .toDouble(),
-                                                        (data['lng'] as num)
-                                                            .toDouble(),
-                                                      ) /
-                                                      1000;
-                                                  distanceText =
-                                                      '${distance.toStringAsFixed(1)} km';
-                                                }
                                                 bool isCatShowcased =
                                                     data['categoryShowcaseUntil'] !=
                                                         null &&
@@ -1712,17 +2028,6 @@ class _HomeScreenState extends State<HomeScreen>
                                                                                     ),
                                                                               ),
                                                                         ),
-                                                                        if (distanceText
-                                                                            .isNotEmpty)
-                                                                          Positioned(
-                                                                            top:
-                                                                                6,
-                                                                            left:
-                                                                                6,
-                                                                            child: _distanceBadge(
-                                                                              distanceText,
-                                                                            ),
-                                                                          ),
                                                                       ],
                                                                     ),
                                                             ),
@@ -1765,15 +2070,20 @@ class _HomeScreenState extends State<HomeScreen>
                                                                   ),
                                                                   Row(
                                                                     children: [
-                                                                      Text(
-                                                                        '₺$formattedPrice',
-                                                                        style: LocalFonts.poppins(
-                                                                          fontWeight:
-                                                                              FontWeight.bold,
-                                                                          color:
-                                                                              AppColors.primary,
-                                                                          fontSize:
-                                                                              15,
+                                                                      Expanded(
+                                                                        child: FittedBox(
+                                                                          fit: BoxFit
+                                                                              .scaleDown,
+                                                                          alignment:
+                                                                              Alignment.centerLeft,
+                                                                          child: Text(
+                                                                            '₺$formattedPrice',
+                                                                            style: LocalFonts.poppins(
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: AppColors.primary,
+                                                                              fontSize: 17,
+                                                                            ),
+                                                                          ),
                                                                         ),
                                                                       ),
                                                                       if (isCatShowcased)
@@ -1843,7 +2153,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                                       data['district'] !=
                                                                           null)
                                                                     Text(
-                                                                      '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                                                      _listingLocationText(data),
                                                                       style: LocalFonts.poppins(
                                                                         fontSize:
                                                                             11,
@@ -1881,10 +2191,12 @@ class _HomeScreenState extends State<HomeScreen>
                                                     crossAxisSpacing: 16,
                                                     mainAxisSpacing: 16,
                                                   ),
-                                              itemCount: filteredDocs.length,
+                                              itemCount:
+                                                  visibleDefaultDocs.length,
                                               itemBuilder: (context, index) {
                                                 var data =
-                                                    filteredDocs[index].data()
+                                                    visibleDefaultDocs[index]
+                                                        .data()
                                                         as Map<String, dynamic>;
                                                 String
                                                 formattedPrice = data['price']
@@ -1919,25 +2231,6 @@ class _HomeScreenState extends State<HomeScreen>
                                                 }
                                                 if (allImages.isEmpty)
                                                   allImages.add('');
-                                                String gridDistanceText = '';
-                                                if (_distance < 30.0 &&
-                                                    _userPosition != null &&
-                                                    data['lat'] is num &&
-                                                    data['lng'] is num) {
-                                                  final distance =
-                                                      Geolocator.distanceBetween(
-                                                        _userPosition!.latitude,
-                                                        _userPosition!
-                                                            .longitude,
-                                                        (data['lat'] as num)
-                                                            .toDouble(),
-                                                        (data['lng'] as num)
-                                                            .toDouble(),
-                                                      ) /
-                                                      1000;
-                                                  gridDistanceText =
-                                                      '${distance.toStringAsFixed(1)} km';
-                                                }
                                                 bool isCatShowcased =
                                                     data['categoryShowcaseUntil'] !=
                                                         null &&
@@ -2095,39 +2388,47 @@ class _HomeScreenState extends State<HomeScreen>
                                                                   CrossAxisAlignment
                                                                       .start,
                                                               children: [
-                                                                Row(
-                                                                  children: [
-                                                                    Text(
-                                                                      '₺$formattedPrice',
-                                                                      style: LocalFonts.poppins(
-                                                                        fontWeight:
-                                                                            FontWeight.bold,
-                                                                        color: Colors
-                                                                            .blue[900],
-                                                                        fontSize:
-                                                                            16,
+                                                                SizedBox(
+                                                                  height: 28,
+                                                                  child: Row(
+                                                                    children: [
+                                                                      Expanded(
+                                                                        child: FittedBox(
+                                                                          fit: BoxFit
+                                                                              .scaleDown,
+                                                                          alignment:
+                                                                              Alignment.centerLeft,
+                                                                          child: Text(
+                                                                            '₺$formattedPrice',
+                                                                            style: LocalFonts.poppins(
+                                                                              fontWeight: FontWeight.bold,
+                                                                              color: Colors.blue[900],
+                                                                              fontSize: 17,
+                                                                            ),
+                                                                          ),
+                                                                        ),
                                                                       ),
-                                                                    ),
-                                                                    const Spacer(),
-                                                                    if (isCatShowcased)
-                                                                      const Icon(
-                                                                        Icons
-                                                                            .stars,
-                                                                        color: Colors
-                                                                            .orange,
-                                                                        size:
-                                                                            16,
-                                                                      ),
-                                                                    if (isPro)
-                                                                      const Icon(
-                                                                        Icons
-                                                                            .verified,
-                                                                        color: AppColors
-                                                                            .secondary,
-                                                                        size:
-                                                                            16,
-                                                                      ),
-                                                                  ],
+                                                                      const Spacer(),
+                                                                      if (isCatShowcased)
+                                                                        const Icon(
+                                                                          Icons
+                                                                              .stars,
+                                                                          color:
+                                                                              Colors.orange,
+                                                                          size:
+                                                                              16,
+                                                                        ),
+                                                                      if (isPro)
+                                                                        const Icon(
+                                                                          Icons
+                                                                              .verified,
+                                                                          color:
+                                                                              AppColors.secondary,
+                                                                          size:
+                                                                              16,
+                                                                        ),
+                                                                    ],
+                                                                  ),
                                                                 ),
                                                                 const SizedBox(
                                                                   height: 6,
@@ -2149,20 +2450,6 @@ class _HomeScreenState extends State<HomeScreen>
                                                                             .w500,
                                                                   ),
                                                                 ),
-                                                                if (gridDistanceText
-                                                                    .isNotEmpty)
-                                                                  Text(
-                                                                    gridDistanceText,
-                                                                    style: LocalFonts.poppins(
-                                                                      fontSize:
-                                                                          10,
-                                                                      color: AppColors
-                                                                          .primary,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600,
-                                                                    ),
-                                                                  ),
                                                                 const SizedBox(
                                                                   height: 4,
                                                                 ),
@@ -2171,7 +2458,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                                     data['district'] !=
                                                                         null)
                                                                   Text(
-                                                                    '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                                                    _listingLocationText(data),
                                                                     style: LocalFonts.poppins(
                                                                       fontSize:
                                                                           10,
@@ -2203,6 +2490,8 @@ class _HomeScreenState extends State<HomeScreen>
                                                 categorySuggestions,
                                               allListingsHeader,
                                               resultsWidget,
+                                              if (isDefaultView)
+                                                _buildRecentlyViewedSection(),
 
                                               // Alta kaydırırken loading animasyonu çıkart
                                               if (_isLoadingMore &&

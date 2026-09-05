@@ -13,7 +13,9 @@ import '../utils/theme_colors.dart';
 import 'listing_detail_screen.dart';
 
 class NearbyListingsScreen extends StatefulWidget {
-  const NearbyListingsScreen({super.key});
+  final double? initialDistance;
+
+  const NearbyListingsScreen({super.key, this.initialDistance});
 
   @override
   State<NearbyListingsScreen> createState() => _NearbyListingsScreenState();
@@ -48,7 +50,10 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
       setState(() {
         _filterCity = prefs.getString('nearby_filterCity');
         _filterDistrict = prefs.getString('nearby_filterDistrict');
-        _distance = prefs.getDouble('nearby_distance') ?? 30.0;
+        _distance =
+            widget.initialDistance ??
+            prefs.getDouble('nearby_distance') ??
+            30.0;
         _sortBy = prefs.getString('nearby_sortBy') ?? 'distance_asc';
         _isGridView = prefs.getBool('nearby_isGridView') ?? false;
         _minPriceController.text = prefs.getString('nearby_minPrice') ?? "";
@@ -142,6 +147,21 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
           return word[0].toUpperCase() + word.substring(1).toLowerCase();
         })
         .join(' ');
+  }
+
+  String _listingLocationText(Map<String, dynamic> data) {
+    final city = data['city'];
+    final district = data['district'];
+    if (city == null || district == null) return '';
+    final features = data['features'];
+    final neighborhood = features is Map
+        ? features['Mahalle']?.toString().trim()
+        : null;
+    final base =
+        '${_formatLocation(city.toString())}, ${_formatLocation(district.toString())}';
+    return neighborhood == null || neighborhood.isEmpty
+        ? base
+        : '$base, ${_formatLocation(neighborhood)}';
   }
 
   void _showCategoryPickerForFilter(String parentId, String currentPath) {
@@ -1174,7 +1194,7 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                                     if (data['city'] != null &&
                                         data['district'] != null)
                                       Text(
-                                        '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                        _listingLocationText(data),
                                         style: LocalFonts.poppins(
                                           fontSize: 10,
                                           color: Colors.grey[600],
@@ -1444,7 +1464,7 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                                     if (data['city'] != null &&
                                         data['district'] != null)
                                       Text(
-                                        '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                        _listingLocationText(data),
                                         style: LocalFonts.poppins(
                                           fontSize: 11,
                                           color: Colors.grey[600],

@@ -1,6 +1,50 @@
 part of 'home_screen.dart';
 
 extension _HomeScreenController on _HomeScreenState {
+  String? _matchFilterLocation(Iterable<String> values, String? candidate) {
+    final normalized = (candidate ?? '').toLowerCase().replaceAll('ı', 'i');
+    if (normalized.isEmpty) return null;
+    for (final value in values) {
+      final current = value.toLowerCase().replaceAll('ı', 'i');
+      if (current == normalized ||
+          current.contains(normalized) ||
+          normalized.contains(current)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _useCurrentLocationForFilter(
+    void Function(void Function()) setModalState,
+  ) async {
+    await _getUserLocation();
+    final position = _userPosition;
+    if (position == null) return;
+    final placemarks = await Geocoding().placemarkFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+    if (placemarks.isEmpty) return;
+    final place = placemarks.first;
+    final city = _matchFilterLocation(
+      turkeyLocations.keys,
+      place.administrativeArea ?? place.locality,
+    );
+    if (city == null) return;
+    final district = _matchFilterLocation(
+      turkeyLocations[city] ?? const <String>[],
+      place.subAdministrativeArea ?? place.locality,
+    );
+    updateState(() {
+      _filterCity = city;
+      _filterDistrict = district;
+      _filterNeighborhood = place.subLocality;
+      _neighborhoodController.text = place.subLocality ?? '';
+    });
+    setModalState(() {});
+    await _savePreferences();
+  }
   Future<void> _checkPendingDeepLink() async {
     if (pendingDeepLink != null) {
       Uri uri = pendingDeepLink!;
@@ -85,41 +129,41 @@ extension _HomeScreenController on _HomeScreenState {
   void _initSpeech() async {
     try {
       await _speechToText.initialize();
-      setState(() {});
+      updateState(() {});
     } catch (e) {}
   }
 
   void _startListening() async {
     await _speechToText.listen(onResult: _onSpeechResult, localeId: 'tr_TR');
-    setState(() => _isListening = true);
+    updateState(() => _isListening = true);
   }
 
   void _stopListening() async {
     await _speechToText.stop();
-    setState(() => _isListening = false);
+    updateState(() => _isListening = false);
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
-    setState(() {
+    updateState(() {
       _searchController.text = result.recognizedWords;
       _searchText = result.recognizedWords.toLowerCase();
       _isFiltering = true;
     });
     _savePreferences();
     Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) setState(() => _isFiltering = false);
+      if (mounted) updateState(() => _isFiltering = false);
     });
   }
 
   Future<void> _loadPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      setState(() {
+      updateState(() {
         _searchText = prefs.getString('searchText') ?? "";
         if (_searchText.isNotEmpty) _searchController.text = _searchText;
         _filterCity = prefs.getString('filterCity');
         _filterDistrict = prefs.getString('filterDistrict');
-        _distance = prefs.getDouble('distance') ?? 30.0;
+        _distance = prefs.getDouble('homeDistance') ?? 30.0;
         _sortBy = 'date_desc';
         _minPriceController.text = prefs.getString('minPrice') ?? "";
         _maxPriceController.text = prefs.getString('maxPrice') ?? "";
@@ -146,7 +190,7 @@ extension _HomeScreenController on _HomeScreenState {
       } else {
         await prefs.remove('filterDistrict');
       }
-      await prefs.setDouble('distance', _distance);
+      await prefs.setDouble('homeDistance', _distance);
       await prefs.remove('sortBy');
       await prefs.setString('minPrice', _minPriceController.text);
       await prefs.setString('maxPrice', _maxPriceController.text);
@@ -179,7 +223,7 @@ extension _HomeScreenController on _HomeScreenState {
       try {
         Position? cachedPosition = await Geolocator.getLastKnownPosition();
         if (cachedPosition != null && mounted) {
-          setState(() => _userPosition = cachedPosition);
+          updateState(() => _userPosition = cachedPosition);
         }
       } catch (e) {}
 
@@ -187,7 +231,7 @@ extension _HomeScreenController on _HomeScreenState {
         desiredAccuracy: LocationAccuracy.high,
         timeLimit: const Duration(seconds: 15),
       );
-      if (mounted) setState(() => _userPosition = position);
+      if (mounted) updateState(() => _userPosition = position);
     } catch (e) {
       print(e);
     }
@@ -213,7 +257,7 @@ extension _HomeScreenController on _HomeScreenState {
   Future<void> _fetchCategoryFeatures(String categoryId) async {
     if (categoryId.isEmpty) {
       if (mounted) {
-        setState(() {
+        updateState(() {
           _categoryFeatures.clear();
           _featureDropdownValues.clear();
         });
@@ -228,7 +272,7 @@ extension _HomeScreenController on _HomeScreenState {
       if (doc.exists && mounted) {
         var data = doc.data() as Map<String, dynamic>;
         List<dynamic> rawFeatures = data['features'] ?? [];
-        setState(() {
+        updateState(() {
           _categoryFeatures.clear();
           _featureDropdownValues.clear();
           for (var f in rawFeatures) {
@@ -349,54 +393,57 @@ extension _HomeScreenController on _HomeScreenState {
                             ],
                           ),
                         ),
-                        ListTile(
-                          title: Text(
-                            tr('all'),
-                            style: LocalFonts.poppins(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green[700],
+                        Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            title: Text(
+                              tr('all'),
+                              style: LocalFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green[700],
+                              ),
                             ),
-                          ),
-                          trailing: const Icon(
-                            Icons.check,
-                            color: Colors.green,
-                          ),
-                          onTap: () async {
-                            try {
-                              setState(() {
-                                _isFiltering = true;
-                                _filterCategoryName = activePath.isEmpty
-                                    ? tr('all')
-                                    : activePath;
-                                _filterCategoryDisplayName =
-                                    activeDisplayPath.isEmpty
-                                    ? tr('all')
-                                    : activeDisplayPath.split(' > ').last;
-                                if (_filterCategoryName == tr('all')) {
-                                  _currentParentId = "";
-                                  _currentParentName = tr('all');
-                                  _currentParentDisplayName = tr('all');
-                                } else {
-                                  _currentParentId = activeParentId;
-                                  _currentParentName = _filterCategoryName;
-                                  _currentParentDisplayName =
-                                      _filterCategoryDisplayName;
+                            trailing: const Icon(
+                              Icons.check,
+                              color: Colors.green,
+                            ),
+                            onTap: () async {
+                              try {
+                                updateState(() {
+                                  _isFiltering = true;
+                                  _filterCategoryName = activePath.isEmpty
+                                      ? tr('all')
+                                      : activePath;
+                                  _filterCategoryDisplayName =
+                                      activeDisplayPath.isEmpty
+                                      ? tr('all')
+                                      : activeDisplayPath.split(' > ').last;
+                                  if (_filterCategoryName == tr('all')) {
+                                    _currentParentId = "";
+                                    _currentParentName = tr('all');
+                                    _currentParentDisplayName = tr('all');
+                                  } else {
+                                    _currentParentId = activeParentId;
+                                    _currentParentName = _filterCategoryName;
+                                    _currentParentDisplayName =
+                                        _filterCategoryDisplayName;
+                                  }
+                                });
+                                _savePreferences();
+                                await _fetchCategoryFeatures(_currentParentId);
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                  if (openFilterOnClose) {
+                                    _showFilterModal();
+                                  }
                                 }
-                              });
-                              _savePreferences();
-                              await _fetchCategoryFeatures(_currentParentId);
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                if (openFilterOnClose) {
-                                  _showFilterModal();
+                              } finally {
+                                if (mounted) {
+                                  updateState(() => _isFiltering = false);
                                 }
                               }
-                            } finally {
-                              if (mounted) {
-                                setState(() => _isFiltering = false);
-                              }
-                            }
-                          },
+                            },
+                          ),
                         ),
                         const Divider(height: 1),
                         if (docs.isEmpty)
@@ -445,7 +492,7 @@ extension _HomeScreenController on _HomeScreenState {
                                     if (subCats.docs.isEmpty) {
                                       try {
                                         Navigator.pop(context);
-                                        setState(() {
+                                        updateState(() {
                                           _isFiltering = true;
                                           _filterCategoryName = newPath;
                                           _filterCategoryDisplayName =
@@ -466,7 +513,9 @@ extension _HomeScreenController on _HomeScreenState {
                                         }
                                       } finally {
                                         if (mounted) {
-                                          setState(() => _isFiltering = false);
+                                          updateState(
+                                            () => _isFiltering = false,
+                                          );
                                         }
                                       }
                                     } else {
@@ -545,7 +594,7 @@ extension _HomeScreenController on _HomeScreenState {
                                     _filterNeighborhood = null;
                                     _featureDropdownValues.clear();
                                   });
-                                  setState(() {
+                                  updateState(() {
                                     _minPriceController.clear();
                                     _maxPriceController.clear();
                                     _distance = 30.0;
@@ -566,7 +615,7 @@ extension _HomeScreenController on _HomeScreenState {
                                     const Duration(milliseconds: 400),
                                     () {
                                       if (mounted) {
-                                        setState(() => _isFiltering = false);
+                                        updateState(() => _isFiltering = false);
                                       }
                                     },
                                   );
@@ -613,7 +662,7 @@ extension _HomeScreenController on _HomeScreenState {
                               ),
                               onChanged: (val) {
                                 setModalState(() {});
-                                setState(() {});
+                                updateState(() {});
                                 _savePreferences();
                               },
                             ),
@@ -633,7 +682,7 @@ extension _HomeScreenController on _HomeScreenState {
                               ),
                               onChanged: (val) {
                                 setModalState(() {});
-                                setState(() {});
+                                updateState(() {});
                                 _savePreferences();
                               },
                             ),
@@ -670,7 +719,9 @@ extension _HomeScreenController on _HomeScreenState {
                         activeColor: AppColors.primary,
                         onChanged: (val) {
                           setModalState(() => _distance = val);
-                          setState(() => _distance = val);
+                        },
+                        onChangeEnd: (val) {
+                          updateState(() => _distance = val);
                           _savePreferences();
                         },
                       ),
@@ -698,6 +749,16 @@ extension _HomeScreenController on _HomeScreenState {
                         style: LocalFonts.poppins(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              _useCurrentLocationForFilter(setModalState),
+                          icon: const Icon(Icons.my_location),
+                          label: Text(tr('use_current_location')),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -737,7 +798,7 @@ extension _HomeScreenController on _HomeScreenState {
                                   _filterNeighborhood = null;
                                   _neighborhoodController.clear();
                                 });
-                                setState(() {
+                                updateState(() {
                                   _filterCity = val;
                                   _filterDistrict = null;
                                   _filterNeighborhood = null;
@@ -778,7 +839,7 @@ extension _HomeScreenController on _HomeScreenState {
                               ],
                               onChanged: (val) {
                                 setModalState(() => _filterDistrict = val);
-                                setState(() => _filterDistrict = val);
+                                updateState(() => _filterDistrict = val);
                                 _savePreferences();
                               },
                             ),
@@ -798,7 +859,7 @@ extension _HomeScreenController on _HomeScreenState {
                         ),
                         onChanged: (val) {
                           setModalState(() => _filterNeighborhood = val);
-                          setState(() => _filterNeighborhood = val);
+                          updateState(() => _filterNeighborhood = val);
                           _savePreferences();
                         },
                       ),
@@ -847,7 +908,7 @@ extension _HomeScreenController on _HomeScreenState {
                                 setModalState(
                                   () => _featureDropdownValues[name] = val,
                                 );
-                                setState(() {
+                                updateState(() {
                                   _featureDropdownValues[name] = val;
                                   _isFiltering = true;
                                 });
@@ -855,7 +916,7 @@ extension _HomeScreenController on _HomeScreenState {
                                   const Duration(milliseconds: 400),
                                   () {
                                     if (mounted) {
-                                      setState(() => _isFiltering = false);
+                                      updateState(() => _isFiltering = false);
                                     }
                                   },
                                 );
@@ -931,14 +992,14 @@ extension _HomeScreenController on _HomeScreenState {
                       ? const Icon(Icons.check, color: AppColors.primary)
                       : null,
                   onTap: () {
-                    setState(() {
+                    updateState(() {
                       _sortBy = 'date_desc';
                       _isFiltering = true;
                     });
                     _savePreferences();
                     Navigator.pop(context);
                     Future.delayed(const Duration(milliseconds: 400), () {
-                      if (mounted) setState(() => _isFiltering = false);
+                      if (mounted) updateState(() => _isFiltering = false);
                     });
                   },
                 ),
@@ -956,14 +1017,14 @@ extension _HomeScreenController on _HomeScreenState {
                       ? const Icon(Icons.check, color: AppColors.primary)
                       : null,
                   onTap: () {
-                    setState(() {
+                    updateState(() {
                       _sortBy = 'date_asc';
                       _isFiltering = true;
                     });
                     _savePreferences();
                     Navigator.pop(context);
                     Future.delayed(const Duration(milliseconds: 400), () {
-                      if (mounted) setState(() => _isFiltering = false);
+                      if (mounted) updateState(() => _isFiltering = false);
                     });
                   },
                 ),
@@ -981,14 +1042,14 @@ extension _HomeScreenController on _HomeScreenState {
                       ? const Icon(Icons.check, color: AppColors.primary)
                       : null,
                   onTap: () {
-                    setState(() {
+                    updateState(() {
                       _sortBy = 'price_asc';
                       _isFiltering = true;
                     });
                     _savePreferences();
                     Navigator.pop(context);
                     Future.delayed(const Duration(milliseconds: 400), () {
-                      if (mounted) setState(() => _isFiltering = false);
+                      if (mounted) updateState(() => _isFiltering = false);
                     });
                   },
                 ),
@@ -1006,14 +1067,14 @@ extension _HomeScreenController on _HomeScreenState {
                       ? const Icon(Icons.check, color: AppColors.primary)
                       : null,
                   onTap: () {
-                    setState(() {
+                    updateState(() {
                       _sortBy = 'price_desc';
                       _isFiltering = true;
                     });
                     _savePreferences();
                     Navigator.pop(context);
                     Future.delayed(const Duration(milliseconds: 400), () {
-                      if (mounted) setState(() => _isFiltering = false);
+                      if (mounted) updateState(() => _isFiltering = false);
                     });
                   },
                 ),

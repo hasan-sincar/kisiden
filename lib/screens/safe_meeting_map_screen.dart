@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/safe_meeting_point.dart';
 import '../utils/local_fonts.dart';
@@ -30,6 +31,7 @@ class _SafeMeetingMapScreenState extends State<SafeMeetingMapScreen> {
   SafeMeetingPoint? _selectedPoint;
   double _zoom = 13;
   Timer? _rebuildDebounce;
+  bool _locationPermissionGranted = false;
 
   BitmapDescriptor? _singleMarkerIcon;
   BitmapDescriptor? _selectedMarkerIcon;
@@ -42,7 +44,25 @@ class _SafeMeetingMapScreenState extends State<SafeMeetingMapScreen> {
         widget.points.where((p) => p.id == widget.initialSelectedId).isNotEmpty
         ? widget.points.firstWhere((p) => p.id == widget.initialSelectedId)
         : (widget.points.isNotEmpty ? widget.points.first : null);
+    _checkLocationPermission();
     _prepareIconsAndMarkers();
+  }
+
+  Future<void> _checkLocationPermission() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (!mounted) return;
+      setState(() {
+        _locationPermissionGranted =
+            permission == LocationPermission.always ||
+            permission == LocationPermission.whileInUse;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _locationPermissionGranted = false;
+      });
+    }
   }
 
   @override
@@ -255,6 +275,19 @@ class _SafeMeetingMapScreenState extends State<SafeMeetingMapScreen> {
     );
   }
 
+  Future<void> _openDirections(SafeMeetingPoint point) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1'
+      '&destination=${point.latitude},${point.longitude}',
+    );
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yol tarifi açılamadı.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -265,8 +298,8 @@ class _SafeMeetingMapScreenState extends State<SafeMeetingMapScreen> {
               target: _initialTarget,
               zoom: _zoom,
             ),
-            myLocationButtonEnabled: true,
-            myLocationEnabled: true,
+            myLocationButtonEnabled: _locationPermissionGranted,
+            myLocationEnabled: _locationPermissionGranted,
             compassEnabled: true,
             mapToolbarEnabled: false,
             zoomControlsEnabled: false,
@@ -363,40 +396,81 @@ class _SafeMeetingMapScreenState extends State<SafeMeetingMapScreen> {
                       itemBuilder: (context, index) {
                         final point = widget.points[index];
                         final selected = _selectedPoint?.id == point.id;
-                        return ListTile(
-                          selected: selected,
-                          selectedTileColor: const Color(0xFFF0F7FF),
-                          leading: Icon(
-                            Icons.verified_user_outlined,
-                            color: selected
-                                ? Colors.blue[700]
-                                : Colors.grey[700],
-                          ),
-                          title: Text(
-                            point.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: LocalFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
+                        return Material(
+                          color: selected
+                              ? const Color(0xFFF0F7FF)
+                              : Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _focusPoint(point),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.verified_user_outlined,
+                                    color: selected
+                                        ? Colors.blue[700]
+                                        : Colors.grey[700],
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          point.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: LocalFonts.poppins(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${point.address}\n${tr('distance')}: ${_distanceLabel(point.distanceMeters)}',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: LocalFonts.poppins(
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  selected
+                                      ? Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              tooltip: tr('get_directions'),
+                                              onPressed: () =>
+                                                  _openDirections(point),
+                                              icon: const Icon(
+                                                Icons.directions,
+                                                color: Colors.green,
+                                              ),
+                                            ),
+                                            FilledButton(
+                                              onPressed: () =>
+                                                  Navigator.pop(context, point),
+                                              child: Text(tr('select')),
+                                            ),
+                                          ],
+                                        )
+                                      : OutlinedButton.icon(
+                                          onPressed: () => _focusPoint(point),
+                                          icon: const Icon(Icons.map_outlined),
+                                          label: Text(tr('show_on_map')),
+                                        ),
+                                ],
+                              ),
                             ),
                           ),
-                          subtitle: Text(
-                            '${point.address}\n${tr('distance')}: ${_distanceLabel(point.distanceMeters)}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: LocalFonts.poppins(fontSize: 11),
-                          ),
-                          trailing: selected
-                              ? FilledButton(
-                                  onPressed: () =>
-                                      Navigator.pop(context, point),
-                                  child: Text(tr('select')),
-                                )
-                              : OutlinedButton(
-                                  onPressed: () => _focusPoint(point),
-                                  child: Text(tr('show_on_map')),
-                                ),
                         );
                       },
                     ),

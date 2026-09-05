@@ -308,6 +308,12 @@ class _InboxScreenState extends State<InboxScreen> {
                                 listingId: data['listingId'],
                                 listingImage: data['listingImage'],
                                 listingPrice: data['listingPrice']?.toString(),
+                                listingLatitude:
+                                    (data['listingLatitude'] as num?)
+                                        ?.toDouble(),
+                                listingLongitude:
+                                    (data['listingLongitude'] as num?)
+                                        ?.toDouble(),
                               ),
                             ),
                           );

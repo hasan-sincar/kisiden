@@ -177,9 +177,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // YENİ: Apple ile Giriş Yönlendirmesi
   Future<void> _loginWithApple() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
-    var user = await _authService.signInWithApple();
-    if (user != null && mounted) {
+    try {
+      final user = await _authService.signInWithApple();
+      if (user == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+      if (!mounted) return;
       await GuestSessionService.end();
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -187,8 +193,32 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (_) => const RootScreen()),
         (route) => false,
       );
-    } else {
-      if (mounted) setState(() => _isLoading = false);
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_friendlyAppleAuthError(error))),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${tr('generic_try_again_error')}: $error')),
+      );
+    }
+  }
+
+  String _friendlyAppleAuthError(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'canceled':
+      case 'web-context-canceled':
+        return 'Apple ile giriş iptal edildi.';
+      case 'operation-not-allowed':
+        return 'Apple ile giriş Firebase Authentication içinde etkin değil.';
+      case 'invalid-credential':
+        return 'Apple kimlik doğrulaması geçersiz. Lütfen tekrar deneyin.';
+      default:
+        return error.message ?? 'Apple ile giriş yapılamadı.';
     }
   }
 
@@ -296,7 +326,7 @@ class _LoginScreenState extends State<LoginScreen> {
           if (!mounted) return;
           _lastOtpRequestAt = DateTime.now();
           setState(() => _isLoading = false);
-          Navigator.push(
+          Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (_) => OtpScreen(

@@ -10,12 +10,41 @@ class SafeMeetingPointsService {
   static const List<String> _overpassEndpoints = [
     'https://overpass-api.de/api/interpreter',
     'https://lz4.overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
   ];
+  static final Map<String, List<SafeMeetingPoint>> _cache =
+      <String, List<SafeMeetingPoint>>{};
+  static final Map<String, Future<List<SafeMeetingPoint>>> _pending =
+      <String, Future<List<SafeMeetingPoint>>>{};
 
   Future<List<SafeMeetingPoint>> fetchNearbyPoints({
     required double latitude,
     required double longitude,
     int radiusMeters = 3500,
+  }) async {
+    final cacheKey =
+        '${latitude.toStringAsFixed(4)},${longitude.toStringAsFixed(4)}:$radiusMeters';
+    final cached = _cache[cacheKey];
+    if (cached != null) return cached;
+    final pending = _pending[cacheKey];
+    if (pending != null) return pending;
+
+    final request = _fetchNearbyPoints(
+      latitude: latitude,
+      longitude: longitude,
+      radiusMeters: radiusMeters,
+    );
+    _pending[cacheKey] = request;
+    final points = await request;
+    _pending.remove(cacheKey);
+    if (points.isNotEmpty) _cache[cacheKey] = points;
+    return points;
+  }
+
+  Future<List<SafeMeetingPoint>> _fetchNearbyPoints({
+    required double latitude,
+    required double longitude,
+    required int radiusMeters,
   }) async {
     final query =
         '''
@@ -29,6 +58,12 @@ class SafeMeetingPointsService {
 
   node(around:${radiusMeters},${latitude},${longitude})[amenity=townhall];
   way(around:${radiusMeters},${latitude},${longitude})[amenity=townhall];
+  node(around:${radiusMeters},${latitude},${longitude})[amenity=fire_station];
+  way(around:${radiusMeters},${latitude},${longitude})[amenity=fire_station];
+  node(around:${radiusMeters},${latitude},${longitude})[amenity=hospital];
+  way(around:${radiusMeters},${latitude},${longitude})[amenity=hospital];
+  node(around:${radiusMeters},${latitude},${longitude})[amenity=library];
+  way(around:${radiusMeters},${latitude},${longitude})[amenity=library];
 
   node(around:${radiusMeters},${latitude},${longitude})[amenity=bus_station];
   way(around:${radiusMeters},${latitude},${longitude})[amenity=bus_station];
@@ -44,6 +79,10 @@ class SafeMeetingPointsService {
 
   node(around:${radiusMeters},${latitude},${longitude})[amenity=cafe][brand];
   way(around:${radiusMeters},${latitude},${longitude})[amenity=cafe][brand];
+  node(around:${radiusMeters},${latitude},${longitude})[amenity=pharmacy];
+  way(around:${radiusMeters},${latitude},${longitude})[amenity=pharmacy];
+  node(around:${radiusMeters},${latitude},${longitude})[shop=supermarket];
+  way(around:${radiusMeters},${latitude},${longitude})[shop=supermarket];
 
   node(around:${radiusMeters},${latitude},${longitude})[place=square];
   way(around:${radiusMeters},${latitude},${longitude})[place=square];
@@ -54,71 +93,105 @@ out center 120;
     for (final endpoint in _overpassEndpoints) {
       try {
         final response = await http
-            .post(Uri.parse(endpoint), body: {'data': query})
-            .timeout(const Duration(seconds: 12));
+            .post(
+              Uri.parse(endpoint),
+              headers: const {
+                'Accept': 'application/json',
+                'User-Agent': 'KisidenApp/1.0 (safe meeting points)',
+              },
+              body: {'data': query},
+            )
+            .timeout(const Duration(seconds: 8));
 
         if (response.statusCode != 200) {
+          final getResponse = await http
+              .get(
+                Uri.parse(endpoint).replace(queryParameters: {'data': query}),
+                headers: const {
+                  'Accept': 'application/json',
+                  'User-Agent': 'KisidenApp/1.0 (safe meeting points)',
+                },
+              )
+              .timeout(const Duration(seconds: 8));
+          if (getResponse.statusCode != 200) continue;
+          final points = _parsePoints(getResponse.body, latitude, longitude);
+          if (points.isNotEmpty) return points;
           continue;
         }
 
-        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-        final elements = (decoded['elements'] as List<dynamic>? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .toList();
-
-        final points = <SafeMeetingPoint>[];
-        for (final element in elements) {
-          final tags =
-              (element['tags'] as Map<String, dynamic>? ??
-              const <String, dynamic>{});
-          final lat =
-              (element['lat'] as num?)?.toDouble() ??
-              ((element['center'] as Map<String, dynamic>?)?['lat'] as num?)
-                  ?.toDouble();
-          final lon =
-              (element['lon'] as num?)?.toDouble() ??
-              ((element['center'] as Map<String, dynamic>?)?['lon'] as num?)
-                  ?.toDouble();
-
-          if (lat == null || lon == null) {
-            continue;
-          }
-
-          final name = _resolveName(tags);
-          final category = _resolveCategory(tags);
-          if (category == null) {
-            continue;
-          }
-
-          final address = _resolveAddress(tags);
-          final distance = Geolocator.distanceBetween(
-            latitude,
-            longitude,
-            lat,
-            lon,
-          );
-
-          points.add(
-            SafeMeetingPoint(
-              id: '${element['type']}_${element['id']}',
-              name: name,
-              address: address,
-              category: category,
-              latitude: lat,
-              longitude: lon,
-              distanceMeters: distance,
-            ),
-          );
-        }
-
-        points.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
-        return _deduplicate(points).take(20).toList();
+        final points = _parsePoints(response.body, latitude, longitude);
+        if (points.isNotEmpty) return points;
       } catch (_) {
         continue;
       }
     }
 
     return const <SafeMeetingPoint>[];
+  }
+
+  List<SafeMeetingPoint> _parsePoints(
+    String body,
+    double latitude,
+    double longitude,
+  ) {
+    try {
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      final elements = (decoded['elements'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+
+      final points = <SafeMeetingPoint>[];
+      for (final element in elements) {
+        final tags =
+            (element['tags'] as Map<String, dynamic>? ??
+            const <String, dynamic>{});
+        final lat =
+            (element['lat'] as num?)?.toDouble() ??
+            ((element['center'] as Map<String, dynamic>?)?['lat'] as num?)
+                ?.toDouble();
+        final lon =
+            (element['lon'] as num?)?.toDouble() ??
+            ((element['center'] as Map<String, dynamic>?)?['lon'] as num?)
+                ?.toDouble();
+
+        if (lat == null || lon == null) {
+          continue;
+        }
+
+        final name = _resolveName(tags);
+        final category = _resolveCategory(tags);
+        if (category == null) {
+          continue;
+        }
+
+        final address = _resolveAddress(tags);
+        final distance = Geolocator.distanceBetween(
+          latitude,
+          longitude,
+          lat,
+          lon,
+        );
+
+        points.add(
+          SafeMeetingPoint(
+            id: '${element['type']}_${element['id']}',
+            name: name,
+            address: address,
+            category: category,
+            latitude: lat,
+            longitude: lon,
+            distanceMeters: distance,
+          ),
+        );
+      }
+
+      points.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
+      return _deduplicate(points).take(20).toList();
+    } on FormatException {
+      return const <SafeMeetingPoint>[];
+    } on TypeError {
+      return const <SafeMeetingPoint>[];
+    }
   }
 
   String _resolveName(Map<String, dynamic> tags) {
@@ -189,6 +262,7 @@ out center 120;
     final brand = tags['brand']?.toString().toLowerCase() ?? '';
 
     if (shop == 'mall') return 'mall';
+    if (shop == 'supermarket') return 'supermarket';
 
     if (amenity == 'police') {
       if (name.contains('jandarma')) return 'gendarmerie';
@@ -196,6 +270,10 @@ out center 120;
     }
 
     if (amenity == 'townhall') return 'municipality';
+    if (amenity == 'fire_station') return 'fire_station';
+    if (amenity == 'hospital') return 'hospital';
+    if (amenity == 'library') return 'library';
+    if (amenity == 'pharmacy') return 'pharmacy';
     if (amenity == 'bus_station') return 'bus_terminal';
 
     if (station == 'subway') return 'metro';

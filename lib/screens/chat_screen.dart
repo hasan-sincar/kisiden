@@ -9,6 +9,9 @@ import '../services/database_service.dart';
 import '../utils/translations.dart';
 import '../utils/chat_risk_detector.dart';
 import 'listing_detail_screen.dart';
+import '../models/safe_meeting_point.dart';
+import '../services/safe_meeting_points_service.dart';
+import 'safe_meeting_map_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
@@ -17,6 +20,8 @@ class ChatScreen extends StatefulWidget {
   final String? listingId;
   final String? listingImage;
   final String? listingPrice;
+  final double? listingLatitude;
+  final double? listingLongitude;
 
   const ChatScreen({
     super.key,
@@ -26,6 +31,8 @@ class ChatScreen extends StatefulWidget {
     this.listingId,
     this.listingImage,
     this.listingPrice,
+    this.listingLatitude,
+    this.listingLongitude,
   });
 
   @override
@@ -44,10 +51,14 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _chatListingId;
   String? _chatListingImage;
   String? _chatListingPrice;
+  double? _chatListingLatitude;
+  double? _chatListingLongitude;
   ChatRiskAnalysis _composerRisk = ChatRiskDetector.analyze('');
   bool _isRestrictionLoading = true;
   bool _canSendMessage = true;
   bool _canStartNewChat = true;
+  bool _isLoadingMeetingPoints = false;
+  bool _isReceiverTradeEnabled = false;
   int _restrictionLevel = 0;
   String _restrictionReason = '';
   int _restrictionSecondsLeft = 0;
@@ -55,6 +66,53 @@ class _ChatScreenState extends State<ChatScreen> {
   String get _chatRoomId {
     final ids = <String>[currentUserId, widget.receiverId]..sort();
     return ids.join('_');
+  }
+
+  Future<void> _showCounterOfferDialog({
+    required String receiverId,
+    required String listingTitle,
+    required String listingId,
+  }) async {
+    final controller = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('counter_offer')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: tr('your_offer_tl'),
+            prefixText: '₺ ',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(tr('cancel')),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = double.tryParse(
+                controller.text.trim().replaceAll(',', '.'),
+              );
+              if (value == null || value <= 0) return;
+              Navigator.pop(dialogContext, value);
+            },
+            child: Text(tr('send_offer')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (amount == null) return;
+    await _dbService.sendCounterOffer(
+      receiverId: receiverId,
+      listingTitle: listingTitle,
+      listingId: listingId,
+      offerAmount: amount,
+    );
   }
 
   static const List<String> _defaultReadyMessageKeys = <String>[
@@ -79,6 +137,8 @@ class _ChatScreenState extends State<ChatScreen> {
     _chatListingId = widget.listingId;
     _chatListingImage = widget.listingImage;
     _chatListingPrice = widget.listingPrice;
+    _chatListingLatitude = widget.listingLatitude;
+    _chatListingLongitude = widget.listingLongitude;
     _initSpeech();
     _loadChatRestrictions();
     _loadCustomReadyMessages();
@@ -130,6 +190,10 @@ class _ChatScreenState extends State<ChatScreen> {
             'listingId': _chatListingId ?? '',
             'listingImage': _chatListingImage ?? '',
             'listingPrice': _chatListingPrice ?? '',
+            if (_chatListingLatitude != null)
+              'listingLatitude': _chatListingLatitude,
+            if (_chatListingLongitude != null)
+              'listingLongitude': _chatListingLongitude,
             'unreadBy': <String>[],
           }, SetOptions(merge: true));
     } catch (e) {
@@ -144,15 +208,23 @@ class _ChatScreenState extends State<ChatScreen> {
           .doc(_chatRoomId)
           .get();
 
-      if (!chatDoc.exists) return;
-
       final chatData = chatDoc.data() as Map<String, dynamic>?;
-      if (chatData == null) return;
+      if (!chatDoc.exists && (_chatListingId == null || _chatListingId!.isEmpty)) {
+        return;
+      }
+      if (chatData == null) {
+        await _loadReceiverTradeSetting();
+        return;
+      }
 
       final existingTitle = chatData['listingTitle']?.toString();
       final existingId = chatData['listingId']?.toString();
       final existingImage = chatData['listingImage']?.toString();
       final existingPrice = chatData['listingPrice']?.toString();
+      final existingLatitude =
+          (chatData['listingLatitude'] as num?)?.toDouble();
+      final existingLongitude =
+          (chatData['listingLongitude'] as num?)?.toDouble();
 
       if (mounted) {
         setState(() {
@@ -168,6 +240,8 @@ class _ChatScreenState extends State<ChatScreen> {
           _chatListingPrice = (_chatListingPrice?.isNotEmpty == true)
               ? _chatListingPrice
               : (existingPrice?.isNotEmpty == true ? existingPrice : null);
+          _chatListingLatitude ??= existingLatitude;
+          _chatListingLongitude ??= existingLongitude;
         });
       }
 
@@ -185,6 +259,12 @@ class _ChatScreenState extends State<ChatScreen> {
           final listingData = listingDoc.data();
           final resolvedImage = listingData['imageUrl']?.toString() ?? '';
           final resolvedPrice = listingData['price']?.toString() ?? '';
+          final resolvedLatitude =
+              (listingData['lat'] as num?)?.toDouble() ??
+              (listingData['latitude'] as num?)?.toDouble();
+          final resolvedLongitude =
+              (listingData['lng'] as num?)?.toDouble() ??
+              (listingData['longitude'] as num?)?.toDouble();
 
           if (mounted) {
             setState(() {
@@ -197,6 +277,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   resolvedPrice.isNotEmpty) {
                 _chatListingPrice = resolvedPrice;
               }
+              _chatListingLatitude ??= resolvedLatitude;
+              _chatListingLongitude ??= resolvedLongitude;
             });
           }
 
@@ -207,12 +289,117 @@ class _ChatScreenState extends State<ChatScreen> {
                 'listingId': listingDoc.id,
                 if (resolvedImage.isNotEmpty) 'listingImage': resolvedImage,
                 if (resolvedPrice.isNotEmpty) 'listingPrice': resolvedPrice,
+                if (resolvedLatitude != null)
+                  'listingLatitude': resolvedLatitude,
+                if (resolvedLongitude != null)
+                  'listingLongitude': resolvedLongitude,
               }, SetOptions(merge: true));
+        }
+      }
+      await _loadReceiverTradeSetting();
+      if (_chatListingId != null && _chatListingId!.isNotEmpty &&
+          (_chatListingLatitude == null || _chatListingLongitude == null)) {
+        final listing = await FirebaseFirestore.instance
+            .collection('listings')
+            .doc(_chatListingId)
+            .get();
+        final data = listing.data();
+        if (mounted && data != null) {
+          setState(() {
+            _chatListingLatitude =
+                (data['lat'] as num?)?.toDouble() ??
+                (data['latitude'] as num?)?.toDouble();
+            _chatListingLongitude =
+                (data['lng'] as num?)?.toDouble() ??
+                (data['longitude'] as num?)?.toDouble();
+          });
         }
       }
     } catch (e) {
       debugPrint('Hydrate chat listing meta failed: $e');
     }
+  }
+
+  Future<void> _loadReceiverTradeSetting() async {
+    final listingId = _chatListingId;
+    if (listingId == null || listingId.isEmpty) return;
+    final listing = await FirebaseFirestore.instance
+        .collection('listings')
+        .doc(listingId)
+        .get();
+    if (mounted && listing.exists) {
+      setState(() {
+        _isReceiverTradeEnabled =
+            (listing.data()?['tradeEnabled'] as bool?) ?? false;
+      });
+    }
+  }
+
+  Future<void> _showTradeListingPicker() async {
+    if (!_isReceiverTradeEnabled || !_canSendMessage) return;
+    final listings = await _dbService.getUserListingsForTrade(
+      uid: currentUserId,
+    );
+    if (!mounted) return;
+    if (listings.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('trade_offer_missing_own_listing'))),
+      );
+      return;
+    }
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * 0.7,
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: listings.length,
+            itemBuilder: (context, index) {
+              final listing = listings[index];
+              final image = listing['imageUrl']?.toString() ?? '';
+              return Card(
+                child: ListTile(
+                  leading: image.isEmpty
+                      ? const Icon(Icons.image_outlined)
+                      : Image.network(
+                          image,
+                          width: 56,
+                          height: 56,
+                          fit: BoxFit.cover,
+                        ),
+                  title: Text(listing['title']?.toString() ?? ''),
+                  subtitle: Text('₺${listing['price'] ?? ''}'),
+                  onTap: () => Navigator.pop(sheetContext, listing),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    if (selected == null || !_canSendMessage) return;
+    await _dbService.sendMessage(
+      widget.receiverId,
+      'Takas ilanı: ${selected['title'] ?? ''}',
+      _chatListingTitle ?? '',
+      listingId: _chatListingId,
+      listingImage: _chatListingImage,
+      listingPrice: _chatListingPrice,
+      type: 'tradeListing',
+      tradeListingId: selected['id']?.toString(),
+      tradeListingTitle: selected['title']?.toString(),
+      tradeListingImage: selected['imageUrl']?.toString(),
+      tradeListingPrice: (selected['price'] as num?)?.toDouble(),
+    );
+    await _dbService.notifyTradeListingShared(
+      receiverId: widget.receiverId,
+      senderName: FirebaseAuth.instance.currentUser?.displayName?.trim().isNotEmpty == true
+          ? FirebaseAuth.instance.currentUser!.displayName!
+          : tr('user'),
+      listingId: selected['id']?.toString() ?? '',
+    );
   }
 
   List<String> get _defaultReadyMessages =>
@@ -384,6 +571,52 @@ class _ChatScreenState extends State<ChatScreen> {
 
       await _loadChatRestrictions();
     }
+  }
+
+  Future<void> _shareSafeMeetingPoint() async {
+    if (!_canSendMessage ||
+        _chatListingLatitude == null ||
+        _chatListingLongitude == null) {
+      return;
+    }
+    setState(() => _isLoadingMeetingPoints = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Güvenli buluşma noktaları aranıyor...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    final points = await SafeMeetingPointsService().fetchNearbyPoints(
+      latitude: _chatListingLatitude!,
+      longitude: _chatListingLongitude!,
+    );
+    if (!mounted) return;
+    setState(() => _isLoadingMeetingPoints = false);
+    if (points.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Yakında güvenli buluşma noktası bulunamadı.'),
+        ),
+      );
+      return;
+    }
+    final selected = await Navigator.push<SafeMeetingPoint>(
+      context,
+      MaterialPageRoute(builder: (_) => SafeMeetingMapScreen(points: points)),
+    );
+    if (selected == null || !_canSendMessage) return;
+
+    await _dbService.sendMessage(
+      widget.receiverId,
+      'Güvenli buluşma noktası: ${selected.name}',
+      _chatListingTitle ?? '',
+      listingId: _chatListingId,
+      listingImage: _chatListingImage,
+      listingPrice: _chatListingPrice,
+      type: 'safeMeetingPoint',
+      meetingPoint: selected.toMap(),
+    );
+    await _loadChatRestrictions();
   }
 
   void _insertReadyMessage(String message) {
@@ -840,6 +1073,19 @@ class _ChatScreenState extends State<ChatScreen> {
                               .toDouble();
                           String status = data['offerStatus'] ?? 'pending';
                           String messageId = messages[index].id;
+                          final expiresAt = data['offerExpiresAt'];
+                          final isExpired =
+                              status == 'pending' &&
+                              expiresAt is Timestamp &&
+                              expiresAt.toDate().isBefore(DateTime.now());
+                          if (isExpired) status = 'expired';
+                          if (isExpired) {
+                            _dbService.expireOfferIfNeeded(
+                              chatRoomId,
+                              messageId,
+                              isMe ? widget.receiverId : currentUserId,
+                            );
+                          }
 
                           Color statusColor = Colors.orange;
                           String statusText = '${tr('trade_status_pending')} ⏳';
@@ -849,6 +1095,12 @@ class _ChatScreenState extends State<ChatScreen> {
                           } else if (status == 'rejected') {
                             statusColor = Colors.red;
                             statusText = '${tr('trade_status_rejected')} ❌';
+                          } else if (status == 'expired') {
+                            statusColor = Colors.grey;
+                            statusText = '${tr('offer_expired')} ⌛';
+                          } else if (status == 'cancelled') {
+                            statusColor = Colors.grey;
+                            statusText = '${tr('offer_cancelled')}';
                           }
 
                           return Align(
@@ -889,7 +1141,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          isMe
+                                          data['offerKind'] == 'counter'
+                                              ? tr('counter_offer_received')
+                                              : isMe
                                               ? tr('your_offer_to_seller')
                                               : tr('buyers_offer'),
                                           style: LocalFonts.poppins(
@@ -985,7 +1239,40 @@ class _ChatScreenState extends State<ChatScreen> {
                                             ),
                                           ),
                                         ),
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: OutlinedButton.icon(
+                                            onPressed: () =>
+                                                _showCounterOfferDialog(
+                                                  receiverId: data['senderId']
+                                                      .toString(),
+                                                  listingTitle:
+                                                      (_chatListingTitle ?? '')
+                                                          .toString(),
+                                                  listingId:
+                                                      (_chatListingId ?? '')
+                                                          .toString(),
+                                                ),
+                                            icon: const Icon(Icons.swap_horiz),
+                                            label: Text(tr('counter_offer')),
+                                          ),
+                                        ),
                                       ],
+                                    ),
+                                  ],
+                                  if (isMe && status == 'pending') ...[
+                                    const SizedBox(height: 12),
+                                    OutlinedButton.icon(
+                                      onPressed: () =>
+                                          _dbService.updateOfferStatus(
+                                            chatRoomId,
+                                            messageId,
+                                            'cancelled',
+                                            widget.receiverId,
+                                          ),
+                                      icon: const Icon(Icons.undo),
+                                      label: Text(tr('cancel')),
                                     ),
                                   ],
                                 ],
@@ -994,6 +1281,116 @@ class _ChatScreenState extends State<ChatScreen> {
                           );
                         }
                         // -------------------------------------
+
+                        if (data['type'] == 'safeMeetingPoint') {
+                          final rawPoint = data['meetingPoint'];
+                          final point = rawPoint is Map
+                              ? SafeMeetingPoint.fromMap(
+                                  Map<String, dynamic>.from(rawPoint),
+                                )
+                              : null;
+                          if (point == null) return const SizedBox.shrink();
+                          return Align(
+                            alignment: isMe
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Card(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              child: ListTile(
+                                leading: const Icon(
+                                  Icons.verified_user_outlined,
+                                  color: Colors.green,
+                                ),
+                                title: Text(point.name),
+                                subtitle: Text(point.address),
+                                trailing: const Icon(Icons.map_outlined),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => SafeMeetingMapScreen(
+                                      points: [point],
+                                      initialSelectedId: point.id,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+
+                        if (data['type'] == 'tradeListing') {
+                          final tradeListingId =
+                              data['tradeListingId']?.toString() ?? '';
+                          final tradeTitle =
+                              data['tradeListingTitle']?.toString() ?? '';
+                          final tradeImage =
+                              data['tradeListingImage']?.toString() ?? '';
+                          return Align(
+                            alignment: isMe
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Card(
+                              margin: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: tradeListingId.isEmpty
+                                    ? null
+                                    : () async {
+                                        final listing =
+                                            await FirebaseFirestore.instance
+                                                .collection('listings')
+                                                .doc(tradeListingId)
+                                                .get();
+                                        if (!mounted || !listing.exists) {
+                                          return;
+                                        }
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                ListingDetailScreen(
+                                              data: listing.data()!,
+                                              listingId: tradeListingId,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                child: ListTile(
+                                  leading: const Icon(
+                                    Icons.swap_horiz_rounded,
+                                    color: Colors.deepPurple,
+                                  ),
+                                  title: Text(
+                                    tr('trade_listing_shared'),
+                                    style: LocalFonts.poppins(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.deepPurple,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    tradeTitle.isEmpty
+                                        ? tr('listing_detail')
+                                        : tradeTitle,
+                                  ),
+                                  trailing: tradeImage.isEmpty
+                                      ? const Icon(Icons.chevron_right)
+                                      : Image.network(
+                                          tradeImage,
+                                          width: 48,
+                                          height: 48,
+                                          fit: BoxFit.cover,
+                                        ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }
 
                         return Align(
                           alignment: isMe
@@ -1206,6 +1603,53 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
+                          if (_chatListingLatitude != null &&
+                              _chatListingLongitude != null)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.green[50],
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                tooltip: 'Güvenli buluşma noktası paylaş',
+                                icon: _isLoadingMeetingPoints
+                                    ? SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.green[700],
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.location_on_outlined,
+                                        color: Colors.green[700],
+                                      ),
+                                onPressed: _isLoadingMeetingPoints
+                                    ? null
+                                    : _shareSafeMeetingPoint,
+                              ),
+                            ),
+                          if (_chatListingLatitude != null &&
+                              _chatListingLongitude != null)
+                            const SizedBox(width: 8),
+                          if (_isReceiverTradeEnabled)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.deepPurple[50],
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                tooltip: tr('share_trade_listing'),
+                                icon: Icon(
+                                  Icons.swap_horiz_rounded,
+                                  color: Colors.deepPurple[700],
+                                ),
+                                onPressed: _showTradeListingPicker,
+                              ),
+                            ),
+                          if (_isReceiverTradeEnabled)
+                            const SizedBox(width: 8),
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.indigo[50],

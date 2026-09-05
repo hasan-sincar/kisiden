@@ -147,15 +147,6 @@ class MainActivity : FlutterFragmentActivity() {
             .setContentIntent(contentIntent)
             .build()
 
-        try {
-            val extraNotification = notification.javaClass.getDeclaredField("extraNotification")
-            val extraNotificationObject = extraNotification.get(notification)
-            val method = extraNotificationObject.javaClass.getDeclaredMethod("setMessageCount", Int::class.javaPrimitiveType)
-            method.invoke(extraNotificationObject, count)
-        } catch (_: Throwable) {
-            // Xiaomi-specific badge reflection may not exist on every device.
-        }
-
         notificationManager.notify(BADGE_NOTIFICATION_ID, notification)
     }
 }

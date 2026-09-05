@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:appim/utils/local_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter/foundation.dart';
@@ -62,11 +63,15 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
   double _distance = 30.0;
   final TextEditingController _minPriceController = TextEditingController();
   final TextEditingController _maxPriceController = TextEditingController();
+  final TextEditingController _neighborhoodController =
+      TextEditingController();
 
   String? _filterCity;
   String? _filterDistrict;
+  String? _filterNeighborhood;
   Position? _userPosition;
   bool _isGridView = false;
+  QuerySnapshot? _cachedListingsSnapshot;
 
   @override
   void initState() {
@@ -93,6 +98,10 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
             .last;
       if (filters['city'] != null) _filterCity = filters['city'];
       if (filters['district'] != null) _filterDistrict = filters['district'];
+      if (filters['neighborhood'] != null) {
+        _filterNeighborhood = filters['neighborhood'];
+        _neighborhoodController.text = _filterNeighborhood!;
+      }
       if (filters['minPrice'] != null && filters['minPrice'] > 0)
         _minPriceController.text = filters['minPrice'].toStringAsFixed(0);
       if (filters['maxPrice'] != null &&
@@ -108,7 +117,9 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
       setState(() {
         _filterCity = prefs.getString('filterCity');
         _filterDistrict = prefs.getString('filterDistrict');
-        _distance = prefs.getDouble('distance') ?? 30.0;
+        _filterNeighborhood = prefs.getString('allListingsNeighborhood');
+        _neighborhoodController.text = _filterNeighborhood ?? '';
+        _distance = prefs.getDouble('allListingsDistance') ?? 30.0;
         _sortBy = prefs.getString('sortBy') ?? 'date_desc';
         _minPriceController.text = prefs.getString('minPrice') ?? "";
         _maxPriceController.text = prefs.getString('maxPrice') ?? "";
@@ -131,7 +142,16 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
       } else {
         await prefs.remove('filterDistrict');
       }
-      await prefs.setDouble('distance', _distance);
+      if (_filterNeighborhood != null &&
+          _filterNeighborhood!.trim().isNotEmpty) {
+        await prefs.setString(
+          'allListingsNeighborhood',
+          _filterNeighborhood!.trim(),
+        );
+      } else {
+        await prefs.remove('allListingsNeighborhood');
+      }
+      await prefs.setDouble('allListingsDistance', _distance);
       await prefs.setString('sortBy', _sortBy);
       await prefs.setString('minPrice', _minPriceController.text);
       await prefs.setString('maxPrice', _maxPriceController.text);
@@ -144,7 +164,53 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
   void dispose() {
     _minPriceController.dispose();
     _maxPriceController.dispose();
+    _neighborhoodController.dispose();
     super.dispose();
+  }
+
+  String? _matchFilterLocation(Iterable<String> values, String? candidate) {
+    final normalized = (candidate ?? '').toLowerCase().replaceAll('ı', 'i');
+    if (normalized.isEmpty) return null;
+    for (final value in values) {
+      final current = value.toLowerCase().replaceAll('ı', 'i');
+      if (current == normalized ||
+          current.contains(normalized) ||
+          normalized.contains(current)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _useCurrentLocationForFilter(
+    void Function(void Function()) setModalState,
+  ) async {
+    await _getUserLocation();
+    final position = _userPosition;
+    if (position == null) return;
+    final placemarks = await Geocoding().placemarkFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+    if (placemarks.isEmpty) return;
+    final place = placemarks.first;
+    final city = _matchFilterLocation(
+      turkeyLocations.keys,
+      place.administrativeArea ?? place.locality,
+    );
+    if (city == null) return;
+    final district = _matchFilterLocation(
+      turkeyLocations[city] ?? const <String>[],
+      place.subAdministrativeArea ?? place.locality,
+    );
+    setState(() {
+      _filterCity = city;
+      _filterDistrict = district;
+      _filterNeighborhood = place.subLocality;
+      _neighborhoodController.text = place.subLocality ?? '';
+    });
+    setModalState(() {});
+    await _savePreferences();
   }
 
   Future<void> _getUserLocation() async {
@@ -186,6 +252,21 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
           return word[0].toUpperCase() + word.substring(1).toLowerCase();
         })
         .join(' ');
+  }
+
+  String _listingLocationText(Map<String, dynamic> data) {
+    final city = data['city'];
+    final district = data['district'];
+    if (city == null || district == null) return '';
+    final features = data['features'];
+    final neighborhood = features is Map
+        ? features['Mahalle']?.toString().trim()
+        : null;
+    final base =
+        '${_formatLocation(city.toString())}, ${_formatLocation(district.toString())}';
+    return neighborhood == null || neighborhood.isEmpty
+        ? base
+        : '$base, ${_formatLocation(neighborhood)}';
   }
 
   void _showCategoryPickerForFilter(String parentId, String currentPath) {
@@ -438,6 +519,8 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                       activeColor: Colors.blue[800],
                       onChanged: (val) {
                         setModalState(() => _distance = val);
+                      },
+                      onChangeEnd: (val) {
                         setState(() => _distance = val);
                         _savePreferences();
                       },
@@ -467,6 +550,16 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                       style: LocalFonts.poppins(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            _useCurrentLocationForFilter(setModalState),
+                        icon: const Icon(Icons.my_location),
+                        label: Text(tr('use_current_location')),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -503,10 +596,14 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                               setModalState(() {
                                 _filterCity = val;
                                 _filterDistrict = null;
+                                _filterNeighborhood = null;
+                                _neighborhoodController.clear();
                               });
                               setState(() {
                                 _filterCity = val;
                                 _filterDistrict = null;
+                                _filterNeighborhood = null;
+                                _neighborhoodController.clear();
                               });
                               _savePreferences();
                             },
@@ -551,48 +648,21 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
-
-                    Text(
-                      tr('category_selection'),
-                      style: LocalFonts.poppins(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                    TextField(
+                      controller: _neighborhoodController,
+                      decoration: InputDecoration(
+                        labelText: tr('neighborhood_optional'),
+                        border: const OutlineInputBorder(),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () {
-                        Navigator.pop(context); // Mevcut filtre ekranını kapat
-                        _showCategoryPickerForFilter(
-                          "",
-                          "",
-                        ); // Kategori seçiciyi aç
+                      onChanged: (value) {
+                        setModalState(() => _filterNeighborhood = value);
+                        setState(() => _filterNeighborhood = value);
+                        _savePreferences();
                       },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 16,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              _filterCategoryName,
-                              style: LocalFonts.poppins(fontSize: 15),
-                            ),
-                            const Icon(
-                              Icons.arrow_drop_down,
-                              color: Colors.grey,
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 24),
+
+                    const SizedBox(height: 6),
                     ElevatedButton(
                       onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
@@ -785,9 +855,11 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                   .collection('listings')
                   .where('status', isEqualTo: 'active')
                   .snapshots(),
+              initialData: _cachedListingsSnapshot,
               builder: (context, snapshot) {
                 if (!snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
+                _cachedListingsSnapshot = snapshot.data;
 
                 var filteredDocs = snapshot.data!.docs.where((doc) {
                   var data = doc.data() as Map<String, dynamic>;
@@ -817,18 +889,30 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                   bool matchDistrict =
                       _filterDistrict == null ||
                       data['district'] == _filterDistrict;
+                  final features = data['features'];
+                  final listingNeighborhood = features is Map
+                      ? features['Mahalle']?.toString().trim() ?? ''
+                      : '';
+                  final requestedNeighborhood =
+                      _filterNeighborhood?.trim().toLowerCase() ?? '';
+                  final matchNeighborhood = requestedNeighborhood.isEmpty ||
+                      listingNeighborhood.toLowerCase().contains(
+                        requestedNeighborhood,
+                      );
                   bool matchDistance = true;
-                  if (_distance < 30.0 && _userPosition != null) {
-                    double? lat = data['lat'];
-                    double? lng = data['lng'];
-                    if (lat != null && lng != null) {
+                  if (_distance < 30.0) {
+                    final num? lat = data['lat'] as num?;
+                    final num? lng = data['lng'] as num?;
+                    if (_userPosition != null && lat != null && lng != null) {
                       double dist = Geolocator.distanceBetween(
                         _userPosition!.latitude,
                         _userPosition!.longitude,
-                        lat,
-                        lng,
+                        lat.toDouble(),
+                        lng.toDouble(),
                       );
                       if ((dist / 1000) > _distance) matchDistance = false;
+                    } else {
+                      matchDistance = false;
                     }
                   }
                   bool matchPrice = true;
@@ -843,6 +927,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                       matchDistance &&
                       matchCity &&
                       matchDistrict &&
+                      matchNeighborhood &&
                       matchPrice;
                 }).toList();
 
@@ -1026,43 +1111,49 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
-                                              Text(
-                                                '₺$formattedPrice',
-                                                style: LocalFonts.poppins(
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.blue[800],
-                                                  fontSize: 14,
+                                              SizedBox(
+                                                height: 30,
+                                                child: Row(
+                                                  children: [
+                                                    Text(
+                                                      '₺$formattedPrice',
+                                                      maxLines: 1,
+                                                      softWrap: false,
+                                                      style: LocalFonts.poppins(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: Colors.blue[800],
+                                                        fontSize: 15,
+                                                      ),
+                                                    ),
+                                                    if (distanceText
+                                                        .isNotEmpty) ...[
+                                                      const SizedBox(width: 8),
+                                                      _distanceBadge(
+                                                        distanceText,
+                                                      ),
+                                                    ],
+                                                  ],
                                                 ),
                                               ),
                                               const SizedBox(height: 2),
-                                              if (data['city'] != null &&
-                                                  data['district'] != null)
-                                                Text(
-                                                  '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                              SizedBox(
+                                                height: 16,
+                                                child: Text(
+                                                  data['city'] != null &&
+                                                          data['district'] !=
+                                                              null
+                                                      ? _listingLocationText(data)
+                                                      : '',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                   style: LocalFonts.poppins(
                                                     fontSize: 10,
                                                     color: Colors.grey[600],
                                                   ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
                                                 ),
-                                              if (distanceText.isNotEmpty)
-                                                Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                        top: 2,
-                                                      ),
-                                                  child: Text(
-                                                    distanceText,
-                                                    style: LocalFonts.poppins(
-                                                      fontSize: 10,
-                                                      color: Colors.blue[700],
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -1227,9 +1318,14 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                           height: 2,
                                                         ),
                                                         Row(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .center,
                                                           children: [
                                                             Text(
                                                               '₺$formattedPrice',
+                                                              maxLines: 1,
+                                                              softWrap: false,
                                                               style: LocalFonts.poppins(
                                                                 fontWeight:
                                                                     FontWeight
@@ -1280,23 +1376,27 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                         const SizedBox(
                                                           height: 2,
                                                         ),
-                                                        if (data['city'] !=
-                                                                null &&
-                                                            data['district'] !=
-                                                                null)
-                                                          Text(
-                                                            '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                                        SizedBox(
+                                                          height: 16,
+                                                          child: Text(
+                                                            data['city'] !=
+                                                                        null &&
+                                                                    data['district'] !=
+                                                                        null
+                                                                ? _listingLocationText(data)
+                                                                : '',
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
                                                             style:
                                                                 LocalFonts.poppins(
                                                                   fontSize: 10,
                                                                   color: Colors
                                                                       .grey[600],
                                                                 ),
-                                                            maxLines: 1,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
                                                           ),
+                                                        ),
                                                       ],
                                                     ),
                                                   ),

@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/database_service.dart';
 import '../utils/translations.dart';
+import '../utils/theme_colors.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -30,6 +31,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Uint8List? _coverImageBytes; // YENİ
   String _contactPreference = 'both'; // YENİ
   bool _isLoading = false;
+  bool _isSavingProfile = false;
   String _originalPhoneNumber = '';
   DateTime? _lastSmsTime; // YENİ: Spam gönderimi engellemek için eklendi
 
@@ -670,7 +672,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _saveProfile() async {
     if (_nameController.text.trim().isEmpty) return;
 
-    setState(() => _isLoading = true);
+    setState(() => _isSavingProfile = true);
     try {
       String? photoUrl;
       String? coverPhotoUrl;
@@ -708,9 +710,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } catch (e) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('${tr('error')}$e')));
+      ).showSnackBar(
+        SnackBar(
+          content: Text(
+            e is StateError && e.message == 'name_change_cooldown'
+                ? tr('name_change_cooldown')
+                : '${tr('error')}$e',
+          ),
+        ),
+      );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isSavingProfile = false);
     }
   }
 
@@ -724,6 +734,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     TextInputType? keyboardType,
     Color? iconColor,
   }) {
+    final fieldColor = iconColor ?? AppColors.primary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -736,40 +747,58 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          maxLines: maxLines,
-          readOnly: readOnly,
-          keyboardType: keyboardType,
-          style: LocalFonts.poppins(fontSize: 14),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: LocalFonts.poppins(
-              color: Colors.grey[400],
-              fontSize: 14,
-            ),
-            prefixIcon: Icon(
-              icon,
-              color: iconColor ?? Colors.grey[500],
-              size: 22,
-            ),
-            filled: true,
-            fillColor: readOnly ? Colors.grey[100] : Colors.white,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade200),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.blue.shade400, width: 2),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade200),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: fieldColor.withValues(alpha: 0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: controller,
+            maxLines: maxLines,
+            readOnly: readOnly,
+            keyboardType: keyboardType,
+            style: LocalFonts.poppins(fontSize: 14, color: Colors.black87),
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: LocalFonts.poppins(
+                color: Colors.grey[400],
+                fontSize: 14,
+              ),
+              prefixIcon: Padding(
+                padding: const EdgeInsets.all(10),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: fieldColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: fieldColor, size: 20),
+                ),
+              ),
+              filled: true,
+              fillColor: readOnly ? Colors.grey[100] : Colors.white,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: fieldColor, width: 1.6),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
             ),
           ),
         ),
@@ -778,11 +807,48 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
+  Widget _buildSectionHeader(IconData icon, String title, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              style: LocalFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
         title: Text(
           tr('edit_profile'),
           style: LocalFonts.poppins(fontWeight: FontWeight.bold),
@@ -801,7 +867,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ],
         ),
         child: SafeArea(
-          child: _isLoading
+          child: _isSavingProfile
               ? const SizedBox(
                   height: 54,
                   child: Center(child: CircularProgressIndicator()),
@@ -809,7 +875,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               : ElevatedButton(
                   onPressed: _saveProfile,
                   style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
                     minimumSize: const Size(double.infinity, 54),
+                    elevation: 4,
+                    shadowColor: AppColors.primary.withValues(alpha: 0.3),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   child: Text(
                     tr('save_changes'),
@@ -853,23 +926,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           : null,
                     ),
                     child: _coverImageBytes == null
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.add_photo_alternate,
-                                color: Colors.blue[300],
-                                size: 36,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                tr('add_cover_photo'),
-                                style: LocalFonts.poppins(
-                                  color: Colors.blue[800],
-                                  fontWeight: FontWeight.w500,
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.add_photo_alternate,
+                                  color: Colors.blue[300],
+                                  size: 36,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    tr('add_cover_photo'),
+                                    style: LocalFonts.poppins(
+                                      color: Colors.blue[800],
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           )
                         : const Align(
                             alignment: Alignment.topRight,
@@ -979,23 +1065,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.person,
-                              color: Colors.blue[800],
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              tr('personal_information'),
-                              style: LocalFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ],
+                        _buildSectionHeader(
+                          Icons.person,
+                          tr('personal_information'),
+                          Colors.blue.shade800,
                         ),
                         const SizedBox(height: 20),
                         _buildTextField(
@@ -1144,19 +1217,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(Icons.link, color: Colors.blue[800], size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              tr('social_media_and_web'),
-                              style: LocalFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ],
+                        _buildSectionHeader(
+                          Icons.link,
+                          tr('social_media_and_web'),
+                          Colors.indigo.shade700,
                         ),
                         const SizedBox(height: 20),
                         _buildTextField(
@@ -1202,23 +1266,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.security,
-                              color: Colors.blue[800],
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              tr('contact_info_sms_verified'),
-                              style: LocalFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ],
+                        _buildSectionHeader(
+                          Icons.security,
+                          tr('contact_info_sms_verified'),
+                          Colors.green.shade700,
                         ),
                         const SizedBox(height: 8),
                         Text(

@@ -147,6 +147,21 @@ class _ShowcaseListScreenState extends State<ShowcaseListScreen> {
         .join(' ');
   }
 
+  String _listingLocationText(Map<String, dynamic> data) {
+    final city = data['city'];
+    final district = data['district'];
+    if (city == null || district == null) return '';
+    final features = data['features'];
+    final neighborhood = features is Map
+        ? features['Mahalle']?.toString().trim()
+        : null;
+    final base =
+        '${_formatLocation(city.toString())}, ${_formatLocation(district.toString())}';
+    return neighborhood == null || neighborhood.isEmpty
+        ? base
+        : '$base, ${_formatLocation(neighborhood)}';
+  }
+
   void _showCategoryPickerForFilter(String parentId, String currentPath) {
     showModalBottomSheet(
       context: context,
@@ -1244,7 +1259,7 @@ class _ShowcaseListScreenState extends State<ShowcaseListScreen> {
                                             if (data['city'] != null &&
                                                 data['district'] != null)
                                               Text(
-                                                '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                                _listingLocationText(data),
                                                 style: LocalFonts.poppins(
                                                   fontSize: 10,
                                                   color: Colors.grey[600],
@@ -1492,7 +1507,7 @@ class _ShowcaseListScreenState extends State<ShowcaseListScreen> {
                                             if (data['city'] != null &&
                                                 data['district'] != null)
                                               Text(
-                                                '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                                _listingLocationText(data),
                                                 style: LocalFonts.poppins(
                                                   fontSize: 11,
                                                   color: Colors.grey[600],

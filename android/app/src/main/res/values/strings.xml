@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="appim_widget_description">Kisiden hizli erisim</string>
+    <string name="google_maps_api_key">AIzaSyAKWCsCKDWoG2LZfU1VyXwOYGSCztF0td4</string>
 </resources>

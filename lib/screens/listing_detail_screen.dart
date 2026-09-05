@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart'; // YENİ: Web platform kontrolü için
 import 'package:meta_seo/meta_seo.dart'; // YENİ: SEO Meta etiketleri için
 import '../utils/translations.dart';
 import 'story_share_screen.dart'; // YENİ: Hikaye paylaşım ekranı
+import '../services/viewed_listings_service.dart';
 
 String formatRelativeTime(dynamic timestamp) {
   if (timestamp == null) return '';
@@ -107,6 +108,10 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     _dbService.incrementViewCount(
       widget.listingId,
     ); // İlan detayı her açıldığında görüntülenmeyi 1 artırır
+    ViewedListingsService.record(
+      listingId: widget.listingId,
+      data: widget.data,
+    );
   }
 
   Future<void> _loadFeatureLocalizationMaps() async {
@@ -161,6 +166,39 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
         _featureOptionMap = optionMap;
       });
     } catch (_) {}
+  }
+
+  double? _coordinate(dynamic value) {
+    if (value is GeoPoint) return value.latitude;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  double? _listingCoordinate(
+    Map<String, dynamic> listingData,
+    String key,
+  ) {
+    final direct = listingData[key];
+    if (direct != null) {
+      if (direct is GeoPoint) {
+        return key == 'lat' || key == 'latitude'
+            ? direct.latitude
+            : direct.longitude;
+      }
+      final value = _coordinate(direct);
+      if (value != null) return value;
+    }
+    final location = listingData['location'];
+    if (location is GeoPoint) {
+      return key == 'lat' || key == 'latitude'
+          ? location.latitude
+          : location.longitude;
+    }
+    if (location is Map) {
+      final map = Map<String, dynamic>.from(location);
+      return _coordinate(map[key]);
+    }
+    return null;
   }
 
   String _localizedFeatureKey(String rawKey) {
@@ -224,6 +262,32 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text(tr('cannot_open_link'))));
       }
+
+    }
+  }
+
+  Future<void> _showOfferDialog({
+    required String sellerId,
+    required String listingTitle,
+    required String listingId,
+    required double listingPrice,
+  }) async {
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (_) => _OfferAmountDialog(listingPrice: listingPrice),
+    );
+    if (amount == null || !mounted) return;
+    try {
+      await _dbService.sendOffer(sellerId, listingTitle, listingId, amount);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('offer_sent'))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${tr('error')}$e')),
+      );
     }
   }
 
@@ -547,6 +611,21 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
           return word[0].toUpperCase() + word.substring(1).toLowerCase();
         })
         .join(' ');
+  }
+
+  String _listingLocationText(Map<String, dynamic> data) {
+    final city = data['city'];
+    final district = data['district'];
+    if (city == null || district == null) return '';
+    final features = data['features'];
+    final neighborhood = features is Map
+        ? features['Mahalle']?.toString().trim()
+        : null;
+    final base =
+        '${_formatLocation(city.toString())}, ${_formatLocation(district.toString())}';
+    return neighborhood == null || neighborhood.isEmpty
+        ? base
+        : '$base, ${_formatLocation(neighborhood)}';
   }
 
   @override
@@ -1974,7 +2053,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                                                           data['district'] !=
                                                               null)
                                                         Text(
-                                                          '${_formatLocation(data['city'])}, ${_formatLocation(data['district'])}',
+                                                          _listingLocationText(data),
                                                           style:
                                                               LocalFonts.poppins(
                                                                 fontSize: 10,
@@ -2107,8 +2186,56 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                                             listingId: widget.listingId,
                                             listingImage: allImages.first,
                                             listingPrice: formattedPrice,
+                                            listingLatitude:
+                                                _listingCoordinate(
+                                                  listingData,
+                                                  'lat',
+                                                ) ??
+                                                _listingCoordinate(
+                                                  listingData,
+                                                  'latitude',
+                                                ),
+                                            listingLongitude:
+                                                _listingCoordinate(
+                                                  listingData,
+                                                  'lng',
+                                                ) ??
+                                                _listingCoordinate(
+                                                  listingData,
+                                                  'longitude',
+                                                ),
                                           ),
                                         ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              if (showOffer && sellerId.isNotEmpty)
+                                const SizedBox(width: 8),
+                              if (showOffer && sellerId.isNotEmpty)
+                                Expanded(
+                                  child: _buildActionBtn(
+                                    Icons.local_offer,
+                                    tr('make_offer'),
+                                    Colors.purple[600]!,
+                                    () async {
+                                      if (!await _requireRegisteredUser()) {
+                                        return;
+                                      }
+                                      final price = double.tryParse(
+                                        listingData['price']
+                                                ?.toString()
+                                                .replaceAll(',', '.') ??
+                                            '',
+                                      );
+                                      if (price == null) return;
+                                      await _showOfferDialog(
+                                        sellerId: sellerId,
+                                        listingTitle:
+                                            listingData['title']?.toString() ??
+                                                '',
+                                        listingId: widget.listingId,
+                                        listingPrice: price,
                                       );
                                     },
                                   ),
@@ -2317,6 +2444,67 @@ class _AnswerDialogState extends State<_AnswerDialog> {
                   ),
                 )
               : Text(tr('reply'), style: const TextStyle(color: Colors.white)),
+        ),
+      ],
+    );
+  }
+}
+
+class _OfferAmountDialog extends StatefulWidget {
+  final double listingPrice;
+
+  const _OfferAmountDialog({required this.listingPrice});
+
+  @override
+  State<_OfferAmountDialog> createState() => _OfferAmountDialogState();
+}
+
+class _OfferAmountDialogState extends State<_OfferAmountDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = double.tryParse(
+      _controller.text.trim().replaceAll(',', '.'),
+    );
+    if (value == null || value <= 0) return;
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.local_offer, color: Colors.purple),
+          const SizedBox(width: 8),
+          Text(tr('make_offer')),
+        ],
+      ),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: tr('your_offer_tl'),
+          hintText: widget.listingPrice.toStringAsFixed(0),
+          prefixText: '₺ ',
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(tr('cancel')),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(tr('send_offer')),
         ),
       ],
     );

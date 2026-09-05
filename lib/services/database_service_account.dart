@@ -2,6 +2,16 @@ part of 'database_service.dart';
 
 extension DatabaseServiceAccount on DatabaseService {
   Future<void> deleteMyAccountHard() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseFunctionsException(
+        code: 'unauthenticated',
+        message: 'Oturumunuz sona ermiş. Lütfen tekrar giriş yapın.',
+      );
+    }
+
+    // Ensure the callable request carries a current Firebase Auth token.
+    await user.getIdToken(true);
     final callable = FirebaseFunctions.instanceFor(
       region: 'europe-west1',
     ).httpsCallable('deleteMyAccountHard');
@@ -196,23 +206,45 @@ extension DatabaseServiceAccount on DatabaseService {
     String contactPreference,
   ) async {
     final user = _auth.currentUser!;
-    await user.updateDisplayName(name);
+    final userRef = _firestore.collection('users').doc(user.uid);
+    final currentSnapshot = await userRef.get();
+    final currentData = currentSnapshot.data() ?? <String, dynamic>{};
+    final currentName = (currentData['name'] ?? user.displayName ?? '')
+        .toString();
+    final normalizedName = name.trim();
+    final nameChanged = normalizedName != currentName.trim();
+
+    if (nameChanged) {
+      final lastNameChange = currentData['lastNameChangeAt'];
+      if (lastNameChange is Timestamp) {
+        final elapsed = (await _readServerNow()).difference(
+          lastNameChange.toDate(),
+        );
+        if (elapsed < const Duration(days: 30)) {
+          throw StateError('name_change_cooldown');
+        }
+      }
+    }
+
+    await user.updateDisplayName(normalizedName);
     if (photoUrl != null) await user.updatePhotoURL(photoUrl);
     Map<String, dynamic> updateData = {
-      'name': name,
+      'name': normalizedName,
       'email': email,
       'aboutMe': aboutMe,
       'contactPreference': contactPreference,
     };
+    if (nameChanged)
+      updateData['lastNameChangeAt'] = FieldValue.serverTimestamp();
     if (photoUrl != null) updateData['photoUrl'] = photoUrl;
     if (coverPhotoUrl != null) updateData['coverPhotoUrl'] = coverPhotoUrl;
-    await _firestore.collection('users').doc(user.uid).update(updateData);
+    await userRef.update(updateData);
     var listings = await _firestore
         .collection('listings')
         .where('sellerId', isEqualTo: user.uid)
         .get();
     for (var doc in listings.docs) {
-      await doc.reference.update({'sellerName': name});
+      await doc.reference.update({'sellerName': normalizedName});
     }
   }
 

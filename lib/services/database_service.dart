@@ -225,6 +225,9 @@ class DatabaseService {
     required String district,
     bool isDiscountedForAlarms = false,
     bool isOfferEnabled = true,
+    int offerValidityHours = 24,
+    int offerMinimumPercent = 70,
+    double? offerMinimumAmount,
     bool autoRenew = false,
     bool isUrgent = false,
     bool tradeEnabled = false,
@@ -307,6 +310,9 @@ class DatabaseService {
         'additionalImages': additionalImages,
         'features': featuresMap,
         'isOfferEnabled': isOfferEnabled,
+        'offerValidityHours': offerValidityHours,
+        'offerMinimumPercent': offerMinimumPercent,
+        'offerMinimumAmount': offerMinimumAmount,
         'category': category,
         'categoryPath': categoryPath,
         'sellerId': user.uid,
@@ -361,6 +367,10 @@ class DatabaseService {
     bool? tradeEnabled,
     Map<String, dynamic>? tradePreferences,
     bool? isUrgent,
+    bool? isOfferEnabled,
+    int? offerValidityHours,
+    int? offerMinimumPercent,
+    double? offerMinimumAmount,
     bool isAdmin = false,
   }) async {
     if (!isAdmin && await _containsProfanity([title, description])) {
@@ -532,6 +542,18 @@ class DatabaseService {
     if (tradeEnabled != null) data['tradeEnabled'] = tradeEnabled;
     if (tradePreferences != null) data['tradePreferences'] = tradePreferences;
     if (isUrgent != null) data['isUrgent'] = isUrgent;
+    if (isOfferEnabled != null) data['isOfferEnabled'] = isOfferEnabled;
+    if (offerValidityHours != null) {
+      data['offerValidityHours'] = offerValidityHours;
+    }
+    if (offerMinimumPercent != null) {
+      data['offerMinimumPercent'] = offerMinimumPercent;
+    }
+    if (offerMinimumAmount != null) {
+      data['offerMinimumAmount'] = offerMinimumAmount;
+    } else {
+      data['offerMinimumAmount'] = FieldValue.delete();
+    }
 
     // YENI: Vitrin alanlarını koruyun - anasayfa ve kategori vitrini süresi devam etsin
     if (oldData.containsKey('showcaseUntil') &&

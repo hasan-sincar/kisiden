@@ -677,7 +677,6 @@ async function deleteStoragePrefix(prefix) {
 
 exports.deleteMyAccountHard = onCall({
   region: "europe-west1",
-  enforceAppCheck: true,
 }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError("unauthenticated", "Giris yapilmamis.");
@@ -692,6 +691,40 @@ exports.deleteMyAccountHard = onCall({
     await deleteSubcollectionDocs(listingDoc.ref, "questions");
     await listingDoc.ref.delete();
   }
+
+  // 1b) Kullanicinin baska ilanlardaki sorularini ve cevaplarini temizle.
+  // Cevaplar soru dokumaninda dizi olarak tutuldugu icin tum sorular taranir.
+  const questionsGroup = await db.collectionGroup("questions").get();
+  let questionBatch = db.batch();
+  let questionBatchCount = 0;
+  const commitQuestionBatch = async () => {
+    if (questionBatchCount === 0) return;
+    await questionBatch.commit();
+    questionBatch = db.batch();
+    questionBatchCount = 0;
+  };
+
+  for (const questionDoc of questionsGroup.docs) {
+    const question = questionDoc.data() || {};
+    const replies = Array.isArray(question.replies) ? question.replies : [];
+    const filteredReplies = replies.filter(
+      (reply) => !reply || reply.userId !== uid,
+    );
+    const questionWasAskedByUser = question.userId === uid;
+    const repliesChanged = filteredReplies.length !== replies.length;
+
+    if (questionWasAskedByUser) {
+      questionBatch.delete(questionDoc.ref);
+      questionBatchCount += 1;
+    } else if (repliesChanged) {
+      questionBatch.update(questionDoc.ref, { replies: filteredReplies });
+      questionBatchCount += 1;
+    }
+    if (questionBatchCount >= 450) {
+      await commitQuestionBatch();
+    }
+  }
+  await commitQuestionBatch();
 
   // 2) Ust seviye kullaniciya bagli kayitlar
   await deleteDocsByQuery(db.collection("search_alarms").where("userId", "==", uid));
@@ -1613,7 +1646,6 @@ exports.grantListingRights = onCall({
 
 exports.sendUserNotification = onCall({
   region: "europe-west1",
-  enforceAppCheck: true,
 }, async (request) => {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError("unauthenticated", "Giris yapilmamis.");

@@ -7,6 +7,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart'
     as image_compress; // YENİ
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../services/database_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:typed_data'; // YENİ: Byte okumak için
@@ -35,6 +36,11 @@ class _AddListingScreenState extends State<AddListingScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
+  bool _offersEnabled = true;
+  bool _tradeEnabled = false;
+  int _offerValidityHours = 24;
+  int _offerMinimumPercent = 70;
+  final _offerMinimumAmountController = TextEditingController();
   final _neighborhoodController = TextEditingController();
   String? _selectedNeighborhood;
   final DatabaseService _dbService = DatabaseService();
@@ -53,6 +59,8 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
   String? _selectedCity;
   String? _selectedDistrict;
+  Position? _selectedPosition;
+  bool _isDetectingLocation = false;
 
   List<String> _currentNeighborhoods = []; // YENİ: Seçilen ilçenin mahalleleri
   bool _isLoadingNeighborhoods = false; // YENİ: Yükleniyor durumu
@@ -500,6 +508,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
+    _offerMinimumAmountController.dispose();
     _neighborhoodController.dispose();
     for (final controller in _featureTextControllers.values) {
       controller.dispose();
@@ -720,15 +729,69 @@ class _AddListingScreenState extends State<AddListingScreen> {
             return Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    currentDisplayPath.isEmpty
-                        ? tr('select_category')
-                        : currentDisplayPath,
-                    style: LocalFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+                  child: Row(
+                    children: [
+                      if (currentPath.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back),
+                          tooltip: 'Üst kategoriye dön',
+                          onPressed: () async {
+                            final parentSnapshot = await FirebaseFirestore
+                                .instance
+                                .collection('categories')
+                                .doc(parentId)
+                                .get();
+                            if (!context.mounted) return;
+                            final categoryData = parentSnapshot.data();
+                            final grandParentId =
+                                categoryData?['parentId']?.toString() ?? '';
+                            final pathParts = currentPath
+                                .split(' > ')
+                                .where((part) => part.isNotEmpty)
+                                .toList();
+                            final displayParts = currentDisplayPath
+                                .split(' > ')
+                                .where((part) => part.isNotEmpty)
+                                .toList();
+                            pathParts.removeLast();
+                            if (displayParts.isNotEmpty) {
+                              displayParts.removeLast();
+                            }
+                            Navigator.pop(context);
+                            _showCategoryPicker(
+                              grandParentId,
+                              pathParts.join(' > '),
+                              displayParts.join(' > '),
+                              currentAttributes,
+                            );
+                          },
+                        ),
+                      if (currentPath.isEmpty)
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              tr('select_category'),
+                              style: LocalFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: Text(
+                            currentDisplayPath,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: LocalFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 Expanded(
@@ -1023,6 +1086,90 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
   }
 
+  String? _matchLocationValue(Iterable<String> values, String? candidate) {
+    final normalizedCandidate = _normalizeLocationToken(candidate ?? '');
+    if (normalizedCandidate.isEmpty) return null;
+    for (final value in values) {
+      final normalizedValue = _normalizeLocationToken(value);
+      if (normalizedValue == normalizedCandidate ||
+          normalizedValue.contains(normalizedCandidate) ||
+          normalizedCandidate.contains(normalizedValue)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _detectListingLocation() async {
+    if (_isDetectingLocation) return;
+    setState(() => _isDetectingLocation = true);
+    try {
+      final position = await _getUserLocation();
+      if (position == null) {
+        throw StateError(tr('location_not_available'));
+      }
+
+      final placemarks = await Geocoding().placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      if (placemarks.isEmpty) {
+        throw StateError(tr('location_not_available'));
+      }
+
+      final place = placemarks.first;
+      final city = _matchLocationValue(
+        turkeyLocations.keys,
+        place.administrativeArea ?? place.locality,
+      );
+      if (city == null) {
+        throw StateError(tr('location_not_available'));
+      }
+      final district = _matchLocationValue(
+        turkeyLocations[city] ?? const <String>[],
+        place.subAdministrativeArea ?? place.locality,
+      );
+      if (district == null) {
+        throw StateError(tr('location_not_available'));
+      }
+
+      await _ensureNeighborhoodDataLoaded();
+      final neighborhood = _matchLocationValue(
+        _resolveNeighborhoods(city, district),
+        place.subLocality ?? place.thoroughfare,
+      );
+
+      setState(() {
+        _selectedPosition = position;
+        _selectedCity = city;
+        _selectedDistrict = district;
+        _selectedNeighborhood = neighborhood;
+        _neighborhoodController.text = neighborhood ?? '';
+      });
+      await _loadNeighborhoods(city, district);
+      if (!mounted) return;
+      setState(() {
+        _selectedNeighborhood = neighborhood;
+        _neighborhoodController.text = neighborhood ?? '';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${tr('location_detected')}: $city, $district'
+            '${neighborhood == null ? '' : ', $neighborhood'}',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${tr('location_error')}: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isDetectingLocation = false);
+    }
+  }
+
   Future<void> _submitListing() async {
     if (selectedCategoryId == null) {
       ScaffoldMessenger.of(
@@ -1125,7 +1272,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        Position? position = await _getUserLocation();
+        Position? position = _selectedPosition ?? await _getUserLocation();
         setState(() {
           _loadingText = tr('processing_listing');
         });
@@ -1165,7 +1312,14 @@ class _AddListingScreenState extends State<AddListingScreen> {
               city: _selectedCity!,
               district: _selectedDistrict!,
               isDiscountedForAlarms: isDiscountedForAlarms,
+              isOfferEnabled: _offersEnabled,
+              offerValidityHours: _offerValidityHours,
+              offerMinimumPercent: _offerMinimumPercent,
+              offerMinimumAmount: double.tryParse(
+                _offerMinimumAmountController.text.trim().replaceAll(',', '.'),
+              ),
               autoRenew: false,
+              tradeEnabled: _tradeEnabled,
             );
             if (success && mounted) {
               // YENİ: Kullanıcıyı animasyonlu başarı ekranına yönlendir
@@ -1200,10 +1354,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
             if (mounted)
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(errMsg),
-                  backgroundColor: Colors.red,
-                ),
+                SnackBar(content: Text(errMsg), backgroundColor: Colors.red),
               );
           }
         } else {
@@ -1211,7 +1362,11 @@ class _AddListingScreenState extends State<AddListingScreen> {
           if (mounted)
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(tr('image_upload_failed') + ' ' + tr('check_console_for_details')),
+                content: Text(
+                  tr('image_upload_failed') +
+                      ' ' +
+                      tr('check_console_for_details'),
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -1834,6 +1989,91 @@ class _AddListingScreenState extends State<AddListingScreen> {
           ),
         ),
         const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(tr('offer_settings')),
+                  subtitle: Text(tr('offer_settings_desc')),
+                  value: _offersEnabled,
+                  onChanged: (value) =>
+                      setState(() => _offersEnabled = value),
+                ),
+                if (_offersEnabled) ...[
+                  DropdownButtonFormField<int>(
+                    value: _offerValidityHours,
+                    decoration: InputDecoration(
+                      labelText: tr('offer_validity'),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 24, child: Text('24 saat')),
+                      DropdownMenuItem(value: 48, child: Text('48 saat')),
+                    ],
+                    onChanged: (value) => setState(
+                      () => _offerValidityHours = value ?? 24,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    value: _offerMinimumPercent,
+                    decoration: InputDecoration(
+                      labelText: tr('offer_minimum_percent'),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 70, child: Text('%70')),
+                      DropdownMenuItem(value: 80, child: Text('%80')),
+                      DropdownMenuItem(value: 90, child: Text('%90')),
+                    ],
+                    onChanged: (value) => setState(
+                      () => _offerMinimumPercent = value ?? 70,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _offerMinimumAmountController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: tr('offer_minimum_amount'),
+                      prefixText: '₺ ',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: SwitchListTile(
+            title: Text(tr('trade_settings')),
+            subtitle: Text(tr('trade_settings_desc')),
+            value: _tradeEnabled,
+            onChanged: (value) => setState(() => _tradeEnabled = value),
+          ),
+        ),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isDetectingLocation ? null : _detectListingLocation,
+            icon: _isDetectingLocation
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location),
+            label: Text(
+              _isDetectingLocation
+                  ? tr('getting_location')
+                  : tr('use_current_location'),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
 
         Row(
           children: [

@@ -6,7 +6,6 @@ import '../services/database_service.dart';
 import '../utils/turkey_locations.dart';
 import '../utils/translations.dart';
 import 'all_listings_screen.dart';
-import '../utils/theme_colors.dart';
 
 class SearchAlarmsScreen extends StatefulWidget {
   const SearchAlarmsScreen({super.key});
@@ -115,53 +114,60 @@ class _SearchAlarmsScreenState extends State<SearchAlarmsScreen> {
                       ),
                     ],
                   ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
-                    ),
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.amber[50],
-                      child: Icon(
-                        Icons.notifications_active,
-                        color: Colors.amber[600],
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(16),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
                       ),
-                    ),
-                    title: Text(
-                      catName,
-                      style: LocalFonts.poppins(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.amber[50],
+                        child: Icon(
+                          Icons.notifications_active,
+                          color: Colors.amber[600],
+                        ),
                       ),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 4),
-                        if (data['city'] != null)
-                          Text(
-                            '📍 ${data['city']} ${data['district'] != null ? "- ${data['district']}" : ""}',
-                            style: LocalFonts.poppins(
-                              fontSize: 12,
-                              color: Colors.grey[600],
+                      title: Text(
+                        catName,
+                        style: LocalFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 4),
+                          if (data['city'] != null)
+                            Text(
+                              '📍 ${data['city']} ${data['district'] != null ? "- ${data['district']}" : ""}',
+                              style: LocalFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
                             ),
-                          ),
-                        if (data['minPrice'] != null ||
-                            data['maxPrice'] != null)
-                          Text(
-                            '💰 ${data['minPrice'] ?? 0}₺ - ${data['maxPrice'] == 0 || data['maxPrice'] == null ? tr('unlimited') : "${data['maxPrice']}₺"}',
-                            style: LocalFonts.poppins(
-                              fontSize: 12,
-                              color: Colors.green[700],
-                              fontWeight: FontWeight.w600,
+                          if (data['minPrice'] != null ||
+                              data['maxPrice'] != null)
+                            Text(
+                              '💰 ${data['minPrice'] ?? 0}₺ - ${data['maxPrice'] == 0 || data['maxPrice'] == null ? tr('unlimited') : "${data['maxPrice']}₺"}',
+                              style: LocalFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.green[700],
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () =>
-                          _dbService.deleteSearchAlarm(alarms[index].id),
+                        ],
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.red,
+                        ),
+                        onPressed: () =>
+                            _dbService.deleteSearchAlarm(alarms[index].id),
+                      ),
                     ),
                   ),
                 );

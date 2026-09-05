@@ -83,17 +83,28 @@ class AuthService {
           ],
           nonce: nonce,
         );
+        final identityToken = appleIdCredential.identityToken;
+        if (identityToken == null || identityToken.isEmpty) {
+          throw FirebaseAuthException(
+            code: 'apple-missing-identity-token',
+            message: 'Apple kimlik doğrulama belirteci alınamadı.',
+          );
+        }
 
         final oauthCredential = OAuthProvider('apple.com').credential(
-          idToken: appleIdCredential.identityToken,
+          idToken: identityToken,
           rawNonce: rawNonce,
         );
 
         return await _auth.signInWithCredential(oauthCredential);
       }
+    } on FirebaseAuthException {
+      rethrow;
     } catch (e) {
-      print("Apple Giriş Hatası: $e");
-      return null;
+      throw FirebaseAuthException(
+        code: 'apple-sign-in-failed',
+        message: 'Apple ile giriş yapılamadı: $e',
+      );
     }
   }
 

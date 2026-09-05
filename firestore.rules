@@ -20,8 +20,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function currentUserDocExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function isFutureTimestamp(fieldName) {
       return isSignedIn()
+        && currentUserDocExists()
+        && currentUserDoc().data.keys().hasAny([fieldName])
         && currentUserDoc().data[fieldName] is timestamp
         && currentUserDoc().data[fieldName] > request.time;
     }
@@ -69,7 +75,7 @@ service cloud.firestore {
       // Bu kural, kullanıcıların kendi kendilerine Pro üyelik veya ilan hakkı gibi kritik verileri atamasını engeller.
       allow update: if isAdmin() || (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           // Kullanıcının kendisinin değiştirebileceği güvenli alanlar
-          'name', 'photoUrl', 'coverPhotoUrl', 'aboutMe', 'contactPreference',
+          'name', 'lastNameChangeAt', 'photoUrl', 'coverPhotoUrl', 'aboutMe', 'contactPreference',
           'instagram', 'facebook', 'website', 'fcmToken', 'emailNotifications',
           'emailNotificationsEnabled', 'blockedUsers', 'languageCode',
           'phoneNumber', 'email', 'profileSetupSkipped',
@@ -177,7 +183,11 @@ service cloud.firestore {
         && request.resource.data.senderId == request.auth.uid
         && request.resource.data.message is string
         && request.resource.data.message.size() > 0
-        && request.resource.data.message.size() <= 2000;
+        && request.resource.data.message.size() <= 2000
+        && (!('type' in request.resource.data)
+          || request.resource.data.type is string)
+        && (!('meetingPoint' in request.resource.data)
+          || request.resource.data.meetingPoint is map);
 
       allow update: if isChatParticipant(chatId)
         && request.resource.data.senderId == resource.data.senderId

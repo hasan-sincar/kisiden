@@ -527,6 +527,11 @@ class ProfileScreen extends StatelessWidget {
 
                     // MENÜ LİSTESİ
                     // YENİ: Kullanıcı Pro olsa bile süresini uzatabilmesi için menüyü gizlemiyoruz
+                    _buildMenuSection(
+                      title: tr('account_features'),
+                      icon: Icons.dashboard_customize_outlined,
+                      color: AppColors.primary,
+                      children: [
                     _buildMenuTile(
                       Icons.workspace_premium,
                       isPro ? 'Pro Paketini Uzat / Yenile' : tr('upgrade_pro'),
@@ -632,61 +637,91 @@ class ProfileScreen extends StatelessWidget {
                         );
                       },
                     ),
+                      ],
+                    ),
 
                     const SizedBox(height: 20),
-                    _buildMenuTile(
-                      Icons.language,
-                      tr('language'),
-                      Colors.teal,
-                      () => _showLanguageDialog(context),
+                    _buildMenuSection(
+                      title: tr('preferences'),
+                      icon: Icons.tune,
+                      color: Colors.teal,
+                      children: [
+                        _buildMenuTile(
+                          Icons.language,
+                          tr('language'),
+                          Colors.teal,
+                          () => _showLanguageDialog(context),
+                        ),
+                      ],
                     ),
 
                     if (isAdmin) ...[
-                      _buildMenuTile(
-                        Icons.admin_panel_settings,
-                        tr('admin_panel'),
-                        Colors.purple,
-                        () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const AdminPanelScreen(),
+                      _buildMenuSection(
+                        title: tr('administration'),
+                        icon: Icons.admin_panel_settings,
+                        color: Colors.purple,
+                        children: [
+                          _buildMenuTile(
+                            Icons.admin_panel_settings,
+                            tr('admin_panel'),
+                            Colors.purple,
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AdminPanelScreen(),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
 
                     const SizedBox(height: 20),
-                    _buildMenuTile(
-                      Icons.info_outline,
-                      tr('about_us'),
-                      Colors.grey[700]!,
-                      () => _openLegalPage(context, 'about'),
-                    ),
-                    _buildMenuTile(
-                      Icons.privacy_tip_outlined,
-                      tr('privacy_policy'),
-                      Colors.grey[700]!,
-                      () => _openLegalPage(context, 'privacy'),
-                    ),
-                    _buildMenuTile(
-                      Icons.rule,
-                      tr('terms_of_use'),
-                      Colors.grey[700]!,
-                      () => _openLegalPage(context, 'terms'),
+                    _buildMenuSection(
+                      title: tr('information_and_legal'),
+                      icon: Icons.info_outline,
+                      color: AppColors.primary,
+                      children: [
+                        _buildMenuTile(
+                          Icons.info_outline,
+                          tr('about_us'),
+                          Colors.grey[700]!,
+                          () => _openLegalPage(context, 'about'),
+                        ),
+                        _buildMenuTile(
+                          Icons.privacy_tip_outlined,
+                          tr('privacy_policy'),
+                          Colors.grey[700]!,
+                          () => _openLegalPage(context, 'privacy'),
+                        ),
+                        _buildMenuTile(
+                          Icons.rule,
+                          tr('terms_of_use'),
+                          Colors.grey[700]!,
+                          () => _openLegalPage(context, 'terms'),
+                        ),
+                      ],
                     ),
 
                     const SizedBox(height: 20),
-                    _buildMenuTile(
-                      Icons.logout,
-                      tr('logout'),
-                      Colors.orange,
-                      () => _logout(context),
-                    ),
-                    _buildMenuTile(
-                      Icons.delete_forever,
-                      tr('delete_account'),
-                      Colors.red,
-                      () => _deleteAccount(context),
+                    _buildMenuSection(
+                      title: tr('account_actions'),
+                      icon: Icons.manage_accounts_outlined,
+                      color: Colors.orange,
+                      children: [
+                        _buildMenuTile(
+                          Icons.logout,
+                          tr('logout'),
+                          Colors.orange,
+                          () => _logout(context),
+                        ),
+                        _buildMenuTile(
+                          Icons.delete_forever,
+                          tr('delete_account'),
+                          Colors.red,
+                          () => _deleteAccount(context),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 40),
                   ],
@@ -720,6 +755,57 @@ class ProfileScreen extends StatelessWidget {
       ),
       trailing: const Icon(Icons.chevron_right, color: Colors.grey),
       onTap: onTap,
+    );
+  }
+
+  Widget _buildMenuSection({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required List<Widget> children,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: LocalFonts.poppins(
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...children,
+        ],
+      ),
     );
   }
 }

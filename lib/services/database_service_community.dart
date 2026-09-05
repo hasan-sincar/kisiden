@@ -414,15 +414,20 @@ extension DatabaseServiceCommunity on DatabaseService {
         region: 'europe-west1',
       ).httpsCallable('sendUserNotification');
 
-      await callable.call({
-        'receiverId': userId,
-        'title': title,
-        'message': message,
-        'type': type,
-        'targetId': targetId,
-        'reason': reason ?? '',
-        'source': source.isNotEmpty ? source : 'system',
-      });
+      try {
+        await callable.call({
+          'receiverId': userId,
+          'title': title,
+          'message': message,
+          'type': type,
+          'targetId': targetId,
+          'reason': reason ?? '',
+          'source': source.isNotEmpty ? source : 'system',
+        });
+      } catch (error) {
+        // Bildirim başarısızlığı ana işlemi (ilan, mesaj veya teklif) bozmasın.
+        debugPrint('Kullanıcı bildirimi gönderilemedi: $error');
+      }
       return;
     }
 
@@ -443,6 +448,12 @@ extension DatabaseServiceCommunity on DatabaseService {
     int? riskScore,
     String? riskLevel,
     List<String>? riskSignals,
+    String? type,
+    Map<String, dynamic>? meetingPoint,
+    String? tradeListingId,
+    String? tradeListingTitle,
+    String? tradeListingImage,
+    double? tradeListingPrice,
   }) async {
     if (await _containsProfanity([message])) {
       final ctx = navigatorKey.currentContext;
@@ -487,8 +498,30 @@ extension DatabaseServiceCommunity on DatabaseService {
           if (riskLevel != null && riskLevel.isNotEmpty) 'riskLevel': riskLevel,
           if (riskSignals != null && riskSignals.isNotEmpty)
             'riskSignals': riskSignals,
+          if (type != null && type.isNotEmpty) 'type': type,
+          if (meetingPoint != null) 'meetingPoint': meetingPoint,
+          if (tradeListingId != null && tradeListingId.isNotEmpty)
+            'tradeListingId': tradeListingId,
+          if (tradeListingTitle != null) 'tradeListingTitle': tradeListingTitle,
+          if (tradeListingImage != null) 'tradeListingImage': tradeListingImage,
+          if (tradeListingPrice != null) 'tradeListingPrice': tradeListingPrice,
           'timestamp': FieldValue.serverTimestamp(),
         });
+  }
+
+  Future<void> notifyTradeListingShared({
+    required String receiverId,
+    required String senderName,
+    required String listingId,
+  }) async {
+    await sendNotification(
+      receiverId,
+      'notif_title_trade_listing_shared',
+      'notif_msg_trade_listing_shared',
+      messageArgs: [senderName],
+      type: 'trade_offer',
+      targetId: listingId,
+    );
   }
 
   Future<List<String>> getCustomReadyMessages() async {
@@ -528,10 +561,65 @@ extension DatabaseServiceCommunity on DatabaseService {
     String listingTitle,
     String listingId,
     double offerAmount,
+  ) {
+    return _sendOfferInternal(
+      receiverId,
+      listingTitle,
+      listingId,
+      offerAmount,
+      false,
+    );
+  }
+
+  Future<void> _sendOfferInternal(
+    String receiverId,
+    String listingTitle,
+    String listingId,
+    double offerAmount,
+    bool isCounterOffer,
   ) async {
     final currentUserId = _auth.currentUser!.uid;
+    final listingSnap = await _firestore
+        .collection('listings')
+        .doc(listingId)
+        .get();
+    final listing = listingSnap.data();
+    if (listing == null ||
+        (!isCounterOffer && listing['sellerId'] != receiverId)) {
+      throw StateError('offer_listing_unavailable');
+    }
+    if (listing['isOfferEnabled'] == false) {
+      throw StateError('offers_disabled');
+    }
+    final price = (listing['price'] as num?)?.toDouble() ?? 0;
+    final minimumPercent =
+        (listing['offerMinimumPercent'] as num?)?.toInt() ?? 70;
+    final minimumAmount =
+        (listing['offerMinimumAmount'] as num?)?.toDouble() ?? 0;
+    final requiredAmount = max(price * minimumPercent / 100, minimumAmount);
+    if (offerAmount < requiredAmount) {
+      throw StateError('offer_below_minimum');
+    }
     List<String> ids = [currentUserId, receiverId]..sort();
     String chatRoomId = ids.join('_');
+    final recentOffers = await _firestore
+        .collection('chats')
+        .doc(chatRoomId)
+        .collection('messages')
+        .where('senderId', isEqualTo: currentUserId)
+        .get();
+    final cutoff = DateTime.now().subtract(const Duration(minutes: 10));
+    final recentCount = recentOffers.docs.where((doc) {
+      final data = doc.data();
+      final timestamp = data['timestamp'];
+      return data['type'] == 'offer' &&
+          data['listingId'] == listingId &&
+          timestamp is Timestamp &&
+          timestamp.toDate().isAfter(cutoff);
+    }).length;
+    if (recentCount >= 3) throw StateError('offer_rate_limited');
+    final validityHours =
+        (listing['offerValidityHours'] as num?)?.toInt() ?? 24;
     String messageText = 'Yeni bir teklif: ₺${offerAmount.toStringAsFixed(0)}';
 
     await _firestore.collection('chats').doc(chatRoomId).set({
@@ -553,14 +641,34 @@ extension DatabaseServiceCommunity on DatabaseService {
           'type': 'offer',
           'offerAmount': offerAmount,
           'offerStatus': 'pending',
+          'offerKind': isCounterOffer ? 'counter' : 'initial',
+          'offerExpiresAt': Timestamp.fromDate(
+            DateTime.now().add(Duration(hours: validityHours)),
+          ),
           'listingId': listingId,
           'timestamp': FieldValue.serverTimestamp(),
         });
     await sendNotification(
       receiverId,
-      'notif_title_new_reply',
-      'notif_msg_new_reply',
+      isCounterOffer ? 'notif_title_counter_offer' : 'notif_title_new_offer',
+      isCounterOffer ? 'notif_msg_counter_offer' : 'notif_msg_new_offer',
+      messageArgs: isCounterOffer ? null : [listingTitle],
       type: 'chat',
+    );
+  }
+
+  Future<void> sendCounterOffer({
+    required String receiverId,
+    required String listingTitle,
+    required String listingId,
+    required double offerAmount,
+  }) async {
+    await _sendOfferInternal(
+      receiverId,
+      listingTitle,
+      listingId,
+      offerAmount,
+      true,
     );
   }
 
@@ -576,10 +684,44 @@ extension DatabaseServiceCommunity on DatabaseService {
         .collection('messages')
         .doc(messageId)
         .update({'offerStatus': status});
+    final titleKey = switch (status) {
+      'accepted' => 'notif_title_offer_accepted',
+      'rejected' => 'notif_title_offer_rejected',
+      'cancelled' => 'notif_title_offer_cancelled',
+      _ => 'notif_title_new_reply',
+    };
+    final messageKey = switch (status) {
+      'accepted' => 'notif_msg_offer_accepted',
+      'rejected' => 'notif_msg_offer_rejected',
+      'cancelled' => 'notif_msg_offer_cancelled',
+      _ => 'notif_msg_new_reply',
+    };
+    await sendNotification(receiverId, titleKey, messageKey, type: 'chat');
+  }
+
+  Future<void> expireOfferIfNeeded(
+    String chatRoomId,
+    String messageId,
+    String receiverId,
+  ) async {
+    final ref = _firestore
+        .collection('chats')
+        .doc(chatRoomId)
+        .collection('messages')
+        .doc(messageId);
+    final snap = await ref.get();
+    final data = snap.data();
+    final expiresAt = data?['offerExpiresAt'];
+    if (data?['offerStatus'] != 'pending' ||
+        expiresAt is! Timestamp ||
+        expiresAt.toDate().isAfter(DateTime.now())) {
+      return;
+    }
+    await ref.update({'offerStatus': 'expired'});
     await sendNotification(
       receiverId,
-      'notif_title_new_reply',
-      'notif_msg_new_reply',
+      'notif_title_offer_expired',
+      'notif_msg_offer_expired',
       type: 'chat',
     );
   }
@@ -761,7 +903,7 @@ extension DatabaseServiceCommunity on DatabaseService {
 
   Future<List<Map<String, dynamic>>> getUserListingsForTrade({
     required String uid,
-    int limit = 20,
+    int limit = 1000,
   }) async {
     final snap = await _firestore
         .collection('listings')
