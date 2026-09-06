@@ -26,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   DateTime? _lastOtpRequestAt;
   DateTime? _otpBlockedUntil;
   static const int _otpCooldownSeconds = 60;
+  static const bool _socialLoginEnabled = false;
 
   bool _is17010Error(FirebaseAuthException error) {
     final rawMessage = (error.message ?? '').toLowerCase();
@@ -232,8 +233,9 @@ class _LoginScreenState extends State<LoginScreen> {
       case 'invalid-credential':
         return 'Apple kimlik doğrulaması geçersiz. Lütfen tekrar deneyin.';
       case 'apple-authorization-error-1000':
-        return 'Apple ile giriş yapılandırması tamamlanmamış. Lütfen uygulamayı '
-            'güncelleyip tekrar deneyin.';
+        return 'Apple ile giriş bu TestFlight build\'inde yetkili değil. '
+            'Apple Developer\'da com.kisidencom.appim için Sign in with Apple '
+            'capability ve provisioning profilini yenileyin.';
       default:
         return error.message ?? 'Apple ile giriş yapılamadı.';
     }
@@ -552,67 +554,35 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Divider(
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: Text(
-                                tr('or').toUpperCase(),
-                                style: LocalFonts.poppins(
-                                  color: Colors.white70,
-                                  fontSize: 12,
+                        if (_socialLoginEnabled) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Divider(
+                                  color: Colors.white.withValues(alpha: 0.5),
                                 ),
                               ),
-                            ),
-                            Expanded(
-                              child: Divider(
-                                color: Colors.white.withValues(alpha: 0.5),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Text(
+                                  tr('or').toUpperCase(),
+                                  style: LocalFonts.poppins(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 55),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            side: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.5),
-                            ),
-                            backgroundColor: Colors.white.withValues(
-                              alpha: 0.05,
-                            ),
+                              Expanded(
+                                child: Divider(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                ),
+                              ),
+                            ],
                           ),
-                          onPressed: _isLoading ? null : _loginWithGoogle,
-                          icon: Image.asset(
-                            'assets/icon_google.png',
-                            height: 24,
-                          ),
-                          label: Text(
-                            tr('continue_with_google'),
-                            style: LocalFonts.poppins(
-                              fontSize: 16,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-
-                        // YENİ: Sadece iOS ve macOS cihazlarda Apple ile Giriş butonunu gösteriyoruz
-                        if (defaultTargetPlatform == TargetPlatform.iOS ||
-                            defaultTargetPlatform == TargetPlatform.macOS) ...[
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 18),
                           OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size(double.infinity, 55),
@@ -626,14 +596,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                 alpha: 0.05,
                               ),
                             ),
-                            onPressed: _isLoading ? null : _loginWithApple,
-                            icon: const Icon(
-                              Icons.apple,
-                              color: Colors.white,
-                              size: 28,
+                            onPressed: _isLoading ? null : _loginWithGoogle,
+                            icon: Image.asset(
+                              'assets/icon_google.png',
+                              height: 24,
                             ),
                             label: Text(
-                              tr('continue_with_apple'),
+                              tr('continue_with_google'),
                               style: LocalFonts.poppins(
                                 fontSize: 16,
                                 color: Colors.white,
@@ -641,6 +610,39 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ),
                           ),
+                          if (defaultTargetPlatform == TargetPlatform.iOS ||
+                              defaultTargetPlatform ==
+                                  TargetPlatform.macOS) ...[
+                            const SizedBox(height: 16),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 55),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                side: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                ),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.05,
+                                ),
+                              ),
+                              onPressed: _isLoading ? null : _loginWithApple,
+                              icon: const Icon(
+                                Icons.apple,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                              label: Text(
+                                tr('continue_with_apple'),
+                                style: LocalFonts.poppins(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                         const SizedBox(height: 24),
                         Wrap(
