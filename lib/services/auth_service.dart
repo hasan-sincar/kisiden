@@ -101,9 +101,19 @@ class AuthService {
     } on FirebaseAuthException {
       rethrow;
     } catch (e) {
+      final message = e.toString();
+      if (message.contains('AuthorizationError') &&
+          message.contains('error 1000')) {
+        throw FirebaseAuthException(
+          code: 'apple-authorization-error-1000',
+          message:
+              'Apple ile giriş yetkilendirilemedi. Sign in with Apple capability, '
+              'Bundle ID ve TestFlight imzasını kontrol edin.',
+        );
+      }
       throw FirebaseAuthException(
         code: 'apple-sign-in-failed',
-        message: 'Apple ile giriş yapılamadı: $e',
+        message: 'Apple ile giriş yapılamadı: $message',
       );
     }
   }

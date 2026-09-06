@@ -231,6 +231,9 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'Apple ile giriş Firebase Authentication içinde etkin değil.';
       case 'invalid-credential':
         return 'Apple kimlik doğrulaması geçersiz. Lütfen tekrar deneyin.';
+      case 'apple-authorization-error-1000':
+        return 'Apple ile giriş yapılandırması tamamlanmamış. Lütfen uygulamayı '
+            'güncelleyip tekrar deneyin.';
       default:
         return error.message ?? 'Apple ile giriş yapılamadı.';
     }
