@@ -3,6 +3,7 @@ import 'package:appim/utils/local_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'listing_detail_screen.dart';
+import 'chat_screen.dart';
 import '../utils/translations.dart';
 import 'seller_profile_screen.dart';
 import 'tickets/ticket_detail_screen.dart';
@@ -34,6 +35,61 @@ class NotificationsScreen extends StatelessWidget {
     final hour = dt.hour.toString().padLeft(2, '0');
     final minute = dt.minute.toString().padLeft(2, '0');
     return '$day.$month • $hour:$minute';
+  }
+
+  Future<bool> _openChatNotification(
+    BuildContext context,
+    String currentUserId,
+    String chatRoomId,
+  ) async {
+    if (chatRoomId.isEmpty) return false;
+
+    final chatDoc = await FirebaseFirestore.instance
+        .collection('chats')
+        .doc(chatRoomId)
+        .get();
+    final chatData = chatDoc.data();
+    final participants = chatData?['participants'];
+    if (!chatDoc.exists || chatData == null || participants is! List) {
+      return false;
+    }
+
+    String? otherUserId;
+    for (final participant in participants) {
+      final candidate = participant.toString();
+      if (candidate != currentUserId && candidate.isNotEmpty) {
+        otherUserId = candidate;
+        break;
+      }
+    }
+    final receiverId = otherUserId;
+    if (receiverId == null || receiverId.isEmpty || !context.mounted) {
+      return false;
+    }
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(receiverId)
+        .get();
+    final userData = userDoc.data() ?? <String, dynamic>{};
+    if (!context.mounted) return false;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          receiverId: receiverId,
+          receiverName: userData['name']?.toString() ?? tr('user'),
+          listingTitle: chatData['listingTitle']?.toString(),
+          listingId: chatData['listingId']?.toString(),
+          listingImage: chatData['listingImage']?.toString(),
+          listingPrice: chatData['listingPrice']?.toString(),
+          listingLatitude: (chatData['listingLatitude'] as num?)?.toDouble(),
+          listingLongitude: (chatData['listingLongitude'] as num?)?.toDouble(),
+        ),
+      ),
+    );
+    return true;
   }
 
   void _markAllAsRead(String uid) async {
@@ -277,8 +333,7 @@ class NotificationsScreen extends StatelessWidget {
                               content: SingleChildScrollView(
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     if (hasImage)
                                       ClipRRect(
@@ -304,8 +359,7 @@ class NotificationsScreen extends StatelessWidget {
                               ),
                               actions: [
                                 TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(dialogContext),
+                                  onPressed: () => Navigator.pop(dialogContext),
                                   child: Text(
                                     tr('close'),
                                     style: LocalFonts.poppins(),
@@ -624,7 +678,25 @@ class NotificationsScreen extends StatelessWidget {
                       String type = data['type'] ?? 'general';
                       String targetId = data['targetId'] ?? '';
 
-                      if (type == 'listing' && targetId.isNotEmpty) {
+                      if ((type == 'chat' || type == 'trade_offer') &&
+                          targetId.isNotEmpty) {
+                        final opened = await _openChatNotification(
+                          context,
+                          uid,
+                          targetId,
+                        );
+                        if (!opened &&
+                            type == 'trade_offer' &&
+                            context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                tr('listing_detail_not_found_in_chat'),
+                              ),
+                            ),
+                          );
+                        }
+                      } else if (type == 'listing' && targetId.isNotEmpty) {
                         // İlanı bulup detay sayfasına yönlendir
                         var listingDoc = await FirebaseFirestore.instance
                             .collection('listings')

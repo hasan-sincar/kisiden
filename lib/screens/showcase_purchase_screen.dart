@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:appim/utils/local_fonts.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import '../services/database_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../utils/translations.dart';
 
 class ShowcasePurchaseScreen extends StatefulWidget {
@@ -16,7 +16,6 @@ class ShowcasePurchaseScreen extends StatefulWidget {
 }
 
 class _ShowcasePurchaseScreenState extends State<ShowcasePurchaseScreen> {
-  final DatabaseService _dbService = DatabaseService();
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   late StreamSubscription<List<PurchaseDetails>> _subscription;
 
@@ -31,7 +30,7 @@ class _ShowcasePurchaseScreenState extends State<ShowcasePurchaseScreen> {
   final List<String> _kProductIds = <String>[
     'vitrin_1_gun',
     'vitrin_1_hafta',
-    'vitrin_1_ay',
+    'vitrin_1_ayy',
     'kat_vitrin_1_gun',
     'kat_vitrin_1_hafta',
     'kat_vitrin_1_ay',
@@ -102,8 +101,11 @@ class _ShowcasePurchaseScreenState extends State<ShowcasePurchaseScreen> {
     });
   }
 
-  void _listenToPurchaseUpdated(List<PurchaseDetails> purchaseDetailsList) {
+  Future<void> _listenToPurchaseUpdated(
+    List<PurchaseDetails> purchaseDetailsList,
+  ) async {
     for (var purchaseDetails in purchaseDetailsList) {
+      var entitlementGranted = false;
       if (purchaseDetails.status == PurchaseStatus.pending) {
         // Satın alma bekleniyor
       } else {
@@ -114,78 +116,61 @@ class _ShowcasePurchaseScreenState extends State<ShowcasePurchaseScreen> {
         } else if (purchaseDetails.status == PurchaseStatus.purchased ||
             purchaseDetails.status == PurchaseStatus.restored) {
           // BAŞARILI SATIN ALMA - Veritabanını güncelle
-          int days = 1;
-          if (purchaseDetails.productID == 'vitrin_1_hafta' ||
-              purchaseDetails.productID == 'kat_vitrin_1_hafta' ||
-              purchaseDetails.productID == 'acil_7_gun') {
-            days = 7;
-          }
-          if (purchaseDetails.productID == 'vitrin_1_ay' ||
-              purchaseDetails.productID == 'kat_vitrin_1_ay') {
-            days = 30;
-          }
-          if (purchaseDetails.productID == 'acil_3_gun') {
-            days = 3;
-          }
-
-          final product = _products.cast<ProductDetails?>().firstWhere(
-            (p) => p?.id == purchaseDetails.productID,
-            orElse: () => null,
-          );
-          if (product == null) return; // Ürün detayı bulunamazsa işlemi durdur
-          if (purchaseDetails.productID.startsWith('acil_')) {
-            _dbService
-                .upgradeListingToUrgent(
-                  widget.listingId,
-                  days,
-                  packageId: purchaseDetails.productID,
-                  price: product.price,
-                )
-                .then((_) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(tr('urgent_promoted_1_day'))),
-                    );
-                    Navigator.pop(context);
-                  }
-                });
-          } else if (purchaseDetails.productID.startsWith('kat_')) {
-            _dbService
-                .upgradeListingToCategoryShowcase(
-                  widget.listingId,
-                  days,
-                  packageId: purchaseDetails.productID,
-                  price: product.price,
-                )
-                .then((_) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(tr('listing_cat_showcased_1_day')),
-                      ),
-                    );
-                    Navigator.pop(context); // Önceki sayfaya dön
-                  }
-                });
-          } else {
-            _dbService
-                .upgradeListingToShowcase(
-                  widget.listingId,
-                  days,
-                  packageId: purchaseDetails.productID,
-                  price: product.price,
-                )
-                .then((_) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(tr('listing_showcased_1_day'))),
-                    );
-                    Navigator.pop(context); // Önceki sayfaya dön
-                  }
-                });
+          final promotionType = purchaseDetails.productID.startsWith('acil_')
+              ? 'urgent'
+              : purchaseDetails.productID.startsWith('kat_')
+              ? 'category_showcase'
+              : 'showcase';
+          try {
+            await FirebaseFunctions.instanceFor(
+              region: 'europe-west1',
+            ).httpsCallable('activateListingPromotion').call({
+              'listingId': widget.listingId,
+              'promotionType': promotionType,
+              'mode': 'paid',
+              'productId': purchaseDetails.productID,
+              'purchaseId': purchaseDetails.purchaseID,
+              'purchasePlatform': purchaseDetails.verificationData.source,
+              'verificationData': {
+                'source': purchaseDetails.verificationData.source,
+                'serverVerificationData':
+                    purchaseDetails.verificationData.serverVerificationData,
+                'localVerificationData':
+                    purchaseDetails.verificationData.localVerificationData,
+              },
+            });
+            entitlementGranted = true;
+            if (promotionType == 'urgent') {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(tr('urgent_promoted_1_day'))),
+                );
+                Navigator.pop(context);
+              }
+            } else if (promotionType == 'category_showcase') {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(tr('listing_cat_showcased_1_day'))),
+                );
+                Navigator.pop(context); // Önceki sayfaya dön
+              }
+            } else {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(tr('listing_showcased_1_day'))),
+                );
+                Navigator.pop(context); // Önceki sayfaya dön
+              }
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('${tr('error')}: $e')));
+            }
           }
         }
-        if (purchaseDetails.pendingCompletePurchase) {
+        if (entitlementGranted && purchaseDetails.pendingCompletePurchase) {
           _inAppPurchase.completePurchase(purchaseDetails);
         }
       }
@@ -195,25 +180,13 @@ class _ShowcasePurchaseScreenState extends State<ShowcasePurchaseScreen> {
   Future<void> _useFreeShowcase(bool isCategory) async {
     setState(() => _isLoading = true);
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-
-      if (isCategory) {
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          'freeCategoryShowcaseCount': FieldValue.increment(-1),
-        });
-        await _dbService.upgradeListingToCategoryShowcase(
-          widget.listingId,
-          1,
-        ); // 1 Günlük hediye
-      } else {
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          'freeHomeShowcaseCount': FieldValue.increment(-1),
-        });
-        await _dbService.upgradeListingToShowcase(
-          widget.listingId,
-          1,
-        ); // 1 Günlük hediye
-      }
+      await FirebaseFunctions.instanceFor(
+        region: 'europe-west1',
+      ).httpsCallable('activateListingPromotion').call({
+        'listingId': widget.listingId,
+        'promotionType': isCategory ? 'category_showcase' : 'showcase',
+        'mode': 'free',
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -223,22 +196,24 @@ class _ShowcasePurchaseScreenState extends State<ShowcasePurchaseScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('${tr('error')}: $e')));
+      }
     }
   }
 
   Future<void> _useFreeUrgent() async {
     setState(() => _isLoading = true);
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'freeUrgentCount': FieldValue.increment(-1),
+      await FirebaseFunctions.instanceFor(
+        region: 'europe-west1',
+      ).httpsCallable('activateListingPromotion').call({
+        'listingId': widget.listingId,
+        'promotionType': 'urgent',
+        'mode': 'free',
       });
-      await _dbService.upgradeListingToUrgent(widget.listingId, 1);
 
       if (mounted) {
         ScaffoldMessenger.of(
@@ -275,7 +250,7 @@ class _ShowcasePurchaseScreenState extends State<ShowcasePurchaseScreen> {
     final PurchaseParam purchaseParam = PurchaseParam(productDetails: product);
     _inAppPurchase.buyConsumable(
       purchaseParam: purchaseParam,
-      autoConsume: true,
+      autoConsume: false,
     );
   }
 
@@ -487,7 +462,7 @@ class _ShowcasePurchaseScreenState extends State<ShowcasePurchaseScreen> {
             icon: Icons.diamond,
             color: Colors.amber[800]!,
             onTap: () =>
-                _buyProduct(isCategory ? 'kat_vitrin_1_ay' : 'vitrin_1_ay'),
+                _buyProduct(isCategory ? 'kat_vitrin_1_ay' : 'vitrin_1_ayy'),
           ),
 
           const SizedBox(height: 30),

@@ -36,7 +36,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _priceController = TextEditingController();
-  bool _offersEnabled = true;
+  bool _offersEnabled = false;
   bool _tradeEnabled = false;
   int _offerValidityHours = 24;
   int _offerMinimumPercent = 70;
@@ -204,6 +204,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
     List<PurchaseDetails> purchaseDetailsList,
   ) async {
     for (final purchase in purchaseDetailsList) {
+      var entitlementGranted = false;
       if (!_listingRightPackageGrants.containsKey(purchase.productID)) {
         continue;
       }
@@ -234,7 +235,6 @@ class _AddListingScreenState extends State<AddListingScreen> {
           continue;
         }
 
-        _processedPurchaseIds.add(purchaseToken);
         try {
           final granted = _listingRightPackageGrants[purchase.productID] ?? 0;
           final product = _listingRightProducts
@@ -264,6 +264,8 @@ class _AddListingScreenState extends State<AddListingScreen> {
             'purchasePlatform': purchase.verificationData.source,
             'verificationData': verificationData,
           });
+          entitlementGranted = true;
+          _processedPurchaseIds.add(purchaseToken);
           await _checkUserLimit();
 
           if (mounted) {
@@ -293,7 +295,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
         }
       }
 
-      if (purchase.pendingCompletePurchase) {
+      if (entitlementGranted && purchase.pendingCompletePurchase) {
         await _inAppPurchase.completePurchase(purchase);
       }
     }
@@ -305,7 +307,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
     setState(() => _isBuyingListingRight = true);
     _inAppPurchase.buyConsumable(
       purchaseParam: purchaseParam,
-      autoConsume: true,
+      autoConsume: false,
     );
   }
 

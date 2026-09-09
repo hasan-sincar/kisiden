@@ -84,8 +84,8 @@ dependencies {
 
 configurations.all {
     resolutionStrategy {
-        force("com.android.billingclient:billing:9.0.0")
-        force("com.android.billingclient:billing-ktx:9.0.0")
+        force("com.android.billingclient:billing:9.1.0")
+        force("com.android.billingclient:billing-ktx:9.1.0")
         force("androidx.datastore:datastore:1.1.7")
         force("androidx.datastore:datastore-core:1.1.7")
         force("androidx.datastore:datastore-core-android:1.1.7")

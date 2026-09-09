@@ -26,45 +26,41 @@ class ResponsiveLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final bool isDesktopLayout = constraints.maxWidth >= 1100;
-        final bool isTabletLayout =
-            constraints.maxWidth >= 650 && constraints.maxWidth < 1100;
+    final double screenWidth = MediaQuery.sizeOf(context).width;
+    final bool isDesktopLayout = screenWidth >= 1100;
+    final bool isTabletLayout = screenWidth >= 650 && screenWidth < 1100;
 
-        final bool useFramedLayout = isDesktopLayout || isTabletLayout;
-        final double maxWidth = isDesktopLayout
-            ? desktopMaxWidth
-            : (isTabletLayout ? tabletMaxWidth : double.infinity);
+    final bool useFramedLayout = isDesktopLayout || isTabletLayout;
+    final double maxWidth = isDesktopLayout
+        ? desktopMaxWidth
+        : (isTabletLayout ? tabletMaxWidth : double.infinity);
 
-        return ColoredBox(
-          color: useFramedLayout ? outerBackgroundColor : Colors.transparent,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  boxShadow: useFramedLayout
-                      ? const [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 20,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                      : const [],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(
-                    useFramedLayout ? borderRadius : 0,
-                  ),
-                  child: child,
-                ),
+    return ColoredBox(
+      color: useFramedLayout ? outerBackgroundColor : Colors.transparent,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              boxShadow: useFramedLayout
+                  ? const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(
+                useFramedLayout ? borderRadius : 0,
               ),
+              child: child,
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

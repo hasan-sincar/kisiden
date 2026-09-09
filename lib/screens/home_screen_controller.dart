@@ -12,11 +12,14 @@ extension _HomeScreenController on _HomeScreenState {
         return value;
       }
     }
+
     return null;
   }
 
   Future<void> _useCurrentLocationForFilter(
+    BuildContext modalContext,
     void Function(void Function()) setModalState,
+    TextEditingController neighborhoodController,
   ) async {
     await _getUserLocation();
     final position = _userPosition;
@@ -36,12 +39,15 @@ extension _HomeScreenController on _HomeScreenState {
       turkeyLocations[city] ?? const <String>[],
       place.subAdministrativeArea ?? place.locality,
     );
+    if (!mounted) return;
     updateState(() {
       _filterCity = city;
       _filterDistrict = district;
       _filterNeighborhood = place.subLocality;
       _neighborhoodController.text = place.subLocality ?? '';
     });
+    neighborhoodController.text = place.subLocality ?? '';
+    if (!modalContext.mounted) return;
     setModalState(() {});
     await _savePreferences();
   }
@@ -292,6 +298,9 @@ extension _HomeScreenController on _HomeScreenState {
     String initialDisplayPath = "",
     bool openFilterOnClose = true,
   ]) {
+    if (_isCategoryPickerOpening || _isFilterModalOpening) return;
+    _isCategoryPickerOpening = true;
+
     List<Map<String, String>> history = [
       {
         'id': initialParentId,
@@ -426,9 +435,13 @@ extension _HomeScreenController on _HomeScreenState {
                                 _savePreferences();
                                 await _fetchCategoryFeatures(_currentParentId);
                                 if (context.mounted) {
+                                  if (!context.mounted) return;
                                   Navigator.pop(context);
                                   if (openFilterOnClose) {
-                                    _showFilterModal();
+                                    await Future<void>.delayed(
+                                      const Duration(milliseconds: 300),
+                                    );
+                                    if (mounted) _showFilterModal();
                                   }
                                 }
                               } finally {
@@ -485,6 +498,7 @@ extension _HomeScreenController on _HomeScreenState {
                                         .get();
                                     if (subCats.docs.isEmpty) {
                                       try {
+                                        if (!context.mounted) return;
                                         Navigator.pop(context);
                                         updateState(() {
                                           _isFiltering = true;
@@ -503,7 +517,10 @@ extension _HomeScreenController on _HomeScreenState {
                                         );
                                         if (context.mounted &&
                                             openFilterOnClose) {
-                                          _showFilterModal();
+                                          await Future<void>.delayed(
+                                            const Duration(milliseconds: 300),
+                                          );
+                                          if (mounted) _showFilterModal();
                                         }
                                       } finally {
                                         if (mounted) {
@@ -535,11 +552,94 @@ extension _HomeScreenController on _HomeScreenState {
           },
         );
       },
+    ).whenComplete(() {
+      _isCategoryPickerOpening = false;
+    });
+  }
+
+  Future<void> _showFilterModal() async {
+    if (_isFilterModalOpening) return;
+    _isFilterModalOpening = true;
+
+    try {
+      final result = await Navigator.of(context).push<_HomeFilterResult>(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => _HomeFilterPage(
+            minPrice: _minPriceController.text,
+            maxPrice: _maxPriceController.text,
+            distance: _distance,
+            city: _filterCity,
+            district: _filterDistrict,
+            neighborhood: _filterNeighborhood ?? '',
+            categoryFeatures: List<Map<String, dynamic>>.from(
+              _categoryFeatures,
+            ),
+            featureValues: Map<String, String?>.from(_featureDropdownValues),
+            onUseCurrentLocation: _getCurrentFilterLocation,
+          ),
+        ),
+      );
+
+      if (result != null && mounted) {
+        updateState(() {
+          _minPriceController.text = result.minPrice;
+          _maxPriceController.text = result.maxPrice;
+          _distance = result.distance;
+          _filterCity = result.city;
+          _filterDistrict = result.district;
+          _filterNeighborhood = result.neighborhood;
+          _neighborhoodController.text = result.neighborhood;
+          _featureDropdownValues
+            ..clear()
+            ..addAll(result.featureValues);
+          if (result.clearCategory) {
+            _filterCategoryName = tr('all');
+            _filterCategoryDisplayName = tr('all');
+            _currentParentId = '';
+            _currentParentName = tr('all');
+            _currentParentDisplayName = tr('all');
+            _categoryFeatures.clear();
+          }
+        });
+        await _savePreferences();
+      }
+    } finally {
+      _isFilterModalOpening = false;
+    }
+  }
+
+  Future<_HomeLocationResult?> _getCurrentFilterLocation() async {
+    await _getUserLocation();
+    final position = _userPosition;
+    if (position == null) return null;
+    final placemarks = await Geocoding().placemarkFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+    if (placemarks.isEmpty) return null;
+    final place = placemarks.first;
+    final city = _matchFilterLocation(
+      turkeyLocations.keys,
+      place.administrativeArea ?? place.locality,
+    );
+    if (city == null) return null;
+    return _HomeLocationResult(
+      city: city,
+      district: _matchFilterLocation(
+        turkeyLocations[city] ?? const <String>[],
+        place.subAdministrativeArea ?? place.locality,
+      ),
+      neighborhood: place.subLocality ?? '',
     );
   }
 
-  void _showFilterModal() {
-    showModalBottomSheet(
+  /*
+    The previous bottom-sheet implementation is intentionally retained below
+    only through the page implementation's shared filter values.
+  */
+  /*
+    final shouldApply = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -579,11 +679,14 @@ extension _HomeScreenController on _HomeScreenState {
                                 onPressed: () {
                                   setModalState(() {
                                     _isFiltering = true;
+                                    modalMinPriceController.clear();
+                                    modalMaxPriceController.clear();
                                     _minPriceController.clear();
                                     _maxPriceController.clear();
                                     _distance = 30.0;
                                     _filterCity = null;
                                     _filterDistrict = null;
+                                    modalNeighborhoodController.clear();
                                     _neighborhoodController.clear();
                                     _filterNeighborhood = null;
                                     _featureDropdownValues.clear();
@@ -644,7 +747,7 @@ extension _HomeScreenController on _HomeScreenState {
                         children: [
                           Expanded(
                             child: TextField(
-                              controller: _minPriceController,
+                              controller: modalMinPriceController,
                               keyboardType: TextInputType.number,
                               decoration: InputDecoration(
                                 labelText: tr('min_price'),
@@ -654,17 +757,12 @@ extension _HomeScreenController on _HomeScreenState {
                                   vertical: 12,
                                 ),
                               ),
-                              onChanged: (val) {
-                                setModalState(() {});
-                                updateState(() {});
-                                _savePreferences();
-                              },
                             ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
                             child: TextField(
-                              controller: _maxPriceController,
+                              controller: modalMaxPriceController,
                               keyboardType: TextInputType.number,
                               decoration: InputDecoration(
                                 labelText: tr('max_price'),
@@ -674,11 +772,6 @@ extension _HomeScreenController on _HomeScreenState {
                                   vertical: 12,
                                 ),
                               ),
-                              onChanged: (val) {
-                                setModalState(() {});
-                                updateState(() {});
-                                _savePreferences();
-                              },
                             ),
                           ),
                         ],
@@ -749,8 +842,11 @@ extension _HomeScreenController on _HomeScreenState {
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
-                          onPressed: () =>
-                              _useCurrentLocationForFilter(setModalState),
+                          onPressed: () => _useCurrentLocationForFilter(
+                            context,
+                            setModalState,
+                            modalNeighborhoodController,
+                          ),
                           icon: const Icon(Icons.my_location),
                           label: Text(tr('use_current_location')),
                         ),
@@ -790,12 +886,14 @@ extension _HomeScreenController on _HomeScreenState {
                                   _filterCity = val;
                                   _filterDistrict = null;
                                   _filterNeighborhood = null;
+                                  modalNeighborhoodController.clear();
                                   _neighborhoodController.clear();
                                 });
                                 updateState(() {
                                   _filterCity = val;
                                   _filterDistrict = null;
                                   _filterNeighborhood = null;
+                                  modalNeighborhoodController.clear();
                                   _neighborhoodController.clear();
                                 });
                                 _savePreferences();
@@ -842,7 +940,7 @@ extension _HomeScreenController on _HomeScreenState {
                       ),
                       const SizedBox(height: 16),
                       TextField(
-                        controller: _neighborhoodController,
+                        controller: modalNeighborhoodController,
                         decoration: InputDecoration(
                           labelText: tr('neighborhood_optional'),
                           border: const OutlineInputBorder(),
@@ -852,6 +950,7 @@ extension _HomeScreenController on _HomeScreenState {
                           ),
                         ),
                         onChanged: (val) {
+                          _neighborhoodController.text = val;
                           setModalState(() => _filterNeighborhood = val);
                           updateState(() => _filterNeighborhood = val);
                           _savePreferences();
@@ -921,7 +1020,13 @@ extension _HomeScreenController on _HomeScreenState {
                       ],
                       const SizedBox(height: 30),
                       ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () async {
+                          FocusScope.of(context).unfocus();
+                          await WidgetsBinding.instance.endOfFrame;
+                          if (context.mounted) {
+                            Navigator.pop(context, true);
+                          }
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           minimumSize: const Size(double.infinity, 50),
@@ -947,8 +1052,24 @@ extension _HomeScreenController on _HomeScreenState {
         );
       },
     );
-  }
 
+    if (shouldApply == true && mounted) {
+      await WidgetsBinding.instance.endOfFrame;
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted) {
+        updateState(() {
+          _minPriceController.text = modalMinPriceController.text;
+          _maxPriceController.text = modalMaxPriceController.text;
+        });
+        await _savePreferences();
+      }
+    }
+
+    modalMinPriceController.dispose();
+    modalMaxPriceController.dispose();
+    modalNeighborhoodController.dispose();
+    _isFilterModalOpening = false;
+  */
   void _showSortModal() {
     showModalBottomSheet(
       context: context,
@@ -1093,5 +1214,296 @@ extension _HomeScreenController on _HomeScreenState {
 
   Widget _buildAuctionShowcase() {
     return const SizedBox.shrink();
+  }
+}
+
+class _HomeFilterResult {
+  const _HomeFilterResult({
+    required this.minPrice,
+    required this.maxPrice,
+    required this.distance,
+    required this.city,
+    required this.district,
+    required this.neighborhood,
+    required this.featureValues,
+    required this.clearCategory,
+  });
+
+  final String minPrice;
+  final String maxPrice;
+  final double distance;
+  final String? city;
+  final String? district;
+  final String neighborhood;
+  final Map<String, String?> featureValues;
+  final bool clearCategory;
+}
+
+class _HomeLocationResult {
+  const _HomeLocationResult({
+    required this.city,
+    required this.district,
+    required this.neighborhood,
+  });
+
+  final String city;
+  final String? district;
+  final String neighborhood;
+}
+
+class _HomeFilterPage extends StatefulWidget {
+  const _HomeFilterPage({
+    required this.minPrice,
+    required this.maxPrice,
+    required this.distance,
+    required this.city,
+    required this.district,
+    required this.neighborhood,
+    required this.categoryFeatures,
+    required this.featureValues,
+    required this.onUseCurrentLocation,
+  });
+
+  final String minPrice;
+  final String maxPrice;
+  final double distance;
+  final String? city;
+  final String? district;
+  final String neighborhood;
+  final List<Map<String, dynamic>> categoryFeatures;
+  final Map<String, String?> featureValues;
+  final Future<_HomeLocationResult?> Function() onUseCurrentLocation;
+
+  @override
+  State<_HomeFilterPage> createState() => _HomeFilterPageState();
+}
+
+class _HomeFilterPageState extends State<_HomeFilterPage> {
+  late final TextEditingController _minPriceController;
+  late final TextEditingController _maxPriceController;
+  late final TextEditingController _neighborhoodController;
+  late double _distance;
+  String? _city;
+  String? _district;
+  late final Map<String, String?> _featureValues;
+  bool _isLocating = false;
+  bool _clearCategory = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _minPriceController = TextEditingController(text: widget.minPrice);
+    _maxPriceController = TextEditingController(text: widget.maxPrice);
+    _neighborhoodController = TextEditingController(text: widget.neighborhood);
+    _distance = widget.distance.clamp(0.1, 30.0).toDouble();
+    _city = widget.city;
+    _district = widget.district;
+    _featureValues = Map<String, String?>.from(widget.featureValues);
+  }
+
+  @override
+  void dispose() {
+    _minPriceController.dispose();
+    _maxPriceController.dispose();
+    _neighborhoodController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final districts = _city == null
+        ? const <String>[]
+        : turkeyLocations[_city] ?? const <String>[];
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(tr('filter')),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Text(tr('price_range')),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _minPriceController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: tr('min_price'),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: TextField(
+                  controller: _maxPriceController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: tr('max_price'),
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            '${tr('distance')}: ${_distance >= 30.0 ? tr('all') : '${_distance.toStringAsFixed(1)} km'}',
+          ),
+          Slider(
+            value: _distance,
+            min: 0.1,
+            max: 30,
+            divisions: 300,
+            onChanged: (value) => setState(() => _distance = value),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _city,
+            decoration: InputDecoration(
+              labelText: tr('city'),
+              border: const OutlineInputBorder(),
+            ),
+            items: [
+              DropdownMenuItem(value: null, child: Text(tr('all'))),
+              ...turkeyLocations.keys.map(
+                (city) => DropdownMenuItem(value: city, child: Text(city)),
+              ),
+            ],
+            onChanged: (value) => setState(() {
+              _city = value;
+              _district = null;
+            }),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            initialValue: _district,
+            decoration: InputDecoration(
+              labelText: tr('district'),
+              border: const OutlineInputBorder(),
+            ),
+            items: [
+              DropdownMenuItem(value: null, child: Text(tr('all'))),
+              ...districts.map(
+                (district) =>
+                    DropdownMenuItem(value: district, child: Text(district)),
+              ),
+            ],
+            onChanged: (value) => setState(() => _district = value),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _neighborhoodController,
+            decoration: InputDecoration(
+              labelText: tr('neighborhood_optional'),
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _isLocating
+                ? null
+                : () async {
+                    setState(() => _isLocating = true);
+                    try {
+                      final location = await widget.onUseCurrentLocation();
+                      if (!mounted) return;
+                      if (location != null) {
+                        setState(() {
+                          _city = location.city;
+                          _district = location.district;
+                          _neighborhoodController.text = location.neighborhood;
+                        });
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isLocating = false);
+                    }
+                  },
+            icon: _isLocating
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location),
+            label: Text(tr('use_current_location')),
+          ),
+          if (widget.categoryFeatures.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text(
+              tr('category_specific_filters'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...widget.categoryFeatures.map((feature) {
+              final name = feature['name'] as String;
+              final options = List<String>.from(feature['options'] as List);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: DropdownButtonFormField<String>(
+                  initialValue: _featureValues[name],
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: name,
+                    border: const OutlineInputBorder(),
+                  ),
+                  items: [
+                    DropdownMenuItem(value: null, child: Text(tr('all'))),
+                    ...options.toSet().map(
+                      (option) =>
+                          DropdownMenuItem(value: option, child: Text(option)),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _featureValues[name] = value),
+                ),
+              );
+            }),
+          ],
+          const SizedBox(height: 30),
+          OutlinedButton(
+            onPressed: () {
+              setState(() {
+                _minPriceController.clear();
+                _maxPriceController.clear();
+                _neighborhoodController.clear();
+                _distance = 30;
+                _city = null;
+                _district = null;
+                _clearCategory = true;
+                for (final key in _featureValues.keys) {
+                  _featureValues[key] = null;
+                }
+              });
+            },
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+            child: Text(tr('clear_filter')),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              context,
+              _HomeFilterResult(
+                minPrice: _minPriceController.text,
+                maxPrice: _maxPriceController.text,
+                distance: _distance,
+                city: _city,
+                district: _district,
+                neighborhood: _neighborhoodController.text,
+                featureValues: _featureValues,
+                clearCategory: _clearCategory,
+              ),
+            ),
+            child: Text(tr('show_results')),
+          ),
+        ],
+      ),
+    );
   }
 }

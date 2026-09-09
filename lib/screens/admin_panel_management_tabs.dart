@@ -176,7 +176,7 @@ class _AdminPurchasesTab extends StatelessWidget {
       return tr('showcase_1_day');
     } else if (pId == 'vitrin_1_hafta') {
       return tr('showcase_1_week');
-    } else if (pId == 'vitrin_1_ay') {
+    } else if (pId == 'vitrin_1_ayy') {
       return tr('showcase_1_month');
     } else if (pId == 'kat_vitrin_1_gun') {
       return tr('category_showcase_1_day');

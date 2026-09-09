@@ -821,7 +821,7 @@ class _CategorySection extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => AllListingsScreen(
-                      initialFilters: {'categoryName': topCategory},
+                      initialFilters: {'categoryRoot': topCategory},
                       urgentOnly: true,
                       customTitle: '$categoryName ${tr('listings_suffix')}',
                     ),

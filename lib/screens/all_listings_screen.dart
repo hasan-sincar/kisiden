@@ -63,8 +63,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
   double _distance = 30.0;
   final TextEditingController _minPriceController = TextEditingController();
   final TextEditingController _maxPriceController = TextEditingController();
-  final TextEditingController _neighborhoodController =
-      TextEditingController();
+  final TextEditingController _neighborhoodController = TextEditingController();
 
   String? _filterCity;
   String? _filterDistrict;
@@ -96,6 +95,9 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
             .toString()
             .split(' > ')
             .last;
+      if (filters['categoryRoot'] != null) {
+        _filterCategoryName = filters['categoryRoot'].toString().trim();
+      }
       if (filters['city'] != null) _filterCity = filters['city'];
       if (filters['district'] != null) _filterDistrict = filters['district'];
       if (filters['neighborhood'] != null) {
@@ -878,12 +880,11 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                     // Sadece aktif acilleri gizle; süresi bitenler normal akışa geri düşsün.
                     if (isUrgentActive) return false;
                   }
-                  bool matchCategory =
-                      (_filterCategoryName == 'Tümü' ||
-                      (data['categoryPath']?.toString().contains(
-                            _filterCategoryName,
-                          ) ??
-                          false));
+                  final categoryText =
+                      '${data['categoryPath'] ?? ''} ${data['category'] ?? ''}';
+                  final matchCategory =
+                      _filterCategoryName == 'Tümü' ||
+                      categoryText.contains(_filterCategoryName);
                   bool matchCity =
                       _filterCity == null || data['city'] == _filterCity;
                   bool matchDistrict =
@@ -895,7 +896,8 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                       : '';
                   final requestedNeighborhood =
                       _filterNeighborhood?.trim().toLowerCase() ?? '';
-                  final matchNeighborhood = requestedNeighborhood.isEmpty ||
+                  final matchNeighborhood =
+                      requestedNeighborhood.isEmpty ||
                       listingNeighborhood.toLowerCase().contains(
                         requestedNeighborhood,
                       );
@@ -1143,7 +1145,9 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                   data['city'] != null &&
                                                           data['district'] !=
                                                               null
-                                                      ? _listingLocationText(data)
+                                                      ? _listingLocationText(
+                                                          data,
+                                                        )
                                                       : '',
                                                   maxLines: 1,
                                                   overflow:
@@ -1383,7 +1387,9 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                                         null &&
                                                                     data['district'] !=
                                                                         null
-                                                                ? _listingLocationText(data)
+                                                                ? _listingLocationText(
+                                                                    data,
+                                                                  )
                                                                 : '',
                                                             maxLines: 1,
                                                             overflow:

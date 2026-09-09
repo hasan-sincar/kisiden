@@ -164,6 +164,50 @@ async function verifyGooglePlayPurchase({ packageName, productId, purchaseToken 
     throw new HttpsError("failed-precondition", "Google Play servis hesabi sirri tanimli degil.");
   }
 
+  async function consumeGooglePlayPurchase({ packageName, productId, purchaseToken }) {
+    const { google } = require("googleapis");
+    const rawSecret = googlePlayServiceAccountJson.value();
+    if (!rawSecret) {
+      throw new HttpsError("failed-precondition", "Google Play servis hesabi sirri tanimli degil.");
+    }
+
+    async function acknowledgeGooglePlayPurchase({ packageName, productId, purchaseToken }) {
+      const { google } = require("googleapis");
+      const credentials = JSON.parse(googlePlayServiceAccountJson.value());
+      const auth = new google.auth.GoogleAuth({
+        credentials,
+        scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+      });
+      const androidpublisher = google.androidpublisher({ version: "v3", auth });
+      await androidpublisher.purchases.products.acknowledge({
+        packageName,
+        productId,
+        token: purchaseToken,
+      }, {});
+    }
+    let credentials;
+    try {
+      credentials = JSON.parse(rawSecret);
+    } catch {
+      throw new HttpsError("failed-precondition", "Google Play servis hesabi JSON'i gecersiz.");
+    }
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+    });
+    const androidpublisher = google.androidpublisher({ version: "v3", auth });
+    try {
+      await androidpublisher.purchases.products.consume({
+        packageName,
+        productId,
+        token: purchaseToken,
+      });
+    } catch (error) {
+      logger.error("Google Play consume hatasi:", error?.message || error);
+      throw new HttpsError("unavailable", "Google Play satin alma tamamlanamadi.");
+    }
+  }
+
   let credentials;
   try {
     credentials = JSON.parse(rawSecret);
@@ -1724,11 +1768,299 @@ exports.grantListingRights = onCall({
     return { newTotalLimit, grantCount };
   });
 
+  if (mode === "paid_package" && purchasePlatform === "android") {
+    await consumeGooglePlayPurchase({
+      packageName: String(listingRightsSettings.androidPackageName || "com.kisidencom.app").trim(),
+      productId: requestedProductId,
+      purchaseToken: serverVerificationData,
+    });
+  }
+
   return {
     success: true,
     granted: result.grantCount,
     newTotalLimit: result.newTotalLimit,
   };
+});
+
+// Vitrin/acil ilan haklarini, ilan sahibi ve satin alma dogrulamasi ile birlikte
+// tek bir transaction icinde uygular.
+exports.activateListingPromotion = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+  secrets: [googlePlayServiceAccountJson, appleSharedSecret],
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const uid = request.auth.uid;
+  const listingId = String(request.data?.listingId || "").trim();
+  const promotionType = String(request.data?.promotionType || "").trim();
+  const mode = String(request.data?.mode || "").trim();
+  const productId = String(request.data?.productId || "").trim();
+  const verificationData = request.data?.verificationData || {};
+  const purchasePlatform = normalizePurchasePlatform(
+    String(request.data?.purchasePlatform || ""),
+    String(verificationData.source || ""),
+  );
+  const serverVerificationData = String(verificationData.serverVerificationData || "").trim();
+  const localVerificationData = String(verificationData.localVerificationData || "").trim();
+
+  const promotionConfig = {
+    showcase: {
+      products: { vitrin_1_gun: 1, vitrin_1_hafta: 7, vitrin_1_ayy: 30 },
+      until: "showcaseUntil",
+      at: "showcasedAt",
+    },
+    category_showcase: {
+      products: { kat_vitrin_1_gun: 1, kat_vitrin_1_hafta: 7, kat_vitrin_1_ay: 30 },
+      until: "categoryShowcaseUntil",
+      at: "categoryShowcasedAt",
+    },
+    urgent: {
+      products: { acil_2_gun: 2, acil_3_gun: 3, acil_7_gun: 7 },
+      until: "urgentUntil",
+      at: "urgentAt",
+    },
+  }[promotionType];
+
+  if (!listingId || !promotionConfig || !["free", "paid"].includes(mode)) {
+    throw new HttpsError("invalid-argument", "Gecersiz vitrin parametreleri.");
+  }
+
+  const days = mode === "paid" ? promotionConfig.products[productId] : 1;
+  if (!days) {
+    throw new HttpsError("permission-denied", "Bu vitrin paketi aktif degil.");
+  }
+
+  let verificationRef = null;
+  let verificationPayload = null;
+  let externalPurchaseId = String(request.data?.purchaseId || "").trim();
+  if (mode === "paid") {
+    if (!purchasePlatform) {
+      throw new HttpsError("invalid-argument", "Satin alma platformu anlasilamadi.");
+    }
+    if (purchasePlatform === "android") {
+      if (!serverVerificationData) {
+        throw new HttpsError("invalid-argument", "Google Play satin alma token'i eksik.");
+      }
+      const verified = await verifyGooglePlayPurchase({
+        packageName: "com.kisidencom.app",
+        productId,
+        purchaseToken: serverVerificationData,
+      });
+      verificationRef = db.collection("purchase_verifications").doc(verified.verificationKey);
+      verificationPayload = verified.payload;
+      externalPurchaseId = verified.externalId || externalPurchaseId;
+    } else if (purchasePlatform === "ios") {
+      const receiptData = localVerificationData || serverVerificationData;
+      if (!receiptData) {
+        throw new HttpsError("invalid-argument", "Apple receipt verisi eksik.");
+      }
+      const verified = await verifyApplePurchase({
+        bundleId: "com.kisidencom.appim",
+        productId,
+        receiptData,
+      });
+      verificationRef = db.collection("purchase_verifications").doc(verified.verificationKey);
+      verificationPayload = verified.payload;
+      externalPurchaseId = verified.externalId || externalPurchaseId;
+    } else {
+      throw new HttpsError("invalid-argument", "Desteklenmeyen satin alma platformu.");
+    }
+  }
+
+  const listingRef = db.collection("listings").doc(listingId);
+  const userRef = db.collection("users").doc(uid);
+  const purchaseRef = db.collection("purchases").doc();
+  const result = await db.runTransaction(async (tx) => {
+    const listingSnap = await tx.get(listingRef);
+    const userSnap = await tx.get(userRef);
+    const verificationSnap = verificationRef ? await tx.get(verificationRef) : null;
+    if (!listingSnap.exists) throw new HttpsError("not-found", "Ilan bulunamadi.");
+    if (!userSnap.exists) throw new HttpsError("not-found", "Kullanici bulunamadi.");
+
+    const listing = listingSnap.data() || {};
+    const user = userSnap.data() || {};
+    if (listing.sellerId !== uid && request.auth.token?.admin !== true) {
+      throw new HttpsError("permission-denied", "Bu ilana erisim yetkiniz yok.");
+    }
+
+    const update = {
+      [promotionConfig.until]: admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() + days * 24 * 60 * 60 * 1000),
+      ),
+      [promotionConfig.at]: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (mode === "free") {
+      const countField = promotionType === "showcase"
+        ? "freeHomeShowcaseCount"
+        : promotionType === "category_showcase"
+          ? "freeCategoryShowcaseCount"
+          : "freeUrgentCount";
+      const count = Number(user[countField] || 0);
+      if (count < 1) throw new HttpsError("resource-exhausted", "Ucretsiz hakkiniz bulunmuyor.");
+      tx.update(userRef, {
+        [countField]: admin.firestore.FieldValue.increment(-1),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      tx.set(purchaseRef, {
+        userId: uid,
+        listingId,
+        packageId: productId,
+        days,
+        type: promotionType,
+        mode,
+        purchaseId: externalPurchaseId,
+        purchasePlatform,
+        verifiedByServer: true,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    tx.update(listingRef, update);
+    if (verificationRef) {
+      if (verificationSnap.exists && verificationSnap.data()?.usedBy) {
+        throw new HttpsError("already-exists", "Bu satin alma daha once kullanildi.");
+      }
+      tx.set(verificationRef, {
+        usedBy: uid,
+        usedAt: admin.firestore.FieldValue.serverTimestamp(),
+        listingId,
+        productId,
+        ...(verificationPayload ? { verificationPayload } : {}),
+      }, { merge: true });
+    }
+    return { days };
+  });
+
+  if (mode === "paid" && purchasePlatform === "android") {
+    await consumeGooglePlayPurchase({
+      packageName: "com.kisidencom.app",
+      productId,
+      purchaseToken: serverVerificationData,
+    });
+  }
+
+  return { success: true, days: result.days };
+});
+
+exports.activateProPurchase = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+  secrets: [googlePlayServiceAccountJson],
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const uid = request.auth.uid;
+  const productId = String(request.data?.productId || "").trim();
+  const verificationData = request.data?.verificationData || {};
+  const purchasePlatform = normalizePurchasePlatform(
+    String(request.data?.purchasePlatform || ""),
+    String(verificationData.source || ""),
+  );
+  const purchaseToken = String(verificationData.serverVerificationData || "").trim();
+  const receiptData = String(
+    verificationData.localVerificationData || verificationData.serverVerificationData || "",
+  ).trim();
+  const packages = {
+    pro_3_ay: { days: 90, limit: 25, home: 2, category: 2, urgent: 2 },
+    pro_6_ay: { days: 180, limit: 60, home: 10, category: 10, urgent: 10 },
+    pro_12_ay: { days: 365, limit: 250, home: 25, category: 25, urgent: 25 },
+  };
+  const selected = packages[productId];
+  if (!selected || !["android", "ios"].includes(purchasePlatform)) {
+    throw new HttpsError("invalid-argument", "Gecersiz Pro satin alma bilgisi.");
+  }
+
+  let verified;
+  if (purchasePlatform === "android") {
+    if (!purchaseToken) {
+      throw new HttpsError("invalid-argument", "Google Play satin alma token'i eksik.");
+    }
+    verified = await verifyGooglePlayPurchase({
+      packageName: "com.kisidencom.app",
+      productId,
+      purchaseToken,
+    });
+  } else {
+    if (!receiptData) {
+      throw new HttpsError("invalid-argument", "Apple receipt verisi eksik.");
+    }
+    verified = await verifyApplePurchase({
+      bundleId: "com.kisidencom.appim",
+      productId,
+      receiptData,
+    });
+  }
+  const verificationRef = db.collection("purchase_verifications").doc(verified.verificationKey);
+  const userRef = db.collection("users").doc(uid);
+  const purchaseRef = db.collection("purchases").doc();
+  const result = await db.runTransaction(async (tx) => {
+    const [userSnap, verificationSnap] = await Promise.all([
+      tx.get(userRef),
+      tx.get(verificationRef),
+    ]);
+    if (!userSnap.exists) throw new HttpsError("not-found", "Kullanici bulunamadi.");
+    if (verificationSnap.exists && verificationSnap.data()?.usedBy) {
+      throw new HttpsError("already-exists", "Bu satin alma daha once kullanildi.");
+    }
+    const user = userSnap.data() || {};
+    const now = new Date();
+    const currentUntil = user.proUntil?.toDate?.() || now;
+    const base = currentUntil > now ? currentUntil : now;
+    const proUntil = new Date(base.getTime() + selected.days * 24 * 60 * 60 * 1000);
+    tx.set(userRef, {
+      proUntil: admin.firestore.Timestamp.fromDate(proUntil),
+      proListingLimit: selected.limit,
+      freeHomeShowcaseCount: admin.firestore.FieldValue.increment(selected.home),
+      freeCategoryShowcaseCount: admin.firestore.FieldValue.increment(selected.category),
+      freeUrgentCount: admin.firestore.FieldValue.increment(selected.urgent),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    tx.set(purchaseRef, {
+      userId: uid,
+      packageId: productId,
+      days: selected.days,
+      limit: selected.limit,
+      purchaseId: verified.externalId,
+      purchasePlatform,
+      verifiedByServer: true,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      type: "Pro Paket",
+    });
+    tx.set(verificationRef, {
+      usedBy: uid,
+      usedAt: admin.firestore.FieldValue.serverTimestamp(),
+      packageId: productId,
+      verificationPayload: verified.payload,
+    }, { merge: true });
+    return { proUntil };
+  });
+
+  const listings = await db.collection("listings")
+    .where("sellerId", "==", uid)
+    .get();
+  const batch = db.batch();
+  listings.docs.forEach((doc) => batch.update(doc.ref, {
+    isPro: true,
+    proUntil: admin.firestore.Timestamp.fromDate(result.proUntil),
+  }));
+  if (!listings.empty) await batch.commit();
+  if (purchasePlatform === "android") {
+    await acknowledgeGooglePlayPurchase({
+      packageName: "com.kisidencom.app",
+      productId,
+      purchaseToken,
+    });
+  }
+  return { success: true, proUntil: result.proUntil.toISOString() };
 });
 
 exports.sendUserNotification = onCall({

@@ -64,8 +64,11 @@ class _ChatScreenState extends State<ChatScreen> {
   int _restrictionSecondsLeft = 0;
 
   String get _chatRoomId {
-    final ids = <String>[currentUserId, widget.receiverId]..sort();
-    return ids.join('_');
+    return DatabaseService.buildChatRoomId(
+      firstUserId: currentUserId,
+      secondUserId: widget.receiverId,
+      listingId: _chatListingId ?? widget.listingId,
+    );
   }
 
   Future<void> _showCounterOfferDialog({
@@ -107,12 +110,37 @@ class _ChatScreenState extends State<ChatScreen> {
     );
     controller.dispose();
     if (amount == null) return;
-    await _dbService.sendCounterOffer(
-      receiverId: receiverId,
-      listingTitle: listingTitle,
-      listingId: listingId,
-      offerAmount: amount,
-    );
+    try {
+      await _dbService.sendCounterOffer(
+        receiverId: receiverId,
+        listingTitle: listingTitle,
+        listingId: listingId,
+        offerAmount: amount,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('offer_sent'))));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_offerErrorMessage(e))));
+    }
+  }
+
+  String _offerErrorMessage(Object error) {
+    final code = error is StateError ? error.message : error.toString();
+    if (error is FirebaseException) {
+      return tr('offer_send_failed');
+    }
+    return switch (code) {
+      'offer_below_minimum' => tr('offer_below_minimum'),
+      'offers_disabled' => tr('offers_disabled'),
+      'offer_listing_unavailable' => tr('offer_listing_unavailable'),
+      'offer_rate_limited' => tr('offer_rate_limited'),
+      _ => tr('offer_send_failed'),
+    };
   }
 
   static const List<String> _defaultReadyMessageKeys = <String>[
@@ -209,7 +237,8 @@ class _ChatScreenState extends State<ChatScreen> {
           .get();
 
       final chatData = chatDoc.data() as Map<String, dynamic>?;
-      if (!chatDoc.exists && (_chatListingId == null || _chatListingId!.isEmpty)) {
+      if (!chatDoc.exists &&
+          (_chatListingId == null || _chatListingId!.isEmpty)) {
         return;
       }
       if (chatData == null) {
@@ -221,10 +250,10 @@ class _ChatScreenState extends State<ChatScreen> {
       final existingId = chatData['listingId']?.toString();
       final existingImage = chatData['listingImage']?.toString();
       final existingPrice = chatData['listingPrice']?.toString();
-      final existingLatitude =
-          (chatData['listingLatitude'] as num?)?.toDouble();
-      final existingLongitude =
-          (chatData['listingLongitude'] as num?)?.toDouble();
+      final existingLatitude = (chatData['listingLatitude'] as num?)
+          ?.toDouble();
+      final existingLongitude = (chatData['listingLongitude'] as num?)
+          ?.toDouble();
 
       if (mounted) {
         setState(() {
@@ -297,7 +326,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
       await _loadReceiverTradeSetting();
-      if (_chatListingId != null && _chatListingId!.isNotEmpty &&
+      if (_chatListingId != null &&
+          _chatListingId!.isNotEmpty &&
           (_chatListingLatitude == null || _chatListingLongitude == null)) {
         final listing = await FirebaseFirestore.instance
             .collection('listings')
@@ -395,10 +425,12 @@ class _ChatScreenState extends State<ChatScreen> {
     );
     await _dbService.notifyTradeListingShared(
       receiverId: widget.receiverId,
-      senderName: FirebaseAuth.instance.currentUser?.displayName?.trim().isNotEmpty == true
+      senderName:
+          FirebaseAuth.instance.currentUser?.displayName?.trim().isNotEmpty ==
+              true
           ? FirebaseAuth.instance.currentUser!.displayName!
           : tr('user'),
-      listingId: selected['id']?.toString() ?? '',
+      chatRoomId: _chatRoomId,
     );
   }
 
@@ -1342,19 +1374,18 @@ class _ChatScreenState extends State<ChatScreen> {
                                 onTap: tradeListingId.isEmpty
                                     ? null
                                     : () async {
-                                        final listing =
-                                            await FirebaseFirestore.instance
-                                                .collection('listings')
-                                                .doc(tradeListingId)
-                                                .get();
+                                        final listing = await FirebaseFirestore
+                                            .instance
+                                            .collection('listings')
+                                            .doc(tradeListingId)
+                                            .get();
                                         if (!mounted || !listing.exists) {
                                           return;
                                         }
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) =>
-                                                ListingDetailScreen(
+                                            builder: (_) => ListingDetailScreen(
                                               data: listing.data()!,
                                               listingId: tradeListingId,
                                             ),
@@ -1648,8 +1679,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 onPressed: _showTradeListingPicker,
                               ),
                             ),
-                          if (_isReceiverTradeEnabled)
-                            const SizedBox(width: 8),
+                          if (_isReceiverTradeEnabled) const SizedBox(width: 8),
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.indigo[50],

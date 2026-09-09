@@ -469,7 +469,11 @@ extension DatabaseServiceCommunity on DatabaseService {
     }
     final currentUserId = _auth.currentUser!.uid;
     List<String> ids = [currentUserId, receiverId]..sort();
-    String chatRoomId = ids.join('_');
+    final chatRoomId = DatabaseService.buildChatRoomId(
+      firstUserId: currentUserId,
+      secondUserId: receiverId,
+      listingId: listingId,
+    );
     final payload = <String, dynamic>{
       'participants': ids,
       'lastMessage': message,
@@ -512,15 +516,15 @@ extension DatabaseServiceCommunity on DatabaseService {
   Future<void> notifyTradeListingShared({
     required String receiverId,
     required String senderName,
-    required String listingId,
+    required String chatRoomId,
   }) async {
     await sendNotification(
       receiverId,
       'notif_title_trade_listing_shared',
       'notif_msg_trade_listing_shared',
       messageArgs: [senderName],
-      type: 'trade_offer',
-      targetId: listingId,
+      type: 'chat',
+      targetId: chatRoomId,
     );
   }
 
@@ -601,7 +605,19 @@ extension DatabaseServiceCommunity on DatabaseService {
       throw StateError('offer_below_minimum');
     }
     List<String> ids = [currentUserId, receiverId]..sort();
-    String chatRoomId = ids.join('_');
+    final chatRoomId = DatabaseService.buildChatRoomId(
+      firstUserId: currentUserId,
+      secondUserId: receiverId,
+      listingId: listingId,
+    );
+    await _firestore.collection('chats').doc(chatRoomId).set({
+      'participants': ids,
+      'listingTitle': listingTitle,
+      'listingId': listingId,
+      'lastMessage': '',
+      'lastMessageTime': FieldValue.serverTimestamp(),
+      'unreadBy': <String>[],
+    }, SetOptions(merge: true));
     final recentOffers = await _firestore
         .collection('chats')
         .doc(chatRoomId)
@@ -627,6 +643,7 @@ extension DatabaseServiceCommunity on DatabaseService {
       'lastMessage': messageText,
       'lastMessageTime': FieldValue.serverTimestamp(),
       'listingTitle': listingTitle,
+      'listingId': listingId,
       'unreadBy': FieldValue.arrayUnion([receiverId]),
     }, SetOptions(merge: true));
 
@@ -654,6 +671,7 @@ extension DatabaseServiceCommunity on DatabaseService {
       isCounterOffer ? 'notif_msg_counter_offer' : 'notif_msg_new_offer',
       messageArgs: isCounterOffer ? null : [listingTitle],
       type: 'chat',
+      targetId: chatRoomId,
     );
   }
 
@@ -696,7 +714,13 @@ extension DatabaseServiceCommunity on DatabaseService {
       'cancelled' => 'notif_msg_offer_cancelled',
       _ => 'notif_msg_new_reply',
     };
-    await sendNotification(receiverId, titleKey, messageKey, type: 'chat');
+    await sendNotification(
+      receiverId,
+      titleKey,
+      messageKey,
+      type: 'chat',
+      targetId: chatRoomId,
+    );
   }
 
   Future<void> expireOfferIfNeeded(
@@ -723,6 +747,7 @@ extension DatabaseServiceCommunity on DatabaseService {
       'notif_title_offer_expired',
       'notif_msg_offer_expired',
       type: 'chat',
+      targetId: chatRoomId,
     );
   }
 

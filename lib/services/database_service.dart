@@ -30,6 +30,19 @@ class DatabaseService {
        _messagingOverride = messaging,
        _analyticsOverride = analytics;
 
+  static String buildChatRoomId({
+    required String firstUserId,
+    required String secondUserId,
+    String? listingId,
+  }) {
+    final ids = <String>[firstUserId, secondUserId]..sort();
+    final participantsId = ids.join('_');
+    final normalizedListingId = listingId?.trim() ?? '';
+    return normalizedListingId.isEmpty
+        ? participantsId
+        : '${participantsId}_listing_$normalizedListingId';
+  }
+
   static Map<String, dynamic> buildTradeOfferPayload({
     required String senderId,
     required String receiverId,

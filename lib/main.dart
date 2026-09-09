@@ -399,8 +399,6 @@ class _KisidenAppState extends State<KisidenApp> {
       valueListenable: appLocale,
       builder: (context, locale, child) {
         return MaterialApp(
-          key: ValueKey(locale.languageCode),
-
           navigatorKey: navigatorKey,
 
           debugShowCheckedModeBanner: false,

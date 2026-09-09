@@ -267,10 +267,16 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     required String listingTitle,
     required String listingId,
     required double listingPrice,
+    required double minimumOfferAmount,
+    required int minimumOfferPercent,
   }) async {
     final amount = await showDialog<double>(
       context: context,
-      builder: (_) => _OfferAmountDialog(listingPrice: listingPrice),
+      builder: (_) => _OfferAmountDialog(
+        listingPrice: listingPrice,
+        minimumOfferAmount: minimumOfferAmount,
+        minimumOfferPercent: minimumOfferPercent,
+      ),
     );
     if (amount == null || !mounted) return;
     try {
@@ -283,8 +289,22 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('${tr('error')}$e')));
+      ).showSnackBar(SnackBar(content: Text(_offerErrorMessage(e))));
     }
+  }
+
+  String _offerErrorMessage(Object error) {
+    final code = error is StateError ? error.message : error.toString();
+    if (error is FirebaseException) {
+      return tr('offer_send_failed');
+    }
+    return switch (code) {
+      'offer_below_minimum' => tr('offer_below_minimum'),
+      'offers_disabled' => tr('offers_disabled'),
+      'offer_listing_unavailable' => tr('offer_listing_unavailable'),
+      'offer_rate_limited' => tr('offer_rate_limited'),
+      _ => tr('offer_send_failed'),
+    };
   }
 
   void _openFullGallery(List<String> images, int initialIndex) {
@@ -2150,7 +2170,15 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                               contactPref == 'both' ||
                               contactPref == 'message_only';
                           bool isOfferEnabled =
-                              listingData['isOfferEnabled'] ?? true;
+                              listingData['isOfferEnabled'] == true;
+                          final offerMinimumPercent =
+                              (listingData['offerMinimumPercent'] as num?)
+                                  ?.toInt() ??
+                              70;
+                          final offerMinimumAmount =
+                              (listingData['offerMinimumAmount'] as num?)
+                                  ?.toDouble() ??
+                              0;
                           bool showOffer = isOfferEnabled && !isMyListing;
 
                           return Row(
@@ -2263,6 +2291,12 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                                             '',
                                         listingId: widget.listingId,
                                         listingPrice: price,
+                                        minimumOfferAmount: [
+                                          price * offerMinimumPercent / 100,
+                                          offerMinimumAmount,
+                                        ].reduce((a, b) => a > b ? a : b),
+                                        minimumOfferPercent:
+                                            offerMinimumPercent,
                                       );
                                     },
                                   ),
@@ -2479,8 +2513,14 @@ class _AnswerDialogState extends State<_AnswerDialog> {
 
 class _OfferAmountDialog extends StatefulWidget {
   final double listingPrice;
+  final double minimumOfferAmount;
+  final int minimumOfferPercent;
 
-  const _OfferAmountDialog({required this.listingPrice});
+  const _OfferAmountDialog({
+    required this.listingPrice,
+    required this.minimumOfferAmount,
+    required this.minimumOfferPercent,
+  });
 
   @override
   State<_OfferAmountDialog> createState() => _OfferAmountDialogState();
@@ -2511,16 +2551,28 @@ class _OfferAmountDialogState extends State<_OfferAmountDialog> {
           Text(tr('make_offer')),
         ],
       ),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: InputDecoration(
-          labelText: tr('your_offer_tl'),
-          hintText: widget.listingPrice.toStringAsFixed(0),
-          prefixText: '₺ ',
-        ),
-        onSubmitted: (_) => _submit(),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${tr('offer_minimum_percent')}: %${widget.minimumOfferPercent}\n'
+            '${tr('offer_price_range').replaceFirst('%s', widget.minimumOfferAmount.toStringAsFixed(0)).replaceFirst('%s', widget.listingPrice.toStringAsFixed(0))}',
+            style: const TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: tr('your_offer_tl'),
+              hintText: widget.listingPrice.toStringAsFixed(0),
+              prefixText: '₺ ',
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+        ],
       ),
       actions: [
         TextButton(

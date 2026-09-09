@@ -41,7 +41,7 @@ class _EditListingScreenState extends State<EditListingScreen> {
   bool _isLoading = false;
   String _loadingText = "";
   bool _autoRenew = false;
-  bool _offersEnabled = true;
+  bool _offersEnabled = false;
   bool _tradeEnabled = false;
   int _offerValidityHours = 24;
   int _offerMinimumPercent = 70;
@@ -85,7 +85,7 @@ class _EditListingScreenState extends State<EditListingScreen> {
     }
 
     _autoRenew = widget.currentData['autoRenew'] ?? false;
-    _offersEnabled = widget.currentData['isOfferEnabled'] as bool? ?? true;
+    _offersEnabled = widget.currentData['isOfferEnabled'] as bool? ?? false;
     _tradeEnabled = widget.currentData['tradeEnabled'] as bool? ?? false;
     _offerValidityHours =
         (widget.currentData['offerValidityHours'] as num?)?.toInt() ?? 24;

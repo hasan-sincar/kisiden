@@ -198,19 +198,19 @@ class _HomeScreenState extends State<HomeScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
+                                  '$price TL',
+                                  style: LocalFonts.poppins(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
                                   data['title']?.toString() ?? '',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: LocalFonts.poppins(
                                     fontWeight: FontWeight.w600,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                Text(
-                                  '$price TL',
-                                  style: LocalFonts.poppins(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.bold,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -376,6 +376,15 @@ class _HomeScreenState extends State<HomeScreen>
   String? _filterCity;
   String? _filterDistrict;
 
+  double? _parsePrice(dynamic value) {
+    if (value is num) return value.toDouble();
+    final normalized = value
+        ?.toString()
+        .replaceAll(RegExp(r'[^0-9,.-]'), '')
+        .replaceAll(',', '.');
+    return normalized == null ? null : double.tryParse(normalized);
+  }
+
   final int _lastUnreadCount = 0;
   int _lastNotifCount = 0;
   bool _isFirstNotifLoad = true;
@@ -385,6 +394,9 @@ class _HomeScreenState extends State<HomeScreen>
   int _documentLimit = 20;
   bool _isLoadingMore = false;
   bool _isFiltering = false; // YENİ: Filtreleme animasyonu için state
+  bool _isFilterModalOpening = false;
+  bool _isCategoryPickerOpening = false;
+  bool _isHandlingBack = false;
   QuerySnapshot? _cachedListingsSnapshot;
   late final AnimationController _urgentPulseController;
   late final Animation<double> _urgentPulseScale;
@@ -572,6 +584,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _resetHomeFilters() async {
+    if (!mounted) return;
     _dismissSearchFocus();
     setState(() {
       _searchController.clear();
@@ -593,35 +606,8 @@ class _HomeScreenState extends State<HomeScreen>
       }
     });
     await _savePreferences();
+    if (!mounted) return;
     await _fetchCategoryFeatures('');
-  }
-
-  Future<bool> _confirmResetFilters() async {
-    final shouldReset = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(tr('clear_filters'), style: LocalFonts.poppins()),
-        content: Text(
-          tr('clear_filters_confirmation'),
-          style: LocalFonts.poppins(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(tr('cancel'), style: LocalFonts.poppins()),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(tr('confirm'), style: LocalFonts.poppins()),
-          ),
-        ],
-      ),
-    );
-    if (shouldReset == true) {
-      await _resetHomeFilters();
-      return true;
-    }
-    return false;
   }
 
   Widget _buildUrgentNavIcon({required bool active}) {
@@ -699,20 +685,6 @@ class _HomeScreenState extends State<HomeScreen>
           .collection('listings')
           .where('status', isEqualTo: 'active');
 
-      // Fiyat filtresi
-      double? minP = isSearchMode
-          ? null
-          : double.tryParse(_minPriceController.text);
-      if (!isSearchMode && minP != null && minP > 0) {
-        query = query.where('price', isGreaterThanOrEqualTo: minP);
-      }
-      double? maxP = isSearchMode
-          ? null
-          : double.tryParse(_maxPriceController.text);
-      if (!isSearchMode && maxP != null && maxP > 0) {
-        query = query.where('price', isLessThanOrEqualTo: maxP);
-      }
-
       // Sıralama
       // Fiyat sıralaması seçildiyse daima fiyat alanına göre sırala.
       // Firestore'da price aralığı varken de aynı alan üzerinden orderBy güvenlidir.
@@ -727,7 +699,9 @@ class _HomeScreenState extends State<HomeScreen>
           (isSearchMode ||
               hasCategoryFilter ||
               hasLocationFilter ||
-              _distance < 30.0)
+              _distance < 30.0 ||
+              _minPriceController.text.trim().isNotEmpty ||
+              _maxPriceController.text.trim().isNotEmpty)
           ? 1000
           : _documentLimit;
       return query.limit(effectiveLimit);
@@ -777,22 +751,31 @@ class _HomeScreenState extends State<HomeScreen>
           }
         }
 
-        return WillPopScope(
-          onWillPop: () async {
+        return PopScope(
+          canPop:
+              !_isHandlingBack &&
+              !_hasActiveFilters() &&
+              !_searchFocusNode.hasFocus &&
+              FocusManager.instance.primaryFocus == null,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+
             if (_hasActiveFilters()) {
-              await _confirmResetFilters();
-              return false;
+              if (_isHandlingBack) return;
+              setState(() => _isHandlingBack = true);
+              _resetHomeFilters().whenComplete(() {
+                if (mounted) {
+                  setState(() => _isHandlingBack = false);
+                }
+              });
+              return;
             }
 
-            // Arama metni zaten temizse, açık kalan klavyeyi kapatmadan
-            // ana sayfadan çıkılmasına izin verme.
+            // Açık klavyeyi kapatmadan ana sayfadan çıkılmasına izin verme.
             if (_searchFocusNode.hasFocus ||
                 FocusManager.instance.primaryFocus != null) {
               _dismissSearchFocus();
-              return false;
             }
-
-            return true; // En başa döndüyse uygulamadan çıkmaya izin ver
           },
           child: Scaffold(
             resizeToAvoidBottomInset:
@@ -1662,11 +1645,37 @@ class _HomeScreenState extends State<HomeScreen>
                                                   );
                                             }
 
+                                            bool matchPrice = true;
+                                            if (!isSearchMode) {
+                                              final minPrice = _parsePrice(
+                                                _minPriceController.text,
+                                              );
+                                              final maxPrice = _parsePrice(
+                                                _maxPriceController.text,
+                                              );
+                                              final listingPrice = _parsePrice(
+                                                data['price'],
+                                              );
+                                              if (minPrice != null &&
+                                                  (listingPrice == null ||
+                                                      listingPrice <
+                                                          minPrice)) {
+                                                matchPrice = false;
+                                              }
+                                              if (maxPrice != null &&
+                                                  (listingPrice == null ||
+                                                      listingPrice >
+                                                          maxPrice)) {
+                                                matchPrice = false;
+                                              }
+                                            }
+
                                             return matchSearch &&
                                                 matchCategory &&
                                                 matchDistance &&
                                                 matchNeighborhood &&
-                                                matchFeatures;
+                                                matchFeatures &&
+                                                matchPrice;
                                           }).toList();
 
                                           // Kullanıcının herhangi bir filtre uygulayıp uygulamadığını kontrol et.
