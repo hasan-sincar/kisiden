@@ -19,9 +19,20 @@ class _InboxScreenState extends State<InboxScreen> {
   bool isSelectionMode = false;
 
   void _deleteSelected() async {
-    for (String chatId in selectedChats) {
-      await DatabaseService().deleteChat(chatId);
+    try {
+      for (String chatId in selectedChats) {
+        await DatabaseService().deleteChat(chatId);
+      }
+    } on FirebaseException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${tr('generic_try_again_error')} (${error.code})'),
+        ),
+      );
+      return;
     }
+    if (!mounted) return;
     setState(() {
       selectedChats.clear();
       isSelectionMode = false;
@@ -111,10 +122,18 @@ class _InboxScreenState extends State<InboxScreen> {
               var data = docs[index].data() as Map<String, dynamic>;
               String chatId = docs[index].id;
 
-              List participants = data['participants'];
-              String otherUserId = participants.firstWhere(
-                (id) => id != currentUserId,
+              final participants = data['participants'];
+              if (participants is! List || participants.length < 2) {
+                return const SizedBox.shrink();
+              }
+              final otherParticipant = participants.cast<dynamic>().firstWhere(
+                (id) => id?.toString() != currentUserId,
+                orElse: () => null,
               );
+              final otherUserId = otherParticipant?.toString() ?? '';
+              if (otherUserId.isEmpty) {
+                return const SizedBox.shrink();
+              }
 
               List unreadBy = data['unreadBy'] ?? [];
               bool isUnread = unreadBy.contains(currentUserId);
@@ -218,9 +237,12 @@ class _InboxScreenState extends State<InboxScreen> {
                                     color: Colors.grey[600],
                                   ),
                                   const SizedBox(width: 4),
-                                  Flexible(
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 180,
+                                    ),
                                     child: Text(
-                                      data['listingTitle'],
+                                      data['listingTitle'].toString(),
                                       style: LocalFonts.poppins(
                                         fontSize: 11,
                                         color: Colors.grey[700],

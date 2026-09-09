@@ -512,7 +512,7 @@ class NotificationsScreen extends StatelessWidget {
                   );
                 }
 
-                return Container(
+                return Material(
                   color: isRead ? Colors.transparent : tileUnreadColor,
                   child: ListTile(
                     dense: true,

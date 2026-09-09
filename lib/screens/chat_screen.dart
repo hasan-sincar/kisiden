@@ -39,6 +39,52 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
+class _CounterOfferDialog extends StatefulWidget {
+  const _CounterOfferDialog();
+
+  @override
+  State<_CounterOfferDialog> createState() => _CounterOfferDialogState();
+}
+
+class _CounterOfferDialogState extends State<_CounterOfferDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = double.tryParse(_controller.text.trim().replaceAll(',', '.'));
+    if (value == null || value <= 0) return;
+    Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tr('counter_offer')),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: tr('your_offer_tl'),
+          prefixText: '₺ ',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(tr('cancel')),
+        ),
+        FilledButton(onPressed: _submit, child: Text(tr('send_offer'))),
+      ],
+    );
+  }
+}
+
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final DatabaseService _dbService = DatabaseService();
@@ -76,39 +122,10 @@ class _ChatScreenState extends State<ChatScreen> {
     required String listingTitle,
     required String listingId,
   }) async {
-    final controller = TextEditingController();
     final amount = await showDialog<double>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(tr('counter_offer')),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            labelText: tr('your_offer_tl'),
-            prefixText: '₺ ',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(tr('cancel')),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = double.tryParse(
-                controller.text.trim().replaceAll(',', '.'),
-              );
-              if (value == null || value <= 0) return;
-              Navigator.pop(dialogContext, value);
-            },
-            child: Text(tr('send_offer')),
-          ),
-        ],
-      ),
+      builder: (_) => const _CounterOfferDialog(),
     );
-    controller.dispose();
     if (amount == null) return;
     try {
       await _dbService.sendCounterOffer(
@@ -1219,57 +1236,66 @@ class _ChatScreenState extends State<ChatScreen> {
                                   // Satıcı teklifi görüyorsa Kabul Et / Reddet butonlarını çıkar
                                   if (!isMe && status == 'pending') ...[
                                     const SizedBox(height: 16),
-                                    Row(
+                                    Column(
                                       children: [
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: Colors.red[600],
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                            ),
-                                            onPressed: () =>
-                                                _dbService.updateOfferStatus(
-                                                  chatRoomId,
-                                                  messageId,
-                                                  'rejected',
-                                                  data['senderId'],
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: ElevatedButton(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor:
+                                                      Colors.red[600],
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
                                                 ),
-                                            child: Text(
-                                              tr('reject'),
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  Colors.green[600],
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                            ),
-                                            onPressed: () =>
-                                                _dbService.updateOfferStatus(
-                                                  chatRoomId,
-                                                  messageId,
-                                                  'accepted',
-                                                  data['senderId'],
+                                                onPressed: () => _dbService
+                                                    .updateOfferStatus(
+                                                      chatRoomId,
+                                                      messageId,
+                                                      'rejected',
+                                                      data['senderId'],
+                                                    ),
+                                                child: Text(
+                                                  tr('reject'),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                  ),
                                                 ),
-                                            child: Text(
-                                              tr('accept'),
-                                              style: TextStyle(
-                                                color: Colors.white,
                                               ),
                                             ),
-                                          ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: ElevatedButton(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor:
+                                                      Colors.green[600],
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                ),
+                                                onPressed: () => _dbService
+                                                    .updateOfferStatus(
+                                                      chatRoomId,
+                                                      messageId,
+                                                      'accepted',
+                                                      data['senderId'],
+                                                    ),
+                                                child: Text(
+                                                  tr('accept'),
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                         const SizedBox(height: 8),
                                         SizedBox(

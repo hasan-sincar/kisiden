@@ -218,8 +218,10 @@ service cloud.firestore {
           'offerStatus', 'message', 'editedAt'
         ]);
 
-      allow delete: if isChatParticipant(chatId)
-        && (resource.data.senderId == request.auth.uid || isAdmin());
+      // Sohbeti silen katılımcı, konuşmanın tamamını kaldırabilmelidir.
+      // Aksi halde karşı tarafın mesajları silinemediği için sohbet silme
+      // işlemi yarıda kalır ve kullanıcıya permission-denied döner.
+      allow delete: if isChatParticipant(chatId);
     }
 
     // KATEGORİLER VE SİSTEM AYARLARI: Okunabilir ama dışarıdan ASLA değiştirilemez!
