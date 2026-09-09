@@ -38,6 +38,9 @@ class AuthService {
 
   // Google ile Giriş Yapma Fonksiyonu
   Future<UserCredential?> signInWithGoogle() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      return null;
+    }
     try {
       if (kIsWeb) {
         // ÇÖZÜM: Web için Popup tabanlı doğrudan Firebase Auth kullanımı
@@ -91,10 +94,9 @@ class AuthService {
           );
         }
 
-        final oauthCredential = OAuthProvider('apple.com').credential(
-          idToken: identityToken,
-          rawNonce: rawNonce,
-        );
+        final oauthCredential = OAuthProvider(
+          'apple.com',
+        ).credential(idToken: identityToken, rawNonce: rawNonce);
 
         return await _auth.signInWithCredential(oauthCredential);
       }

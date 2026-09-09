@@ -552,61 +552,63 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Divider(
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                              ),
-                              child: Text(
-                                tr('or').toUpperCase(),
-                                style: LocalFonts.poppins(
-                                  color: Colors.white70,
-                                  fontSize: 12,
+                        if (defaultTargetPlatform == TargetPlatform.android) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Divider(
+                                  color: Colors.white.withValues(alpha: 0.5),
                                 ),
                               ),
-                            ),
-                            Expanded(
-                              child: Divider(
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
+                                child: Text(
+                                  tr('or').toUpperCase(),
+                                  style: LocalFonts.poppins(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Divider(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(double.infinity, 55),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              side: BorderSide(
                                 color: Colors.white.withValues(alpha: 0.5),
                               ),
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.05,
+                              ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 55),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                            onPressed: _isLoading ? null : _loginWithGoogle,
+                            icon: Image.asset(
+                              'assets/icon_google.png',
+                              height: 24,
                             ),
-                            side: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.5),
-                            ),
-                            backgroundColor: Colors.white.withValues(
-                              alpha: 0.05,
-                            ),
-                          ),
-                          onPressed: _isLoading ? null : _loginWithGoogle,
-                          icon: Image.asset(
-                            'assets/icon_google.png',
-                            height: 24,
-                          ),
-                          label: Text(
-                            tr('continue_with_google'),
-                            style: LocalFonts.poppins(
-                              fontSize: 16,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
+                            label: Text(
+                              tr('continue_with_google'),
+                              style: LocalFonts.poppins(
+                                fontSize: 16,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                         if (defaultTargetPlatform == TargetPlatform.macOS) ...[
                           const SizedBox(height: 16),
                           OutlinedButton.icon(
