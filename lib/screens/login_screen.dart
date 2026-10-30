@@ -1,6 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:appim/utils/local_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
@@ -8,9 +8,8 @@ import '../services/guest_session_service.dart';
 import 'otp_screen.dart';
 import '../main.dart';
 import '../utils/translations.dart';
-import '../utils/theme_colors.dart';
 import 'legal_document_screen.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'contact_us_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,12 +19,52 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const MethodChannel _phoneNumberHintChannel = MethodChannel(
+    'appim/widget',
+  );
   final AuthService _authService = AuthService();
   final TextEditingController _phoneController = TextEditingController();
   bool _isLoading = false;
+  bool _phoneAuthCompleted = false;
   DateTime? _lastOtpRequestAt;
   DateTime? _otpBlockedUntil;
   static const int _otpCooldownSeconds = 60;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _selectPhoneNumberFromDevice();
+      });
+    }
+  }
+
+  Future<void> _selectPhoneNumberFromDevice() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+
+    try {
+      final phoneNumber = await _phoneNumberHintChannel.invokeMethod<String>(
+        'pickPhoneNumber',
+      );
+      if (!mounted || phoneNumber == null || phoneNumber.trim().isEmpty) return;
+
+      final normalized = _normalizePhoneForAuth(phoneNumber);
+      final input = normalized.startsWith('+90')
+          ? normalized.substring(3)
+          : phoneNumber.trim();
+      _phoneController.value = TextEditingValue(
+        text: input,
+        selection: TextSelection.collapsed(offset: input.length),
+      );
+    } on PlatformException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('phone_hint_unavailable'))));
+    }
+  }
+
   bool _is17010Error(FirebaseAuthException error) {
     final rawMessage = (error.message ?? '').toLowerCase();
     return error.code == '17010' ||
@@ -142,19 +181,6 @@ class _LoginScreenState extends State<LoginScreen> {
             LegalDocumentScreen(title: title, assetPath: assetPath),
       ),
     );
-  }
-
-  Future<void> _openSupportPage() async {
-    final uri = Uri.parse('https://kisiden.com/support');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      return;
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Destek sayfası açılamadı.')));
   }
 
   Future<void> _loginWithGoogle() async {
@@ -293,18 +319,19 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    _phoneAuthCompleted = false;
     setState(() => _isLoading = true);
 
     try {
       await _authService.verifyPhoneNumber(
         phoneNumber: normalized,
         verificationCompleted: (credential) async {
+          if (_phoneAuthCompleted) return;
           try {
             await FirebaseAuth.instance.signInWithCredential(credential);
             await GuestSessionService.end();
-            if (!mounted) return;
-            Navigator.pushAndRemoveUntil(
-              context,
+            _phoneAuthCompleted = true;
+            navigatorKey.currentState?.pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const RootScreen()),
               (route) => false,
             );
@@ -340,7 +367,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ).showSnackBar(SnackBar(content: Text(errorMessage)));
         },
         codeSent: (verificationId, forceResendingToken) {
-          if (!mounted) return;
+          if (!mounted || _phoneAuthCompleted) return;
           _lastOtpRequestAt = DateTime.now();
           setState(() => _isLoading = false);
           Navigator.pushReplacement(
@@ -367,333 +394,450 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // ŞIK ARKAPLAN (GRADIENT)
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0D47A1),
-                  Color(0xFF1976D2),
-                  Color(0xFF4A148C),
-                ],
+      backgroundColor: const Color(0xFFFAFAFA),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final verticalPadding = constraints.maxHeight < 700 ? 12.0 : 22.0;
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: constraints.maxWidth < 380 ? 20 : 26,
+                vertical: verticalPadding,
               ),
-            ),
-          ),
-
-          // DEKORATİF ARKAPLAN ŞEKİLLERİ
-          Positioned(
-            top: -100,
-            left: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.1),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -50,
-            right: -50,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blueAccent.withValues(alpha: 0.2),
-              ),
-            ),
-          ),
-
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(30),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                  child: Container(
-                    padding: const EdgeInsets.all(32.0),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        width: 1.5,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 8),
+                      Image.asset(
+                        'assets/logo.png',
+                        width: 76,
+                        height: 76,
+                        fit: BoxFit.contain,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 20,
-                          spreadRadius: 5,
+                      const SizedBox(height: 7),
+                      Text(
+                        tr('app_name'),
+                        style: LocalFonts.poppins(
+                          fontSize: 27,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF17191D),
+                          letterSpacing: -0.5,
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset('assets/logo.png', height: 80),
-                        const SizedBox(height: 16),
-                        Text(
-                          tr('app_name'),
-                          style: LocalFonts.poppins(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 1.2,
-                          ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        tr('welcome_new_generation_marketplace'),
+                        textAlign: TextAlign.center,
+                        style: LocalFonts.poppins(
+                          fontSize: 12,
+                          color: const Color(0xFF858994),
                         ),
-                        Text(
-                          tr('welcome_new_generation_marketplace'),
-                          style: LocalFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.white70,
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-
-                        // Telefon Numarası Giriş Alanı
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(height: 26),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _LoginBenefit(
+                              icon: Icons.sell_outlined,
+                              title: tr('login_benefit_trade_title'),
+                              subtitle: tr('login_benefit_trade_subtitle'),
                             ),
                           ),
-                          child: TextField(
-                            controller: _phoneController,
-                            onChanged: _onPhoneChanged,
-                            keyboardType: TextInputType.phone,
-                            autofillHints: const [
-                              AutofillHints.telephoneNumber,
-                            ],
-                            style: LocalFonts.poppins(
-                              color: const Color(0xFF6B7280),
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.5,
+                          const _LoginBenefitDivider(),
+                          Expanded(
+                            child: _LoginBenefit(
+                              icon: Icons.shield_outlined,
+                              title: tr('login_benefit_trust_title'),
+                              subtitle: tr('login_benefit_trust_subtitle'),
                             ),
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 16,
+                          ),
+                          const _LoginBenefitDivider(),
+                          Expanded(
+                            child: _LoginBenefit(
+                              icon: Icons.people_outline_rounded,
+                              title: tr('login_benefit_listings_title'),
+                              subtitle: tr('login_benefit_listings_subtitle'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 26),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 78,
+                        child: TextField(
+                          controller: _phoneController,
+                          onChanged: _onPhoneChanged,
+                          keyboardType: TextInputType.phone,
+                          autofillHints: const [AutofillHints.telephoneNumber],
+                          textAlignVertical: TextAlignVertical.center,
+                          style: LocalFonts.poppins(
+                            color: const Color(0xFF17191D),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w400,
+                            letterSpacing: 0.3,
+                          ),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white,
+                            floatingLabelBehavior: FloatingLabelBehavior.always,
+                            labelText: tr('login_phone_label'),
+                            labelStyle: LocalFonts.poppins(
+                              color: const Color(0xFF858994),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            hintText: tr('phone_hint'),
+                            hintStyle: LocalFonts.poppins(
+                              color: const Color(0xFF858994),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.phone_iphone_outlined,
+                              color: Color(0xFF17191D),
+                              size: 21,
+                            ),
+                            suffixIcon:
+                                !kIsWeb &&
+                                    defaultTargetPlatform ==
+                                        TargetPlatform.android
+                                ? IconButton(
+                                    tooltip: tr('choose_phone_from_device'),
+                                    onPressed: _isLoading
+                                        ? null
+                                        : _selectPhoneNumberFromDevice,
+                                    icon: const Icon(Icons.contact_phone),
+                                  )
+                                : null,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 18,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFE1E3E8),
                               ),
-                              prefixIcon: const Icon(
-                                Icons.phone,
-                                color: Colors.black,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF17191D),
+                                width: 1.2,
                               ),
-                              hintText: tr('phone_hint'),
-                              hintStyle: LocalFonts.poppins(
-                                color: const Color(0xFF6B7280),
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 1,
-                              ),
-                              suffixIcon: _isLoading
-                                  ? const Padding(
-                                      padding: EdgeInsets.all(12.0),
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          color: AppColors.primary,
-                                          strokeWidth: 2,
-                                        ),
-                                      ),
-                                    )
-                                  : Padding(
-                                      padding: const EdgeInsets.only(
-                                        right: 8,
-                                        top: 6,
-                                        bottom: 6,
-                                      ),
-                                      child: Material(
-                                        color: AppColors.primary,
-                                        elevation: 3,
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: InkWell(
-                                          onTap: _sendOtp,
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          child: const SizedBox(
-                                            width: 42,
-                                            height: 42,
-                                            child: Icon(
-                                              Icons.arrow_forward_rounded,
-                                              color: Colors.white,
-                                              size: 24,
-                                            ),
-                                          ),
-                                        ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          tr('phone_auth_sms_notice'),
+                          style: LocalFonts.poppins(
+                            color: const Color(0xFF858994),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 62,
+                        child: FilledButton(
+                          onPressed: _isLoading ? null : _sendOtp,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF17191D),
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: const Color(0xFF777A80),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const SizedBox(width: 24),
+                                    Text(
+                                      tr('login_continue'),
+                                      style: LocalFonts.poppins(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                            ),
-                          ),
+                                    const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: Colors.white,
+                                      size: 21,
+                                    ),
+                                  ],
+                                ),
                         ),
-                        const SizedBox(height: 8),
-
-                        TextButton.icon(
-                          onPressed: _isLoading ? null : _continueAsGuest,
-                          icon: const Icon(Icons.visibility_outlined),
-                          label: Text(
-                            tr('continue_as_guest'),
-                            style: LocalFonts.poppins(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-
-                        if (defaultTargetPlatform == TargetPlatform.android) ...[
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Divider(
-                                  color: Colors.white.withValues(alpha: 0.5),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: Text(
-                                  tr('or').toUpperCase(),
-                                  style: LocalFonts.poppins(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Divider(
-                                  color: Colors.white.withValues(alpha: 0.5),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 18),
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 55),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.05,
-                              ),
-                            ),
-                            onPressed: _isLoading ? null : _loginWithGoogle,
-                            icon: Image.asset(
-                              'assets/icon_google.png',
-                              height: 24,
-                            ),
-                            label: Text(
-                              tr('continue_with_google'),
-                              style: LocalFonts.poppins(
-                                fontSize: 16,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (defaultTargetPlatform == TargetPlatform.macOS) ...[
-                          const SizedBox(height: 16),
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(double.infinity, 55),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.05,
-                              ),
-                            ),
-                            onPressed: _isLoading ? null : _loginWithApple,
-                            icon: const Icon(
-                              Icons.apple,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                            label: Text(
-                              tr('continue_with_apple'),
-                              style: LocalFonts.poppins(
-                                fontSize: 16,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          crossAxisAlignment: WrapCrossAlignment.center,
+                      ),
+                      if (defaultTargetPlatform == TargetPlatform.android ||
+                          defaultTargetPlatform == TargetPlatform.macOS) ...[
+                        const SizedBox(height: 21),
+                        Row(
                           children: [
-                            TextButton(
-                              onPressed: () => _openLegalPage('privacy'),
+                            const Expanded(
+                              child: Divider(
+                                color: Color(0xFFE1E3E8),
+                                height: 1,
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
                               child: Text(
-                                tr('privacy_policy'),
+                                tr('or').toUpperCase(),
                                 style: LocalFonts.poppins(
-                                  color: Colors.white,
-                                  fontSize: 12,
+                                  color: const Color(0xFF858994),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 1,
                                 ),
                               ),
                             ),
-                            const Text(
-                              "•",
-                              style: TextStyle(color: Colors.white70),
-                            ),
-                            TextButton(
-                              onPressed: () => _openLegalPage('terms'),
-                              child: Text(
-                                tr('terms_of_use'),
-                                style: LocalFonts.poppins(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            const Text(
-                              "•",
-                              style: TextStyle(color: Colors.white70),
-                            ),
-                            TextButton(
-                              onPressed: _openSupportPage,
-                              child: Text(
-                                tr('contact_us'),
-                                style: LocalFonts.poppins(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                ),
+                            const Expanded(
+                              child: Divider(
+                                color: Color(0xFFE1E3E8),
+                                height: 1,
                               ),
                             ),
                           ],
                         ),
                       ],
-                    ),
+                      if (defaultTargetPlatform == TargetPlatform.android) ...[
+                        const SizedBox(height: 17),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 60,
+                          child: OutlinedButton(
+                            onPressed: _isLoading ? null : _loginWithGoogle,
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF17191D),
+                              side: const BorderSide(color: Color(0xFFE1E3E8)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              elevation: 1,
+                              shadowColor: Colors.black.withValues(alpha: 0.08),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Image.asset(
+                                  'assets/icon_google.png',
+                                  height: 22,
+                                ),
+                                const SizedBox(width: 11),
+                                Text(
+                                  tr('continue_with_google'),
+                                  style: LocalFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (defaultTargetPlatform == TargetPlatform.macOS) ...[
+                        const SizedBox(height: 17),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 60,
+                          child: OutlinedButton.icon(
+                            onPressed: _isLoading ? null : _loginWithApple,
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF17191D),
+                              side: const BorderSide(color: Color(0xFFE1E3E8)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            icon: const Icon(Icons.apple, size: 23),
+                            label: Text(
+                              tr('continue_with_apple'),
+                              style: LocalFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 60,
+                        child: OutlinedButton(
+                          onPressed: _isLoading ? null : _continueAsGuest,
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: const Color(0xFF17191D),
+                            side: const BorderSide(color: Color(0xFFE1E3E8)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.visibility_outlined,
+                                color: Color(0xFF17191D),
+                                size: 21,
+                              ),
+                              Expanded(
+                                child: Text(
+                                  tr('continue_as_guest'),
+                                  textAlign: TextAlign.center,
+                                  style: LocalFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                color: Color(0xFFAAADB5),
+                                size: 16,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _LoginLegalLink(
+                            label: tr('privacy_policy'),
+                            onPressed: () => _openLegalPage('privacy'),
+                          ),
+                          _LoginLegalLink(
+                            label: tr('contact_us'),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ContactUsScreen(),
+                              ),
+                            ),
+                          ),
+                          _LoginLegalLink(
+                            label: tr('terms_of_use'),
+                            onPressed: () => _openLegalPage('terms'),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
+    );
+  }
+}
+
+class _LoginBenefit extends StatelessWidget {
+  const _LoginBenefit({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 21, color: const Color(0xFF17191D)),
+        const SizedBox(height: 7),
+        Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: LocalFonts.poppins(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF17191D),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: LocalFonts.poppins(
+            fontSize: 9,
+            color: const Color(0xFF858994),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LoginBenefitDivider extends StatelessWidget {
+  const _LoginBenefitDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 42,
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      color: const Color(0xFFE1E3E8),
+    );
+  }
+}
+
+class _LoginLegalLink extends StatelessWidget {
+  const _LoginLegalLink({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: const Color(0xFF858994),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(label, style: LocalFonts.poppins(fontSize: 11)),
     );
   }
 }

@@ -7,10 +7,12 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/database_service.dart';
+import '../services/banner_ad_settings_service.dart';
 import '../utils/turkey_locations.dart';
 import '../utils/translations.dart';
 import '../utils/theme_colors.dart';
 import 'listing_detail_screen.dart';
+import 'listing_comparison_screen.dart';
 
 class NearbyListingsScreen extends StatefulWidget {
   final double? initialDistance;
@@ -27,6 +29,7 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
   String _currentParentName = "Tümü";
   String _sortBy = 'distance_asc'; // Varsayılan: Yakından Uzağa
   double _distance = 30.0;
+  int? _createdWithinHours;
   bool _isGridView = false;
   final TextEditingController _minPriceController = TextEditingController();
   final TextEditingController _maxPriceController = TextEditingController();
@@ -36,6 +39,103 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
   String? _filterDistrict;
   String? _filterNeighborhood;
   Position? _userPosition;
+  final Map<String, Map<String, dynamic>> _selectedListings = {};
+
+  void _toggleComparisonSelection(String listingId, Map<String, dynamic> data) {
+    if (_selectedListings.containsKey(listingId)) {
+      setState(() => _selectedListings.remove(listingId));
+      return;
+    }
+
+    if (_selectedListings.length >= 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('comparison_limit_reached').replaceFirst('%s', '4')),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedListings[listingId] = Map<String, dynamic>.from(data);
+    });
+  }
+
+  Widget _comparisonToggleButton(String listingId, Map<String, dynamic> data) {
+    final isSelected = _selectedListings.containsKey(listingId);
+    return Material(
+      color: isSelected
+          ? Colors.blue[800]
+          : Colors.white.withValues(alpha: 0.95),
+      shape: const CircleBorder(),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+        visualDensity: VisualDensity.compact,
+        tooltip: tr(
+          isSelected ? 'remove_from_comparison' : 'add_to_comparison',
+        ),
+        icon: Icon(
+          isSelected ? Icons.check_rounded : Icons.compare_arrows_rounded,
+          color: isSelected ? Colors.white : Colors.black87,
+          size: 20,
+        ),
+        onPressed: () => _toggleComparisonSelection(listingId, data),
+      ),
+    );
+  }
+
+  void _openComparison() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ListingComparisonScreen(
+          listings: _selectedListings.entries.toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComparisonBar() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                tr(
+                  'comparison_selection_count',
+                ).replaceFirst('%s', _selectedListings.length.toString()),
+                style: LocalFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+            ),
+            IconButton(
+              onPressed: () => setState(_selectedListings.clear),
+              tooltip: tr('clear_selection'),
+              icon: const Icon(Icons.clear_all_rounded),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: _selectedListings.length >= 2 ? _openComparison : null,
+              child: Text(tr('compare_listings')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -54,6 +154,11 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
             widget.initialDistance ??
             prefs.getDouble('nearby_distance') ??
             30.0;
+        final createdWithinHours = prefs.getInt('nearby_createdWithinHours');
+        _createdWithinHours =
+            createdWithinHours == 24 || createdWithinHours == 48
+            ? createdWithinHours
+            : null;
         _sortBy = prefs.getString('nearby_sortBy') ?? 'distance_asc';
         _isGridView = prefs.getBool('nearby_isGridView') ?? false;
         _minPriceController.text = prefs.getString('nearby_minPrice') ?? "";
@@ -80,6 +185,11 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
         await prefs.remove('nearby_filterDistrict');
       }
       await prefs.setDouble('nearby_distance', _distance);
+      if (_createdWithinHours == null) {
+        await prefs.remove('nearby_createdWithinHours');
+      } else {
+        await prefs.setInt('nearby_createdWithinHours', _createdWithinHours!);
+      }
       await prefs.setString('nearby_sortBy', _sortBy);
       await prefs.setBool('nearby_isGridView', _isGridView);
       await prefs.setString('nearby_minPrice', _minPriceController.text);
@@ -162,6 +272,14 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
     return neighborhood == null || neighborhood.isEmpty
         ? base
         : '$base, ${_formatLocation(neighborhood)}';
+  }
+
+  DateTime? _createdAt(Map<String, dynamic> listing) {
+    final value = listing['createdAt'];
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   void _showCategoryPickerForFilter(String parentId, String currentPath) {
@@ -381,6 +499,58 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                             },
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      tr('listing_time_filter'),
+                      style: LocalFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        for (final option in <({int? hours, String key})>[
+                          (hours: null, key: 'any_date'),
+                          (hours: 24, key: 'last_24_hours'),
+                          (hours: 48, key: 'last_48_hours'),
+                        ])
+                          ChoiceChip(
+                            label: Text(tr(option.key)),
+                            selected: _createdWithinHours == option.hours,
+                            onSelected: (selected) {
+                              final nextValue = selected ? option.hours : null;
+                              setModalState(
+                                () => _createdWithinHours = nextValue,
+                              );
+                              setState(() => _createdWithinHours = nextValue);
+                              _savePreferences();
+                            },
+                            selectedColor: AppColors.primary.withValues(
+                              alpha: 0.12,
+                            ),
+                            side: BorderSide(
+                              color: _createdWithinHours == option.hours
+                                  ? AppColors.primary.withValues(alpha: 0.45)
+                                  : Colors.grey.shade300,
+                            ),
+                            labelStyle: LocalFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: _createdWithinHours == option.hours
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                              color: _createdWithinHours == option.hours
+                                  ? AppColors.primary
+                                  : Colors.black87,
+                            ),
+                            showCheckmark: false,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                          ),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -739,6 +909,7 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final double screenWidth = MediaQuery.sizeOf(context).width;
     final int crossAxisCount = screenWidth > 1200
         ? 5
@@ -774,10 +945,12 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
         ],
       ),
       body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(FirebaseAuth.instance.currentUser!.uid)
-            .snapshots(),
+        stream: currentUserId == null
+            ? null
+            : FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(currentUserId)
+                  .snapshots(),
         builder: (context, userSnap) {
           List<String> hiddenUsers = [];
           if (userSnap.hasData && userSnap.data!.exists) {
@@ -847,13 +1020,23 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                 double? maxP = double.tryParse(_maxPriceController.text);
                 if (minP != null && listingPrice < minP) matchPrice = false;
                 if (maxP != null && listingPrice > maxP) matchPrice = false;
+                bool matchCreatedAt = true;
+                if (_createdWithinHours != null) {
+                  final createdAt = _createdAt(data);
+                  final cutoff = DateTime.now().subtract(
+                    Duration(hours: _createdWithinHours!),
+                  );
+                  matchCreatedAt =
+                      createdAt != null && !createdAt.isBefore(cutoff);
+                }
 
                 return matchCategory &&
                     matchDistance &&
                     matchCity &&
                     matchDistrict &&
                     matchNeighborhood &&
-                    matchPrice;
+                    matchPrice &&
+                    matchCreatedAt;
               }).toList();
 
               filteredDocs.sort((a, b) {
@@ -988,102 +1171,108 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                           ),
                         );
                       },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                      child: Stack(
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: Container(
-                          decoration: isCatShowcased
-                              ? BoxDecoration(
-                                  border: Border.all(
-                                    color: AppColors.secondary.withValues(
-                                      alpha: 0.5,
-                                    ),
-                                    width: 2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(16),
-                                )
-                              : null,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(
-                                    top: Radius.circular(16),
-                                  ),
-                                  child: SizedBox(
-                                    width: double.infinity,
-                                    child: allImages.first.isEmpty
-                                        ? const Icon(
-                                            Icons.image,
-                                            color: Colors.grey,
-                                          )
-                                        : Stack(
-                                            fit: StackFit.expand,
-                                            children: [
-                                              PageView.builder(
-                                                itemCount: allImages.length,
-                                                itemBuilder:
-                                                    (
-                                                      context,
-                                                      imgIndex,
-                                                    ) => Image.network(
-                                                      allImages[imgIndex],
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (c, e, s) =>
-                                                          const Icon(
-                                                            Icons
-                                                                .image_not_supported,
-                                                            color: Colors.grey,
-                                                          ),
-                                                    ),
-                                              ),
-                                              if (distanceText.isNotEmpty)
-                                                Positioned(
-                                                  top: 6,
-                                                  left: 6,
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 3,
+                            child: Container(
+                              decoration: isCatShowcased
+                                  ? BoxDecoration(
+                                      border: Border.all(
+                                        color: AppColors.secondary.withValues(
+                                          alpha: 0.5,
+                                        ),
+                                        width: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(16),
+                                    )
+                                  : null,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(16),
+                                      ),
+                                      child: SizedBox(
+                                        width: double.infinity,
+                                        child: allImages.first.isEmpty
+                                            ? const Icon(
+                                                Icons.image,
+                                                color: Colors.grey,
+                                              )
+                                            : Stack(
+                                                fit: StackFit.expand,
+                                                children: [
+                                                  PageView.builder(
+                                                    itemCount: allImages.length,
+                                                    itemBuilder:
+                                                        (
+                                                          context,
+                                                          imgIndex,
+                                                        ) => Image.network(
+                                                          allImages[imgIndex],
+                                                          fit: BoxFit.cover,
+                                                          errorBuilder:
+                                                              (
+                                                                c,
+                                                                e,
+                                                                s,
+                                                              ) => const Icon(
+                                                                Icons
+                                                                    .image_not_supported,
+                                                                color:
+                                                                    Colors.grey,
+                                                              ),
                                                         ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.white
-                                                          .withValues(
-                                                            alpha: 0.9,
-                                                          ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                    ),
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        const Icon(
-                                                          Icons.location_on,
-                                                          color:
-                                                              AppColors.primary,
-                                                          size: 10,
+                                                  ),
+                                                  if (distanceText.isNotEmpty)
+                                                    Positioned(
+                                                      top: 6,
+                                                      left: 6,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 3,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.white
+                                                              .withValues(
+                                                                alpha: 0.9,
+                                                              ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
                                                         ),
-                                                        const SizedBox(
-                                                          width: 4,
-                                                        ),
-                                                        Text(
-                                                          distanceText,
-                                                          style:
-                                                              LocalFonts.poppins(
+                                                        child: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(
+                                                              Icons.location_on,
+                                                              color: AppColors
+                                                                  .primary,
+                                                              size: 10,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 4,
+                                                            ),
+                                                            Text(
+                                                              distanceText,
+                                                              style: LocalFonts.poppins(
                                                                 color: AppColors
                                                                     .primary,
                                                                 fontSize: 10,
@@ -1091,47 +1280,48 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                                                                     FontWeight
                                                                         .bold,
                                                               ),
+                                                            ),
+                                                          ],
                                                         ),
-                                                      ],
+                                                      ),
                                                     ),
-                                                  ),
-                                                ),
-                                              if (allImages.length > 1)
-                                                Positioned(
-                                                  bottom: 6,
-                                                  right: 6,
-                                                  child: Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 3,
+                                                  if (allImages.length > 1)
+                                                    Positioned(
+                                                      bottom: 6,
+                                                      right: 6,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 3,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.black
+                                                              .withValues(
+                                                                alpha: 0.65,
+                                                              ),
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
                                                         ),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.black
-                                                          .withValues(
-                                                            alpha: 0.65,
-                                                          ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                    ),
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        const Icon(
-                                                          Icons.photo_library,
-                                                          color: Colors.white,
-                                                          size: 12,
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 4,
-                                                        ),
-                                                        Text(
-                                                          '${allImages.length}',
-                                                          style:
-                                                              LocalFonts.poppins(
+                                                        child: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(
+                                                              Icons
+                                                                  .photo_library,
+                                                              color:
+                                                                  Colors.white,
+                                                              size: 12,
+                                                            ),
+                                                            const SizedBox(
+                                                              width: 4,
+                                                            ),
+                                                            Text(
+                                                              '${allImages.length}',
+                                                              style: LocalFonts.poppins(
                                                                 color: Colors
                                                                     .white,
                                                                 fontSize: 10,
@@ -1139,75 +1329,86 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                                                                     FontWeight
                                                                         .bold,
                                                               ),
+                                                            ),
+                                                          ],
                                                         ),
-                                                      ],
+                                                      ),
                                                     ),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
+                                                ],
+                                              ),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
+                                  Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              '₺$formattedPrice',
+                                              style: LocalFonts.poppins(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.blue[900],
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                            const Spacer(),
+                                            if (isCatShowcased)
+                                              const Icon(
+                                                Icons.stars,
+                                                color: Colors.orange,
+                                                size: 16,
+                                              ),
+                                            if (isPro)
+                                              const Icon(
+                                                Icons.verified,
+                                                color: AppColors.secondary,
+                                                size: 16,
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
                                         Text(
-                                          '₺$formattedPrice',
+                                          data['title'] ?? '',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: LocalFonts.poppins(
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue[900],
-                                            fontSize: 16,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        const Spacer(),
-                                        if (isCatShowcased)
-                                          const Icon(
-                                            Icons.stars,
-                                            color: Colors.orange,
-                                            size: 16,
-                                          ),
-                                        if (isPro)
-                                          const Icon(
-                                            Icons.verified,
-                                            color: AppColors.secondary,
-                                            size: 16,
+                                        const SizedBox(height: 4),
+                                        if (data['city'] != null &&
+                                            data['district'] != null)
+                                          Text(
+                                            _listingLocationText(data),
+                                            style: LocalFonts.poppins(
+                                              fontSize: 10,
+                                              color: Colors.grey[600],
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                       ],
                                     ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      data['title'] ?? '',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: LocalFonts.poppins(
-                                        fontSize: 13,
-                                        color: Colors.black87,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    if (data['city'] != null &&
-                                        data['district'] != null)
-                                      Text(
-                                        _listingLocationText(data),
-                                        style: LocalFonts.poppins(
-                                          fontSize: 10,
-                                          color: Colors.grey[600],
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
+                          Positioned(
+                            right: 8,
+                            bottom: 8,
+                            child: _comparisonToggleButton(
+                              filteredDocs[index].id,
+                              data,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },
@@ -1272,213 +1473,254 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                         ),
                       ),
                     ),
-                    child: Container(
-                      height: 115,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: 115,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: Container(
-                        decoration: isCatShowcased
-                            ? BoxDecoration(
-                                border: Border.all(
-                                  color: Colors.orange.shade300,
-                                  width: 2,
-                                ),
-                                borderRadius: BorderRadius.circular(16),
-                              )
-                            : null,
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: const BorderRadius.horizontal(
-                                left: Radius.circular(16),
-                              ),
-                              child: SizedBox(
-                                width: 115,
-                                height: 115,
-                                child: allImages.first.isEmpty
-                                    ? const Icon(
-                                        Icons.image,
-                                        color: Colors.grey,
-                                      )
-                                    : Stack(
-                                        fit: StackFit.expand,
-                                        children: [
-                                          PageView.builder(
-                                            itemCount: allImages.length,
-                                            itemBuilder: (context, imgIndex) =>
-                                                Image.network(
-                                                  allImages[imgIndex],
-                                                  fit: BoxFit.cover,
-                                                ),
-                                          ),
-                                          if (distanceText.isNotEmpty)
-                                            Positioned(
-                                              top: 4,
-                                              left: 4,
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 4,
-                                                      vertical: 2,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.9),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    const Icon(
-                                                      Icons.location_on,
-                                                      color: AppColors.primary,
-                                                      size: 8,
-                                                    ),
-                                                    const SizedBox(width: 2),
-                                                    Text(
-                                                      distanceText,
-                                                      style: LocalFonts.poppins(
-                                                        color:
-                                                            AppColors.primary,
-                                                        fontSize: 8,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          if (allImages.length > 1)
-                                            Positioned(
-                                              bottom: 4,
-                                              right: 4,
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 4,
-                                                      vertical: 2,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black
-                                                      .withValues(alpha: 0.65),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    const Icon(
-                                                      Icons.photo_library,
-                                                      color: Colors.white,
-                                                      size: 8,
-                                                    ),
-                                                    const SizedBox(width: 2),
-                                                    Text(
-                                                      '${allImages.length}',
-                                                      style: LocalFonts.poppins(
-                                                        color: Colors.white,
-                                                        fontSize: 8,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      data['title'] ?? '',
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: LocalFonts.poppins(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                        color: Colors.black87,
-                                        height: 1.2,
-                                      ),
+                          child: Container(
+                            decoration: isCatShowcased
+                                ? BoxDecoration(
+                                    border: Border.all(
+                                      color: Colors.orange.shade300,
+                                      width: 2,
                                     ),
-                                    const SizedBox(height: 4),
-                                    Row(
+                                    borderRadius: BorderRadius.circular(16),
+                                  )
+                                : null,
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.horizontal(
+                                    left: Radius.circular(16),
+                                  ),
+                                  child: SizedBox(
+                                    width: 115,
+                                    height: 115,
+                                    child: allImages.first.isEmpty
+                                        ? const Icon(
+                                            Icons.image,
+                                            color: Colors.grey,
+                                          )
+                                        : Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              PageView.builder(
+                                                itemCount: allImages.length,
+                                                itemBuilder:
+                                                    (context, imgIndex) =>
+                                                        Image.network(
+                                                          allImages[imgIndex],
+                                                          fit: BoxFit.cover,
+                                                        ),
+                                              ),
+                                              if (distanceText.isNotEmpty)
+                                                Positioned(
+                                                  top: 4,
+                                                  left: 4,
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 4,
+                                                          vertical: 2,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white
+                                                          .withValues(
+                                                            alpha: 0.9,
+                                                          ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            4,
+                                                          ),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(
+                                                          Icons.location_on,
+                                                          color:
+                                                              AppColors.primary,
+                                                          size: 8,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 2,
+                                                        ),
+                                                        Text(
+                                                          distanceText,
+                                                          style:
+                                                              LocalFonts.poppins(
+                                                                color: AppColors
+                                                                    .primary,
+                                                                fontSize: 8,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              if (allImages.length > 1)
+                                                Positioned(
+                                                  bottom: 4,
+                                                  right: 4,
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 4,
+                                                          vertical: 2,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.65,
+                                                          ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            4,
+                                                          ),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(
+                                                          Icons.photo_library,
+                                                          color: Colors.white,
+                                                          size: 8,
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 2,
+                                                        ),
+                                                        Text(
+                                                          '${allImages.length}',
+                                                          style:
+                                                              LocalFonts.poppins(
+                                                                color: Colors
+                                                                    .white,
+                                                                fontSize: 8,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      10,
+                                      10,
+                                      46,
+                                      10,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Text(
-                                          '₺$formattedPrice',
+                                          data['title'] ?? '',
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
                                           style: LocalFonts.poppins(
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.primary,
-                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                            color: Colors.black87,
+                                            height: 1.2,
                                           ),
                                         ),
-                                        if (isCatShowcased)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              left: 8.0,
-                                            ),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.orange,
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Text(
+                                              '₺$formattedPrice',
+                                              style: LocalFonts.poppins(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.primary,
+                                                fontSize: 15,
                                               ),
-                                              child: Text(
-                                                tr('highlighted'),
-                                                style: LocalFonts.poppins(
-                                                  color: Colors.white,
-                                                  fontSize: 8,
-                                                  fontWeight: FontWeight.bold,
+                                            ),
+                                            if (isCatShowcased)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  left: 8.0,
+                                                ),
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.orange,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    tr('highlighted'),
+                                                    style: LocalFonts.poppins(
+                                                      color: Colors.white,
+                                                      fontSize: 8,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        if (data['city'] != null &&
+                                            data['district'] != null)
+                                          Text(
+                                            _listingLocationText(data),
+                                            style: LocalFonts.poppins(
+                                              fontSize: 11,
+                                              color: Colors.grey[600],
                                             ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                       ],
                                     ),
-                                    const SizedBox(height: 4),
-                                    if (data['city'] != null &&
-                                        data['district'] != null)
-                                      Text(
-                                        _listingLocationText(data),
-                                        style: LocalFonts.poppins(
-                                          fontSize: 11,
-                                          color: Colors.grey[600],
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                  ],
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          right: 8,
+                          bottom: 8,
+                          child: _comparisonToggleButton(
+                            filteredDocs[index].id,
+                            data,
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },
@@ -1487,6 +1729,9 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
           );
         },
       ),
+      bottomNavigationBar: _selectedListings.isEmpty
+          ? null
+          : _buildComparisonBar(),
     );
   }
 }
@@ -1504,43 +1749,18 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
   @override
   void initState() {
     super.initState();
-    _scheduleAdLoad();
-  }
-
-  Future<void> _scheduleAdLoad() async {
-    if (kIsWeb) {
-      await _fetchAdSettingsAndLoad();
-      return;
-    }
-
-    await Future.delayed(const Duration(seconds: 8));
-    if (!mounted) return;
-    await _fetchAdSettingsAndLoad();
+    _fetchAdSettingsAndLoad();
   }
 
   Future<void> _fetchAdSettingsAndLoad() async {
     try {
       if (kIsWeb) return;
-      var doc = await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('ads')
-          .get();
-      String androidId = 'ca-app-pub-3940256099942544/6300978111';
-      String iosId = 'ca-app-pub-3940256099942544/2934735716';
-      bool active = true;
-      if (doc.exists) {
-        var data = doc.data() as Map<String, dynamic>;
-        active = data['isActive'] ?? true;
-        if (data['androidId']?.toString().isNotEmpty ?? false)
-          androidId = data['androidId'];
-        if (data['iosId']?.toString().isNotEmpty ?? false)
-          iosId = data['iosId'];
-      }
-      if (!active) return;
+      final settings = await BannerAdSettings.load();
+      if (!settings.isActive) return;
       _bannerAd = BannerAd(
         adUnitId: defaultTargetPlatform == TargetPlatform.android
-            ? androidId
-            : iosId,
+            ? settings.androidId
+            : settings.iosId,
         request: const AdRequest(),
         size: AdSize.banner,
         listener: BannerAdListener(

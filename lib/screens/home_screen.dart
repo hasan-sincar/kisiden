@@ -15,6 +15,7 @@ import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // YENİ: Resimlerin önbelleğe alınması için
 import '../services/database_service.dart';
+import '../services/banner_ad_settings_service.dart';
 import '../utils/turkey_locations.dart';
 import 'add_listing_screen.dart';
 import 'listing_detail_screen.dart';
@@ -46,6 +47,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
+  Future<List<Map<String, dynamic>>>? _recentlyViewedFuture;
+  int? _recentlyViewedRevision;
+
   Widget _buildNearbyListingsPreview(List<String> hiddenUsers) {
     final position = _userPosition;
     if (position == null) return const SizedBox();
@@ -240,13 +244,32 @@ class _HomeScreenState extends State<HomeScreen>
   Widget _buildRecentlyViewedSection() {
     return ValueListenableBuilder<int>(
       valueListenable: ViewedListingsService.revision,
-      builder: (context, _, __) => FutureBuilder<List<Map<String, dynamic>>>(
-        future: ViewedListingsService.load(),
-        builder: (context, snapshot) {
-          final entries = snapshot.data ?? [];
-          if (entries.isEmpty) return const SizedBox();
-          final preview = entries.take(5).toList();
-          return Column(
+      builder: (context, revision, __) {
+        if (_recentlyViewedRevision != revision) {
+          _recentlyViewedRevision = revision;
+          _recentlyViewedFuture = ViewedListingsService.loadActivePreview();
+        }
+        final future = _recentlyViewedFuture;
+        if (future == null) return const SizedBox();
+
+        return FutureBuilder<List<Map<String, dynamic>>>(
+          future: future,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  tr('recently_viewed_load_failed'),
+                  style: LocalFonts.poppins(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                ),
+              );
+            }
+            final preview = snapshot.data ?? [];
+            if (preview.isEmpty) return const SizedBox();
+            return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
@@ -334,9 +357,10 @@ class _HomeScreenState extends State<HomeScreen>
                 );
               }),
             ],
-          );
-        },
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -375,6 +399,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   String? _filterCity;
   String? _filterDistrict;
+  int? _createdWithinHours;
 
   double? _parsePrice(dynamic value) {
     if (value is num) return value.toDouble();
@@ -383,6 +408,14 @@ class _HomeScreenState extends State<HomeScreen>
         .replaceAll(RegExp(r'[^0-9,.-]'), '')
         .replaceAll(',', '.');
     return normalized == null ? null : double.tryParse(normalized);
+  }
+
+  DateTime? _listingCreatedAt(Map<String, dynamic> listing) {
+    final value = listing['createdAt'];
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   final int _lastUnreadCount = 0;
@@ -432,11 +465,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     if (type == 'chat') {
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const InboxScreen()),
-      );
       return;
     }
 
@@ -578,6 +606,7 @@ class _HomeScreenState extends State<HomeScreen>
         _minPriceController.text.trim().isNotEmpty ||
         _maxPriceController.text.trim().isNotEmpty ||
         _distance < 30.0 ||
+        _createdWithinHours != null ||
         _featureDropdownValues.values.any(
           (value) => value != null && value.isNotEmpty,
         );
@@ -601,6 +630,7 @@ class _HomeScreenState extends State<HomeScreen>
       _minPriceController.clear();
       _maxPriceController.clear();
       _distance = 30.0;
+      _createdWithinHours = null;
       for (final key in _featureDropdownValues.keys) {
         _featureDropdownValues[key] = null;
       }
@@ -700,6 +730,7 @@ class _HomeScreenState extends State<HomeScreen>
               hasCategoryFilter ||
               hasLocationFilter ||
               _distance < 30.0 ||
+              _createdWithinHours != null ||
               _minPriceController.text.trim().isNotEmpty ||
               _maxPriceController.text.trim().isNotEmpty)
           ? 1000
@@ -1383,6 +1414,7 @@ class _HomeScreenState extends State<HomeScreen>
                               _minPriceController.text.isEmpty &&
                               _maxPriceController.text.isEmpty &&
                               _distance >= 30.0 &&
+                              _createdWithinHours == null &&
                               !_featureDropdownValues.values.any(
                                 (value) => value != null && value.isNotEmpty,
                               ))
@@ -1396,6 +1428,7 @@ class _HomeScreenState extends State<HomeScreen>
                               _minPriceController.text.isEmpty &&
                               _maxPriceController.text.isEmpty &&
                               _distance >= 30.0 &&
+                              _createdWithinHours == null &&
                               !_featureDropdownValues.values.any(
                                 (value) => value != null && value.isNotEmpty,
                               ))
@@ -1670,12 +1703,29 @@ class _HomeScreenState extends State<HomeScreen>
                                               }
                                             }
 
+                                            bool matchCreatedAt = true;
+                                            if (_createdWithinHours != null) {
+                                              final createdAt =
+                                                  _listingCreatedAt(data);
+                                              final cutoff = DateTime.now()
+                                                  .subtract(
+                                                    Duration(
+                                                      hours:
+                                                          _createdWithinHours!,
+                                                    ),
+                                                  );
+                                              matchCreatedAt =
+                                                  createdAt != null &&
+                                                  !createdAt.isBefore(cutoff);
+                                            }
+
                                             return matchSearch &&
                                                 matchCategory &&
                                                 matchDistance &&
                                                 matchNeighborhood &&
                                                 matchFeatures &&
-                                                matchPrice;
+                                                matchPrice &&
+                                                matchCreatedAt;
                                           }).toList();
 
                                           // Kullanıcının herhangi bir filtre uygulayıp uygulamadığını kontrol et.
@@ -1698,6 +1748,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                   .text
                                                   .isNotEmpty ||
                                               _distance < 30.0 ||
+                                              _createdWithinHours != null ||
                                               _featureDropdownValues.values.any(
                                                 (v) =>
                                                     v != null && v.isNotEmpty,
@@ -1898,6 +1949,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                   .text
                                                   .isEmpty &&
                                               _distance >= 30.0 &&
+                                              _createdWithinHours == null &&
                                               !_featureDropdownValues.values
                                                   .any(
                                                     (value) =>
@@ -2966,38 +3018,13 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
   @override
   void initState() {
     super.initState();
-    _scheduleAdLoad();
-  }
-
-  Future<void> _scheduleAdLoad() async {
-    if (kIsWeb) {
-      await _fetchAdSettingsAndLoad();
-      return;
-    }
-
-    await Future.delayed(const Duration(seconds: 8));
-    if (!mounted) return;
-    await _fetchAdSettingsAndLoad();
+    _fetchAdSettingsAndLoad();
   }
 
   Future<void> _fetchAdSettingsAndLoad() async {
     try {
-      var doc = await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('ads')
-          .get();
-      String androidId = 'ca-app-pub-3940256099942544/6300978111';
-      String iosId = 'ca-app-pub-3940256099942544/2934735716';
-      bool active = true;
-      if (doc.exists) {
-        var data = doc.data() as Map<String, dynamic>;
-        active = data['isActive'] ?? true;
-        if (data['androidId']?.toString().isNotEmpty ?? false)
-          androidId = data['androidId'];
-        if (data['iosId']?.toString().isNotEmpty ?? false)
-          iosId = data['iosId'];
-      }
-      if (!active) return;
+      final settings = await BannerAdSettings.load();
+      if (!settings.isActive) return;
 
       if (kIsWeb) {
         if (mounted)
@@ -3010,8 +3037,8 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
 
       _bannerAd = BannerAd(
         adUnitId: defaultTargetPlatform == TargetPlatform.android
-            ? androidId
-            : iosId,
+            ? settings.androidId
+            : settings.iosId,
         request: const AdRequest(),
         size: AdSize.banner,
         listener: BannerAdListener(

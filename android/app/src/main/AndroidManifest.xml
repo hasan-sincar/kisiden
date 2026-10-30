@@ -8,6 +8,10 @@
         android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission
         android:name="android.permission.RECORD_AUDIO"/>
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false"
+        tools:replace="android:required"/>
     <application
         android:label="Kişiden"
         android:name="${applicationName}"

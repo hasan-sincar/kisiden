@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
+  camera_desktop
   cloud_firestore
   file_selector_windows
   firebase_app_check

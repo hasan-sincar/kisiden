@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,6 +31,52 @@ class ViewedListingsService {
   static Future<List<Map<String, dynamic>>> load() async {
     final preferences = await SharedPreferences.getInstance();
     return _read(preferences, DateTime.now());
+  }
+
+  static Future<List<Map<String, dynamic>>> loadActivePreview({
+    int limit = 5,
+  }) async {
+    final preferences = await SharedPreferences.getInstance();
+    final entries = await _read(preferences, DateTime.now());
+    if (entries.isEmpty || limit <= 0) return [];
+
+    const batchSize = 30;
+    final activeEntries = <Map<String, dynamic>>[];
+    final inactiveIds = <String>{};
+
+    for (var offset = 0; offset < entries.length; offset += batchSize) {
+      final batch = entries.skip(offset).take(batchSize).toList();
+      final ids = batch.map((entry) => entry['id'].toString()).toList();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('listings')
+          .where(FieldPath.documentId, whereIn: ids)
+          .get();
+      final activeIds = snapshot.docs
+          .where((doc) => doc.data()['status'] == 'active')
+          .map((doc) => doc.id)
+          .toSet();
+
+      for (final entry in batch) {
+        final id = entry['id'].toString();
+        if (activeIds.contains(id)) {
+          activeEntries.add(entry);
+          if (activeEntries.length == limit) break;
+        } else {
+          inactiveIds.add(id);
+        }
+      }
+
+      if (activeEntries.length == limit) break;
+    }
+
+    if (inactiveIds.isNotEmpty) {
+      final remaining = entries
+          .where((entry) => !inactiveIds.contains(entry['id'].toString()))
+          .toList();
+      await preferences.setString(_storageKey, jsonEncode(remaining));
+    }
+
+    return activeEntries;
   }
 
   static Future<List<Map<String, dynamic>>> _read(

@@ -266,71 +266,208 @@ class ProfileScreen extends StatelessWidget {
   }
 
   void _showLanguageDialog(BuildContext context) {
-    showDialog(
+    showModalBottomSheet<void>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text(
-          tr('language'),
-          style: LocalFonts.poppins(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text(tr('language_tr')),
-              trailing: appLocale.value.languageCode == 'tr'
-                  ? const Icon(Icons.check, color: Colors.green)
-                  : null,
-              onTap: () async {
-                appLocale.value = const Locale('tr');
-                final prefs = await SharedPreferences.getInstance();
-                prefs.setString('language_code', 'tr');
-                if (FirebaseAuth.instance.currentUser != null) {
-                  FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(FirebaseAuth.instance.currentUser!.uid)
-                      .update({'languageCode': 'tr'});
-                }
-                Navigator.pop(c);
-              },
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final selectedLanguage = appLocale.value.languageCode;
+        return SafeArea(
+          top: false,
+          child: Container(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              10,
+              20,
+              MediaQuery.of(sheetContext).viewInsets.bottom + 20,
             ),
-            ListTile(
-              title: Text(tr('language_en')),
-              trailing: appLocale.value.languageCode == 'en'
-                  ? const Icon(Icons.check, color: Colors.green)
-                  : null,
-              onTap: () async {
-                appLocale.value = const Locale('en');
-                final prefs = await SharedPreferences.getInstance();
-                prefs.setString('language_code', 'en');
-                if (FirebaseAuth.instance.currentUser != null) {
-                  FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(FirebaseAuth.instance.currentUser!.uid)
-                      .update({'languageCode': 'en'});
-                }
-                Navigator.pop(c);
-              },
+            decoration: const BoxDecoration(
+              color: Color(0xFFF7F9FD),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
-            ListTile(
-              title: Text(tr('language_ar')),
-              trailing: appLocale.value.languageCode == 'ar'
-                  ? const Icon(Icons.check, color: Colors.green)
-                  : null,
-              onTap: () async {
-                appLocale.value = const Locale('ar');
-                final prefs = await SharedPreferences.getInstance();
-                prefs.setString('language_code', 'ar');
-                if (FirebaseAuth.instance.currentUser != null) {
-                  FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(FirebaseAuth.instance.currentUser!.uid)
-                      .update({'languageCode': 'ar'});
-                }
-                Navigator.pop(c);
-              },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4DAE5),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Container(
+                      height: 44,
+                      width: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF1FF),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.translate_rounded,
+                        color: Color(0xFF1455C0),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tr('language'),
+                            style: LocalFonts.poppins(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF17233C),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            tr('language_picker_subtitle'),
+                            style: LocalFonts.poppins(
+                              fontSize: 12,
+                              color: const Color(0xFF6B778D),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _buildLanguageOption(
+                  context: sheetContext,
+                  code: 'tr',
+                  flag: '🇹🇷',
+                  nativeName: 'Türkçe',
+                  title: tr('language_tr'),
+                  isSelected: selectedLanguage == 'tr',
+                ),
+                const SizedBox(height: 10),
+                _buildLanguageOption(
+                  context: sheetContext,
+                  code: 'en',
+                  flag: '🇬🇧',
+                  nativeName: 'English',
+                  title: tr('language_en'),
+                  isSelected: selectedLanguage == 'en',
+                ),
+                const SizedBox(height: 10),
+                _buildLanguageOption(
+                  context: sheetContext,
+                  code: 'ar',
+                  flag: '🇸🇦',
+                  nativeName: 'العربية',
+                  title: tr('language_ar'),
+                  isSelected: selectedLanguage == 'ar',
+                ),
+              ],
             ),
-          ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLanguageOption({
+    required BuildContext context,
+    required String code,
+    required String flag,
+    required String nativeName,
+    required String title,
+    required bool isSelected,
+  }) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(17),
+      child: InkWell(
+        onTap: () async {
+          appLocale.value = Locale(code);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('language_code', code);
+          final user = FirebaseAuth.instance.currentUser;
+          if (user != null) {
+            FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+              {'languageCode': code},
+            );
+          }
+          if (context.mounted) {
+            Navigator.pop(context);
+          }
+        },
+        borderRadius: BorderRadius.circular(17),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF246BDF)
+                  : const Color(0xFFE5EAF2),
+              width: isSelected ? 1.5 : 1,
+            ),
+            color: isSelected ? const Color(0xFFF2F6FF) : Colors.white,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F4F9),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(flag, style: const TextStyle(fontSize: 27)),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: LocalFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF202C43),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      nativeName,
+                      textDirection: code == 'ar'
+                          ? TextDirection.rtl
+                          : TextDirection.ltr,
+                      style: LocalFonts.poppins(
+                        fontSize: 11,
+                        color: const Color(0xFF788398),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFF246BDF),
+                  size: 23,
+                )
+              else
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF9AA4B3),
+                  size: 22,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -434,10 +571,9 @@ class ProfileScreen extends StatelessWidget {
                                         ? NetworkImage(user.photoURL!)
                                         : null,
                                     onBackgroundImageError:
-                                        (
-                                          exception,
-                                          stackTrace,
-                                        ) {}, // Resim 404 hatasını önleyici
+                                        user.photoURL != null
+                                        ? (exception, stackTrace) {}
+                                        : null,
                                     child: user.photoURL == null
                                         ? const Icon(
                                             Icons.person,
@@ -586,6 +722,7 @@ class ProfileScreen extends StatelessWidget {
                               ),
                             );
                           },
+                          subtitle: tr('search_alarms_hint'),
                         ),
                         _buildMenuTile(
                           Icons.support_agent,
@@ -734,24 +871,59 @@ class ProfileScreen extends StatelessWidget {
     IconData icon,
     String title,
     Color iconColor,
-    VoidCallback onTap,
+    VoidCallback onTap, {
+    String? subtitle,
+  }
   ) {
     return Material(
       color: Colors.transparent,
       child: ListTile(
+        minVerticalPadding: subtitle == null ? 10 : 14,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        hoverColor: iconColor.withValues(alpha: 0.04),
         leading: Container(
-          padding: const EdgeInsets.all(8),
+          width: 44,
+          height: 44,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
+            color: iconColor.withValues(alpha: 0.09),
+            borderRadius: BorderRadius.circular(13),
           ),
-          child: Icon(icon, color: iconColor),
+          child: Icon(icon, color: iconColor, size: 22),
         ),
         title: Text(
           title,
-          style: LocalFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
+          style: LocalFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: const Color(0xFF243047),
+          ),
         ),
-        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+        subtitle: subtitle == null
+            ? null
+            : Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Text(
+                  subtitle,
+                  style: LocalFonts.poppins(
+                    fontSize: 11,
+                    color: const Color(0xFF7B8799),
+                  ),
+                ),
+              ),
+        trailing: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.07),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.chevron_right_rounded,
+            color: iconColor.withValues(alpha: 0.85),
+            size: 20,
+          ),
+        ),
         onTap: onTap,
       ),
     );
@@ -781,22 +953,14 @@ class ProfileScreen extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      title,
-                      textAlign: TextAlign.center,
-                      style: LocalFonts.poppins(
-                        color: color,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            child: Text(
+              title,
+              textAlign: TextAlign.start,
+              style: LocalFonts.poppins(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
             ),
           ),
           ...children,

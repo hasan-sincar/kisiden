@@ -1,6 +1,167 @@
 part of 'database_service.dart';
 
 extension DatabaseServiceCommunity on DatabaseService {
+  Future<void> createListingTransfer({
+    required String listingId,
+    required String receiverId,
+    required String listingTitle,
+    required String listingImage,
+    required String senderName,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('authentication_required');
+    if (receiverId == user.uid) throw ArgumentError('invalid_receiver');
+
+    final listingRef = _firestore.collection('listings').doc(listingId);
+    final transferRef = _firestore.collection('listing_transfers').doc();
+    final receiverProfile = await getPublicUserProfile(receiverId);
+    if (receiverProfile == null) throw StateError('receiver_not_found');
+    final receiverName = (receiverProfile['name'] ?? '').toString().trim();
+    await _firestore.runTransaction((transaction) async {
+      final listingSnapshot = await transaction.get(listingRef);
+      final transferSnapshot = await transaction.get(transferRef);
+      final listingData = listingSnapshot.data();
+      if (!listingSnapshot.exists ||
+          listingData == null ||
+          listingData['sellerId'] != user.uid ||
+          listingData['status'] != 'active') {
+        throw StateError('listing_not_transferable');
+      }
+      if (transferSnapshot.exists) {
+        throw StateError('transfer_already_exists');
+      }
+
+      transaction.set(transferRef, {
+        'listingId': listingId,
+        'listingTitle': listingTitle,
+        'listingImage': listingImage,
+        'senderId': user.uid,
+        'senderName': senderName,
+        'receiverId': receiverId,
+        'receiverName': receiverName,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      transaction.update(listingRef, {'transferRequestId': transferRef.id});
+    });
+
+    await sendNotification(
+      receiverId,
+      'listing_transfer_invite_title',
+      'listing_transfer_invite_message',
+      messageArgs: [senderName, listingTitle],
+      type: 'listing',
+      targetId: listingId,
+      source: 'listing_event',
+      eventId: transferRef.id,
+    );
+    debugPrint(
+      'Listing transfer invitation sent to $receiverName ($receiverId).',
+    );
+  }
+
+  Future<void> respondToListingTransfer({
+    required String transferId,
+    required String listingId,
+    required String senderId,
+    required bool accept,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('authentication_required');
+
+    final listingRef = _firestore.collection('listings').doc(listingId);
+    final transferRef = _firestore
+        .collection('listing_transfers')
+        .doc(transferId);
+    final userRef = _firestore.collection('users').doc(user.uid);
+    await _firestore.runTransaction((transaction) async {
+      final transferSnapshot = await transaction.get(transferRef);
+      final listingSnapshot = await transaction.get(listingRef);
+      final userSnapshot = accept ? await transaction.get(userRef) : null;
+      final transferData = transferSnapshot.data();
+      final listingData = listingSnapshot.data();
+      if (!transferSnapshot.exists ||
+          transferData == null ||
+          transferData['receiverId'] != user.uid ||
+          transferData['senderId'] != senderId ||
+          transferData['status'] != 'pending') {
+        throw StateError('transfer_no_longer_pending');
+      }
+      if (!listingSnapshot.exists ||
+          listingData == null ||
+          listingData['sellerId'] != senderId ||
+          (accept && listingData['status'] != 'active')) {
+        throw StateError('listing_no_longer_transferable');
+      }
+
+      final now = FieldValue.serverTimestamp();
+      transaction.update(transferRef, {
+        'status': accept ? 'accepted' : 'rejected',
+        'updatedAt': now,
+        if (accept) 'acceptedAt': now,
+      });
+      if (accept) {
+        final userData = userSnapshot?.data() ?? {};
+        final receiverProUntil = userData['proUntil'];
+        final receiverHasActivePro =
+            receiverProUntil is Timestamp &&
+            receiverProUntil.toDate().isAfter(DateTime.now());
+        transaction.update(listingRef, {
+          'sellerId': user.uid,
+          'sellerName': (userData['name'] ?? user.displayName ?? 'Kullanıcı')
+              .toString(),
+          'sellerPhone': (userData['phoneNumber'] ?? '').toString(),
+          'isPro': receiverHasActivePro,
+          'proUntil': receiverHasActivePro ? receiverProUntil : null,
+          'transferAcceptedAt': now,
+          'transferRequestId': FieldValue.delete(),
+        });
+      } else {
+        transaction.update(listingRef, {
+          'transferRequestId': FieldValue.delete(),
+        });
+      }
+    });
+  }
+
+  Future<void> cancelListingTransfer({
+    required String listingId,
+    required String transferId,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('authentication_required');
+
+    final listingRef = _firestore.collection('listings').doc(listingId);
+    final transferRef = _firestore
+        .collection('listing_transfers')
+        .doc(transferId);
+    await _firestore.runTransaction((transaction) async {
+      final transferSnapshot = await transaction.get(transferRef);
+      final listingSnapshot = await transaction.get(listingRef);
+      final transferData = transferSnapshot.data();
+      final listingData = listingSnapshot.data();
+      if (!transferSnapshot.exists ||
+          transferData == null ||
+          transferData['senderId'] != user.uid ||
+          transferData['status'] != 'pending' ||
+          !listingSnapshot.exists ||
+          listingData == null ||
+          listingData['sellerId'] != user.uid ||
+          listingData['transferRequestId'] != transferId) {
+        throw StateError('transfer_no_longer_pending');
+      }
+
+      transaction.update(transferRef, {
+        'status': 'cancelled',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      transaction.update(listingRef, {
+        'transferRequestId': FieldValue.delete(),
+      });
+    });
+  }
+
   Future<void> toggleFavorite(String listingId, bool isFavorite) async {
     final uid = _auth.currentUser!.uid;
     if (isFavorite) {
@@ -63,6 +224,9 @@ extension DatabaseServiceCommunity on DatabaseService {
             'notif_title_deactivated',
             'notif_msg_deactivated',
             messageArgs: [title],
+            type: 'listing',
+            targetId: listingId,
+            eventId: listingId,
           );
         }
       }
@@ -106,7 +270,7 @@ extension DatabaseServiceCommunity on DatabaseService {
         .trim();
     final listingTitle = (listingData?['title'] ?? 'İlan').toString().trim();
 
-    await _firestore.collection('reports').add({
+    final reportRef = await _firestore.collection('reports').add({
       'listingId': listingId,
       'reporterId': user.uid,
       'reporterName': reporterName,
@@ -117,6 +281,7 @@ extension DatabaseServiceCommunity on DatabaseService {
 
     try {
       await notifyAdminsForNewReport(
+        reportId: reportRef.id,
         listingId: listingId,
         listingTitle: listingTitle,
         reporterName: reporterName.isNotEmpty ? reporterName : 'Kullanıcı',
@@ -132,43 +297,17 @@ extension DatabaseServiceCommunity on DatabaseService {
   }
 
   Future<void> blockUser(String blockedUid) async {
-    final uid = _auth.currentUser!.uid;
-    await _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('blocked')
-        .doc(blockedUid)
-        .set({'timestamp': FieldValue.serverTimestamp()});
-    await _firestore.collection('users').doc(uid).set({
-      'blockedUsers': FieldValue.arrayUnion([blockedUid]),
-    }, SetOptions(merge: true));
-    final blockedRef = _firestore.collection('users').doc(blockedUid);
-    final blockedSnap = await blockedRef.get();
-    if (blockedSnap.exists) {
-      await blockedRef.update({
-        'blockedBy': FieldValue.arrayUnion([uid]),
-      });
-    }
+    final callable = FirebaseFunctions.instanceFor(
+      region: 'europe-west1',
+    ).httpsCallable('setUserBlocked');
+    await callable.call({'blockedUid': blockedUid, 'blocked': true});
   }
 
   Future<void> unblockUser(String blockedUid) async {
-    final uid = _auth.currentUser!.uid;
-    await _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('blocked')
-        .doc(blockedUid)
-        .delete();
-    await _firestore.collection('users').doc(uid).set({
-      'blockedUsers': FieldValue.arrayRemove([blockedUid]),
-    }, SetOptions(merge: true));
-    final blockedRef = _firestore.collection('users').doc(blockedUid);
-    final blockedSnap = await blockedRef.get();
-    if (blockedSnap.exists) {
-      await blockedRef.update({
-        'blockedBy': FieldValue.arrayRemove([uid]),
-      });
-    }
+    final callable = FirebaseFunctions.instanceFor(
+      region: 'europe-west1',
+    ).httpsCallable('setUserBlocked');
+    await callable.call({'blockedUid': blockedUid, 'blocked': false});
   }
 
   Future<bool> askQuestion(
@@ -209,7 +348,7 @@ extension DatabaseServiceCommunity on DatabaseService {
       }
     }
 
-    await _firestore
+    final questionRef = await _firestore
         .collection('listings')
         .doc(listingId)
         .collection('questions')
@@ -229,6 +368,7 @@ extension DatabaseServiceCommunity on DatabaseService {
         messageArgs: [listingTitle, question],
         type: 'listing',
         targetId: listingId,
+        eventId: questionRef.id,
       );
     } catch (e) {
       print('Yeni soru bildirimi gönderilemedi: $e');
@@ -290,6 +430,7 @@ extension DatabaseServiceCommunity on DatabaseService {
         messageArgs: [listingTitle, answer],
         type: 'listing',
         targetId: listingId,
+        eventId: questionId,
       );
     } catch (e) {
       print('Cevap bildirimi gönderilemedi: $e');
@@ -300,25 +441,20 @@ extension DatabaseServiceCommunity on DatabaseService {
   Future<void> markAsSoldAndGrantReviewPermission(
     String listingId,
     String buyerId,
-    String listingTitle,
   ) async {
-    final user = _auth.currentUser!;
-    final uid = user.uid;
-    final userName = user.displayName ?? 'Satıcı';
-
-    await _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('review_permissions')
-        .doc(buyerId)
-        .set({
-          'listingId': listingId,
-          'listingTitle': listingTitle,
-          'grantedAt': FieldValue.serverTimestamp(),
-        });
-    await _firestore.collection('users').doc(uid).update({
-      'soldCount': FieldValue.increment(1),
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw StateError('authentication_required');
+    final result = await FirebaseFunctions.instanceFor(
+      region: 'europe-west1',
+    ).httpsCallable('markListingSold').call({
+      'listingId': listingId,
+      'buyerId': buyerId,
     });
+    final data = result.data;
+    if (data is! Map || data['sellerName'] is! String) {
+      throw StateError('invalid_mark_listing_sold_response');
+    }
+    final userName = data['sellerName'] as String;
     await deleteListing(listingId);
 
     await sendNotification(
@@ -363,14 +499,6 @@ extension DatabaseServiceCommunity on DatabaseService {
         .doc(user.uid);
     batch.delete(permRef);
 
-    int roundedRating = rating.round().clamp(1, 5);
-    var userRef = _firestore.collection('users').doc(sellerId);
-    batch.set(userRef, {
-      'ratingCount$roundedRating': FieldValue.increment(1),
-      'totalReviewCount': FieldValue.increment(1),
-      'totalRatingScore': FieldValue.increment(rating),
-    }, SetOptions(merge: true));
-
     await batch.commit();
   }
 
@@ -382,17 +510,18 @@ extension DatabaseServiceCommunity on DatabaseService {
     List<String>? messageArgs,
     String type = 'general',
     String targetId = '',
+    String? eventId,
     String? reason,
     String source = '',
   }) async {
     final currentUid = _auth.currentUser?.uid;
     String lang = 'tr';
     try {
-      var userDoc = await _firestore.collection('users').doc(userId).get();
-      if (userDoc.exists) {
-        lang = userDoc.data()?['languageCode'] ?? 'tr';
-      }
-    } catch (e) {}
+      final userData = await getPublicUserProfile(userId);
+      if (userData != null) lang = userData['languageCode'] ?? 'tr';
+    } catch (e) {
+      debugPrint('Bildirim alıcısının dili alınamadı: $e');
+    }
 
     String title = translateNotification(titleKey, lang, titleArgs);
     String message = translateNotification(messageKey, lang, messageArgs);
@@ -413,6 +542,15 @@ extension DatabaseServiceCommunity on DatabaseService {
       final callable = FirebaseFunctions.instanceFor(
         region: 'europe-west1',
       ).httpsCallable('sendUserNotification');
+      final notificationSource = source.isNotEmpty
+          ? source
+          : switch (type) {
+              'chat' => 'chat_event',
+              'listing' => 'listing_event',
+              'trade_offer' => 'trade_offer_event',
+              'review' => 'review_event',
+              _ => 'system',
+            };
 
       try {
         await callable.call({
@@ -421,8 +559,9 @@ extension DatabaseServiceCommunity on DatabaseService {
           'message': message,
           'type': type,
           'targetId': targetId,
+          if (eventId != null && eventId.isNotEmpty) 'eventId': eventId,
           'reason': reason ?? '',
-          'source': source.isNotEmpty ? source : 'system',
+          'source': notificationSource,
         });
       } catch (error) {
         // Bildirim başarısızlığı ana işlemi (ilan, mesaj veya teklif) bozmasın.
@@ -773,27 +912,12 @@ extension DatabaseServiceCommunity on DatabaseService {
   Future<void> toggleFollowSeller(String sellerId, bool isFollowing) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
-    if (isFollowing) {
-      await _firestore
-          .collection('users')
-          .doc(sellerId)
-          .collection('followers')
-          .doc(uid)
-          .delete();
-      await _firestore.collection('users').doc(sellerId).update({
-        'followerCount': FieldValue.increment(-1),
-      });
-    } else {
-      await _firestore
-          .collection('users')
-          .doc(sellerId)
-          .collection('followers')
-          .doc(uid)
-          .set({'timestamp': FieldValue.serverTimestamp()});
-      await _firestore.collection('users').doc(sellerId).update({
-        'followerCount': FieldValue.increment(1),
-      });
-    }
+    await FirebaseFunctions.instanceFor(
+      region: 'europe-west1',
+    ).httpsCallable('toggleSellerFollow').call({
+      'sellerId': sellerId,
+      'following': !isFollowing,
+    });
   }
 
   Stream<bool> isFollowingStream(String sellerId) {
@@ -863,7 +987,7 @@ extension DatabaseServiceCommunity on DatabaseService {
         ? receiverData['sellerName'].toString()
         : tr('seller');
 
-    await _firestore
+    final offerRef = await _firestore
         .collection('trade_offers')
         .add(
           DatabaseService.buildTradeOfferPayload(
@@ -891,6 +1015,7 @@ extension DatabaseServiceCommunity on DatabaseService {
       messageArgs: [receiverData['title']?.toString() ?? tr('listing_detail')],
       type: 'trade_offer',
       targetId: receiverListingId,
+      eventId: offerRef.id,
     );
   }
 
@@ -922,6 +1047,7 @@ extension DatabaseServiceCommunity on DatabaseService {
         messageArgs: [data['senderListingTitle']?.toString() ?? ''],
         type: 'trade_offer',
         targetId: offerId,
+        eventId: offerId,
       );
     }
   }

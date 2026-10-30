@@ -8,6 +8,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/database_service.dart';
+import '../services/banner_ad_settings_service.dart';
 import '../utils/turkey_locations.dart';
 import 'listing_detail_screen.dart';
 import '../utils/theme_colors.dart';
@@ -1551,18 +1552,7 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
   @override
   void initState() {
     super.initState();
-    _scheduleAdLoad();
-  }
-
-  Future<void> _scheduleAdLoad() async {
-    if (kIsWeb) {
-      await _fetchAdSettingsAndLoad();
-      return;
-    }
-
-    await Future.delayed(const Duration(seconds: 8));
-    if (!mounted) return;
-    await _fetchAdSettingsAndLoad();
+    _fetchAdSettingsAndLoad();
   }
 
   Future<void> _fetchAdSettingsAndLoad() async {
@@ -1577,26 +1567,10 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
         return;
       }
 
-      var doc = await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('ads')
-          .get();
-      String androidId = 'ca-app-pub-3940256099942544/6300978111';
-      String iosId = 'ca-app-pub-3940256099942544/2934735716';
-      bool active = true;
-      if (doc.exists) {
-        var data = doc.data() as Map<String, dynamic>;
-        active = data['isActive'] ?? true;
-        if (data['androidId']?.toString().isNotEmpty ?? false) {
-          androidId = data['androidId'];
-        }
-        if (data['iosId']?.toString().isNotEmpty ?? false) {
-          iosId = data['iosId'];
-        }
-      }
-      if (!active) return;
+      final settings = await BannerAdSettings.load();
+      if (!settings.isActive) return;
       _bannerAd = BannerAd(
-        adUnitId: Platform.isAndroid ? androidId : iosId,
+        adUnitId: Platform.isAndroid ? settings.androidId : settings.iosId,
         request: const AdRequest(),
         size: AdSize.banner,
         listener: BannerAdListener(

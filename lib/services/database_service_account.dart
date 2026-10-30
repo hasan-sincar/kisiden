@@ -1,6 +1,73 @@
 part of 'database_service.dart';
 
 extension DatabaseServiceAccount on DatabaseService {
+  Future<List<Map<String, dynamic>>> searchListingTransferRecipients(
+    String query,
+  ) async {
+    final normalizedQuery = query.trim();
+    if (normalizedQuery.length < 2) {
+      throw ArgumentError.value(query, 'query', 'En az 2 karakter girin.');
+    }
+
+    final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('searchListingTransferRecipients')
+        .call({'query': normalizedQuery});
+    final data = result.data;
+    if (data is! Map || data['users'] is! List) {
+      throw StateError('invalid_transfer_recipient_search_response');
+    }
+
+    return (data['users'] as List)
+        .whereType<Map>()
+        .map(Map<String, dynamic>.from)
+        .where((user) => user['uid'] is String && user['name'] is String)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>?> getPublicUserProfile(
+    String userId, {
+    bool refresh = false,
+  }) async {
+    final normalizedUserId = userId.trim();
+    if (normalizedUserId.isEmpty || normalizedUserId.contains('/')) {
+      throw ArgumentError.value(
+        userId,
+        'userId',
+        'Geçersiz kullanıcı kimliği.',
+      );
+    }
+
+    if (!refresh) {
+      final profileSnapshot = await _firestore
+          .collection('public_profiles')
+          .doc(normalizedUserId)
+          .get();
+      if (profileSnapshot.exists) return profileSnapshot.data();
+    }
+
+    final result = await FirebaseFunctions.instanceFor(region: 'europe-west1')
+        .httpsCallable('getPublicUserProfile')
+        .call({'userId': normalizedUserId, if (refresh) 'refresh': true});
+    final data = result.data;
+    if (data is! Map) {
+      throw StateError('invalid_public_user_profile_response');
+    }
+    final profile = data['profile'];
+    if (profile == null) return null;
+    if (profile is! Map) {
+      throw StateError('invalid_public_user_profile_response');
+    }
+    final normalizedProfile = Map<String, dynamic>.from(profile);
+    final createdAt = normalizedProfile['createdAt'];
+    if (createdAt is String) {
+      final parsedCreatedAt = DateTime.tryParse(createdAt);
+      if (parsedCreatedAt != null) {
+        normalizedProfile['createdAt'] = Timestamp.fromDate(parsedCreatedAt);
+      }
+    }
+    return normalizedProfile;
+  }
+
   Future<void> deleteMyAccountHard() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -269,26 +336,15 @@ extension DatabaseServiceAccount on DatabaseService {
 
   Future<bool> isPhoneNumberRegistered(String phoneNumber) async {
     final normalizedPhone = normalizePhoneNumber(phoneNumber);
-    final candidates = <String>{normalizedPhone};
-
-    if (normalizedPhone.startsWith('+90')) {
-      candidates.add(normalizedPhone.replaceFirst('+90', '0'));
+    final callable = FirebaseFunctions.instanceFor(
+      region: 'europe-west1',
+    ).httpsCallable('isPhoneNumberRegistered');
+    final result = await callable.call({'phoneNumber': normalizedPhone});
+    final data = result.data;
+    if (data is! Map || data['registered'] is! bool) {
+      throw StateError('invalid_phone_registration_response');
     }
-    if (normalizedPhone.startsWith('0') && normalizedPhone.length > 10) {
-      candidates.add(normalizedPhone.replaceFirst('0', '+90'));
-    }
-
-    String currentUid = _auth.currentUser?.uid ?? '';
-    for (final candidate in candidates) {
-      var query = await _firestore
-          .collection('users')
-          .where('phoneNumber', isEqualTo: candidate)
-          .get();
-      for (var doc in query.docs) {
-        if (doc.id != currentUid) return true;
-      }
-    }
-    return false;
+    return data['registered'] as bool;
   }
 
   Future<void> markProfileSetupSkipped() async {

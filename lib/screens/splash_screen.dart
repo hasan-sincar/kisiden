@@ -1,7 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:appim/utils/local_fonts.dart';
 import 'dart:async';
-import '../main.dart'; // YENİ: RootScreen kontrolü için ekledik
+
+import 'package:appim/utils/local_fonts.dart';
+import 'package:flutter/material.dart';
+
+import '../main.dart';
 import '../utils/translations.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -12,80 +14,91 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  bool _isVisible = false;
-
   @override
   void initState() {
     super.initState();
-    
-    // Ekran açıldıktan çok kısa bir süre sonra animasyonu tetikleyerek pürüzsüz bir geçiş sağlıyoruz
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        setState(() {
-          _isVisible = true;
-        });
-      }
-    });
-
-    // Animasyon bittikten kısa bir süre sonra (1.8 sn) kullanıcı durumunu kontrol edip yönlendirme yapıyoruz
-    Future.delayed(const Duration(milliseconds: 1800), () {
-      _checkAuthAndNavigate();
-    });
+    Future.delayed(const Duration(milliseconds: 1800), _checkAuthAndNavigate);
   }
-
 
   void _checkAuthAndNavigate() {
     if (!mounted) return;
-    
-    // Doğrudan RootScreen'e yönlendirerek oturum ve telefon numarası kontrolünü devreye sokuyoruz
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (context) => const RootScreen()));
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const RootScreen()),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blue[900], // Şık ve kurumsal bir lacivert arkaplan
-      body: Center(
-        child: AnimatedOpacity(
-          opacity: _isVisible ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 1500),
-          curve: Curves.easeIn,
-          child: AnimatedScale(
-            scale: _isVisible ? 1.0 : 0.8,
-            duration: const Duration(milliseconds: 1500),
-            curve: Curves.easeOutCubic,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final logoSize = (constraints.maxWidth * 0.34)
+                .clamp(112.0, 148.0)
+                .toDouble();
+
+            return Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 30, offset: const Offset(0, 10)),
-                    ],
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'assets/logo.png',
+                            width: logoSize,
+                            height: logoSize,
+                            fit: BoxFit.contain,
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            tr('app_name'),
+                            textAlign: TextAlign.center,
+                            style: LocalFonts.poppins(
+                              fontSize: 34,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF17191D),
+                              letterSpacing: -0.7,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 320),
+                            child: Text(
+                              tr('welcome_new_generation_marketplace'),
+                              textAlign: TextAlign.center,
+                              style: LocalFonts.poppins(
+                                fontSize: 14,
+                                height: 1.5,
+                                color: const Color(0xFF858994),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: Image.asset('assets/logo.png', height: 120),
                 ),
-                const SizedBox(height: 32),
-                Text(
-                  tr('app_name'),
-                  style: LocalFonts.poppins(fontSize: 42, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.5),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  tr('slogan'),
-                  style: LocalFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white70, letterSpacing: 2.0),
-                ),
-                const SizedBox(height: 64),
-                const SizedBox(
-                  width: 30, height: 30,
-                  child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white), strokeWidth: 3),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+                  child: Text(
+                    'www.kisiden.com',
+                    textAlign: TextAlign.center,
+                    style: LocalFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF858994),
+                      letterSpacing: 0.4,
+                    ),
+                  ),
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

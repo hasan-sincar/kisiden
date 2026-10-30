@@ -16,8 +16,6 @@ part 'database_service_account.dart';
 part 'database_service_community.dart';
 
 class DatabaseService {
-  static const List<String> _adminEmails = ['hasanmardinn@gmail.com'];
-
   DatabaseService({
     FirebaseFirestore? firestore,
     FirebaseStorage? storage,
@@ -132,25 +130,14 @@ class DatabaseService {
   }
 
   Future<List<String>> _getAdminUserIds() async {
-    final adminIds = <String>{};
-
-    for (final email in _adminEmails) {
-      final normalizedEmail = email.trim().toLowerCase();
-      if (normalizedEmail.isEmpty) {
-        continue;
-      }
-
-      final snap = await _firestore
-          .collection('users')
-          .where('email', isEqualTo: normalizedEmail)
-          .get();
-
-      for (final doc in snap.docs) {
-        adminIds.add(doc.id);
-      }
+    final result = await FirebaseFunctions.instanceFor(
+      region: 'europe-west1',
+    ).httpsCallable('getAdminUserIds').call();
+    final data = result.data;
+    if (data is! Map || data['userIds'] is! List) {
+      throw StateError('invalid_admin_user_ids_response');
     }
-
-    return adminIds.toList();
+    return (data['userIds'] as List).whereType<String>().toSet().toList();
   }
 
   Future<void> _notifyAdmins({
@@ -160,6 +147,7 @@ class DatabaseService {
     List<String>? messageArgs,
     String type = 'general',
     String targetId = '',
+    String? eventId,
     String? reason,
   }) async {
     final adminIds = await _getAdminUserIds();
@@ -172,6 +160,7 @@ class DatabaseService {
         messageArgs: messageArgs,
         type: type,
         targetId: targetId,
+        eventId: eventId,
         reason: reason,
         source: 'admin_alert',
       );
@@ -179,6 +168,7 @@ class DatabaseService {
   }
 
   Future<void> notifyAdminsForNewReport({
+    required String reportId,
     required String listingId,
     required String listingTitle,
     required String reporterName,
@@ -190,6 +180,7 @@ class DatabaseService {
       messageArgs: [reporterName, listingTitle],
       type: 'listing',
       targetId: listingId,
+      eventId: reportId,
       reason: reason,
     );
   }
@@ -205,6 +196,7 @@ class DatabaseService {
       messageArgs: [userName, subject],
       type: 'ticket',
       targetId: ticketId,
+      eventId: ticketId,
     );
   }
 
@@ -219,6 +211,7 @@ class DatabaseService {
       messageArgs: [listingTitle, sellerName],
       type: 'listing',
       targetId: listingId,
+      eventId: listingId,
     );
   }
 
@@ -244,7 +237,9 @@ class DatabaseService {
     bool autoRenew = false,
     bool isUrgent = false,
     bool tradeEnabled = false,
+    bool cashOnDeliveryAvailable = false,
     Map<String, dynamic>? tradePreferences,
+    List<Map<String, dynamic>> defectMarkers = const <Map<String, dynamic>>[],
   }) async {
     try {
       if (await _containsProfanity([title, description])) {
@@ -345,7 +340,9 @@ class DatabaseService {
         'favoritedBy': [],
         'autoRenew': autoRenew,
         'tradeEnabled': tradeEnabled,
+        'cashOnDeliveryAvailable': cashOnDeliveryAvailable,
         'tradePreferences': tradePreferences ?? <String, dynamic>{},
+        'defectMarkers': defectMarkers,
         'listingRightExpiresAt': listingRightExpiresAt,
         'listingRightSource': usesExtraListingRight ? 'extra' : null,
       });
@@ -356,6 +353,7 @@ class DatabaseService {
         messageArgs: [title, sellerName],
         type: 'listing',
         targetId: listingRef.id,
+        eventId: listingRef.id,
       );
 
       return true;
@@ -378,12 +376,14 @@ class DatabaseService {
     String? city,
     String? district,
     bool? tradeEnabled,
+    bool? cashOnDeliveryAvailable,
     Map<String, dynamic>? tradePreferences,
     bool? isUrgent,
     bool? isOfferEnabled,
     int? offerValidityHours,
     int? offerMinimumPercent,
     double? offerMinimumAmount,
+    List<Map<String, dynamic>>? defectMarkers,
     bool isAdmin = false,
   }) async {
     if (!isAdmin && await _containsProfanity([title, description])) {
@@ -405,6 +405,31 @@ class DatabaseService {
     bool isOnlyPriceChanged = false;
     String currentStatus = 'pending';
     Map<String, dynamic> oldData = {};
+
+    String _normalize(dynamic value) {
+      if (value == null) return '';
+      return value.toString().trim();
+    }
+
+    String _mapKey(Map<dynamic, dynamic> map) {
+      final entries =
+          map.entries
+              .map((e) => MapEntry(_normalize(e.key), _normalize(e.value)))
+              .where((e) => e.key.isNotEmpty)
+              .toList()
+            ..sort((a, b) => a.key.compareTo(b.key));
+      return entries.map((e) => '${e.key}:${e.value}').join('|');
+    }
+
+    String _defectMarkersKey(dynamic value) {
+      if (value is! List) return '';
+      return value
+          .map((marker) {
+            if (marker is! Map) return _normalize(marker);
+            return _mapKey(marker);
+          })
+          .join('||');
+    }
 
     if (listingDoc.exists) {
       oldData = listingDoc.data() as Map<String, dynamic>;
@@ -431,6 +456,14 @@ class DatabaseService {
       bool categorySame = category == null || category == oldData['category'];
       bool citySame = city == null || city == oldData['city'];
       bool districtSame = district == null || district == oldData['district'];
+      bool cashOnDeliverySame =
+          cashOnDeliveryAvailable == null ||
+          (oldData['cashOnDeliveryAvailable'] == true) ==
+              cashOnDeliveryAvailable;
+      bool defectMarkersSame =
+          defectMarkers == null ||
+          _defectMarkersKey(oldData['defectMarkers']) ==
+              _defectMarkersKey(defectMarkers);
 
       bool addImagesSame = true;
       if (additionalImages != null) {
@@ -451,9 +484,11 @@ class DatabaseService {
           descSame &&
           imageSame &&
           addImagesSame &&
+          defectMarkersSame &&
           categorySame &&
           citySame &&
-          districtSame) {
+          districtSame &&
+          cashOnDeliverySame) {
         isOnlyPriceChanged = true;
       }
     }
@@ -466,23 +501,8 @@ class DatabaseService {
       'status': (isAdmin || isOnlyPriceChanged) ? currentStatus : 'pending',
     };
 
-    String _normalize(dynamic value) {
-      if (value == null) return '';
-      return value.toString().trim();
-    }
-
     String _listKey(List<dynamic> list) =>
         list.map((e) => _normalize(e)).where((e) => e.isNotEmpty).join('||');
-
-    String _mapKey(Map<dynamic, dynamic> map) {
-      final entries =
-          map.entries
-              .map((e) => MapEntry(_normalize(e.key), _normalize(e.value)))
-              .where((e) => e.key.isNotEmpty)
-              .toList()
-            ..sort((a, b) => a.key.compareTo(b.key));
-      return entries.map((e) => '${e.key}:${e.value}').join('|');
-    }
 
     final changes = <String, Map<String, String>>{};
     void _addChange(String label, dynamic before, dynamic after) {
@@ -498,6 +518,11 @@ class DatabaseService {
     _addChange('Başlık', oldData['title'], title);
     _addChange('Açıklama', oldData['description'], description);
     _addChange('Fiyat', oldData['price'], price);
+    _addChange(
+      'Kapıda ödeme',
+      oldData['cashOnDeliveryAvailable'] == true,
+      cashOnDeliveryAvailable ?? oldData['cashOnDeliveryAvailable'] == true,
+    );
     _addChange(
       'Kategori',
       oldData['categoryPath'] ?? oldData['category'],
@@ -529,6 +554,15 @@ class DatabaseService {
         };
       }
     }
+    if (defectMarkers != null &&
+        _defectMarkersKey(oldData['defectMarkers']) !=
+            _defectMarkersKey(defectMarkers)) {
+      changes['Fotoğraf Kusurları'] = {
+        'before':
+            '${(oldData['defectMarkers'] is List) ? (oldData['defectMarkers'] as List).length : 0} adet',
+        'after': '${defectMarkers.length} adet',
+      };
+    }
     if (featuresMap != null) {
       final oldFeatures = Map<String, dynamic>.from(oldData['features'] ?? {});
       if (_mapKey(oldFeatures) != _mapKey(featuresMap)) {
@@ -541,6 +575,7 @@ class DatabaseService {
 
     if (newImageUrl != null) data['imageUrl'] = newImageUrl;
     if (additionalImages != null) data['additionalImages'] = additionalImages;
+    if (defectMarkers != null) data['defectMarkers'] = defectMarkers;
     if (oldPrice > 0 && oldPrice != price) {
       data['oldPrice'] = oldPrice;
     } else {
@@ -553,6 +588,9 @@ class DatabaseService {
     if (city != null) data['city'] = city;
     if (district != null) data['district'] = district;
     if (tradeEnabled != null) data['tradeEnabled'] = tradeEnabled;
+    if (cashOnDeliveryAvailable != null) {
+      data['cashOnDeliveryAvailable'] = cashOnDeliveryAvailable;
+    }
     if (tradePreferences != null) data['tradePreferences'] = tradePreferences;
     if (isUrgent != null) data['isUrgent'] = isUrgent;
     if (isOfferEnabled != null) data['isOfferEnabled'] = isOfferEnabled;
@@ -629,6 +667,7 @@ class DatabaseService {
             ],
             type: 'listing',
             targetId: listingId,
+            eventId: listingId,
           );
         }
         await _firestore.collection('listings').doc(listingId).update({
@@ -653,6 +692,9 @@ class DatabaseService {
             'notif_title_fav_removed',
             'notif_msg_fav_removed',
             messageArgs: [title],
+            type: 'listing',
+            targetId: listingId,
+            eventId: listingId,
           );
         }
       }
@@ -803,6 +845,34 @@ class DatabaseService {
     await listingRef.update(updateData);
   }
 
+  Future<void> reactivatePassiveListing(String listingId) async {
+    await _firestore.collection('listings').doc(listingId).update({
+      'status': 'active',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<int> reactivateAllPassiveListings() async {
+    final passiveListings = await _firestore
+        .collection('listings')
+        .where('status', isEqualTo: 'passive')
+        .get();
+
+    for (var start = 0; start < passiveListings.docs.length; start += 450) {
+      final batch = _firestore.batch();
+      final end = min(start + 450, passiveListings.docs.length);
+      for (final listing in passiveListings.docs.sublist(start, end)) {
+        batch.update(listing.reference, {
+          'status': 'active',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+
+    return passiveListings.docs.length;
+  }
+
   Future<void> approveListing(
     String listingId,
     String sellerId,
@@ -834,6 +904,7 @@ class DatabaseService {
             messageArgs: [title, oldPrice.toString(), price.toString(), dirKey],
             type: 'listing',
             targetId: listingId,
+            eventId: listingId,
           );
         }
         updateData['oldPrice'] = FieldValue.delete();
@@ -851,6 +922,7 @@ class DatabaseService {
         messageArgs: [title],
         type: 'listing',
         targetId: listingId,
+        eventId: listingId,
       );
 
       // --- YENİ: ARAMA ALARMI TETİKLEYİCİSİ (ONAY SONRASI) ---
@@ -923,6 +995,7 @@ class DatabaseService {
             messageArgs: [categoryPath, title],
             type: 'listing',
             targetId: listingId,
+            eventId: listingId,
           );
         }
       }
@@ -942,6 +1015,7 @@ class DatabaseService {
           messageArgs: [sellerName, title],
           type: 'listing',
           targetId: listingId,
+          eventId: listingId,
         );
       }
     } catch (e) {
@@ -963,6 +1037,10 @@ class DatabaseService {
         'notif_msg_rejected_reason',
         messageArgs: [title, reason],
         reason: reason,
+        type: 'listing',
+        targetId: listingId,
+        eventId: listingId,
+        source: 'system',
       );
     } else {
       await sendNotification(
@@ -970,6 +1048,10 @@ class DatabaseService {
         'notif_title_rejected',
         'notif_msg_rejected',
         messageArgs: [title],
+        type: 'listing',
+        targetId: listingId,
+        eventId: listingId,
+        source: 'system',
       );
     }
   }
@@ -992,6 +1074,7 @@ class DatabaseService {
       reason: reason,
       type: 'listing',
       targetId: listingId,
+      eventId: listingId,
     );
   }
 
@@ -1550,6 +1633,7 @@ class DatabaseService {
   Future<void> updateListingRightsSettings({
     required String rewardedAndroidAdUnitId,
     required String rewardedIosAdUnitId,
+    required bool rewardedAdsEnabled,
     required int rewardDailyMax,
     required int rewardCooldownMinutes,
     required List<Map<String, dynamic>> paidPackages,
@@ -1557,6 +1641,7 @@ class DatabaseService {
     await _firestore.collection('settings').doc('listing_rights').set({
       'rewardedAndroidAdUnitId': rewardedAndroidAdUnitId,
       'rewardedIosAdUnitId': rewardedIosAdUnitId,
+      'rewardedAdsEnabled': rewardedAdsEnabled,
       'rewardDailyMax': rewardDailyMax,
       'rewardCooldownMinutes': rewardCooldownMinutes,
       'paidPackages': paidPackages,

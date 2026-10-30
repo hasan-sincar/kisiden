@@ -871,12 +871,13 @@ class _AdminAdsTabState extends State<_AdminAdsTab> {
     text: '3',
   );
   final TextEditingController _rewardCooldownMinutesController =
-      TextEditingController(text: '10');
+      TextEditingController(text: '1');
   final TextEditingController _paidPackagesController = TextEditingController(
     text:
         'ilan_hakki_5|5|5 İlan Hakkı\nilan_hakki_10|10|10 İlan Hakkı\nilan_hakki_20|20|20 İlan Hakkı',
   );
   bool _isActive = true;
+  bool _rewardedAdsEnabled = true;
   bool _updateEnabled = true;
   bool _forceUpdate = false;
   bool _isLoading = true;
@@ -954,10 +955,19 @@ class _AdminAdsTabState extends State<_AdminAdsTab> {
                 (data['rewardedAndroidAdUnitId'] ?? '').toString();
             _rewardedIosIdController.text = (data['rewardedIosAdUnitId'] ?? '')
                 .toString();
+            _rewardedAdsEnabled = data['rewardedAdsEnabled'] != false;
             _rewardDailyMaxController.text = (data['rewardDailyMax'] ?? 3)
                 .toString();
+            final cooldown = data['rewardCooldownMinutes'];
+            final cooldownMinutes = cooldown is num
+                ? cooldown.toInt()
+                : int.tryParse(cooldown?.toString() ?? '');
             _rewardCooldownMinutesController.text =
-                (data['rewardCooldownMinutes'] ?? 10).toString();
+                cooldownMinutes != null &&
+                    cooldownMinutes >= 1 &&
+                    cooldownMinutes <= 1440
+                ? cooldownMinutes.toString()
+                : '1';
             if (packageLines.isNotEmpty) {
               _paidPackagesController.text = packageLines;
             }
@@ -1136,18 +1146,29 @@ class _AdminAdsTabState extends State<_AdminAdsTab> {
 
     final rewardDailyMax =
         int.tryParse(_rewardDailyMaxController.text.trim()) ?? 3;
-    final rewardCooldownMinutes =
-        int.tryParse(_rewardCooldownMinutesController.text.trim()) ?? 10;
+    final rewardCooldownMinutes = int.tryParse(
+      _rewardCooldownMinutesController.text.trim(),
+    );
+    if (rewardCooldownMinutes == null ||
+        rewardCooldownMinutes < 1 ||
+        rewardCooldownMinutes > 1440) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('reward_cooldown_minutes_invalid')),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
     try {
       await DatabaseService().updateListingRightsSettings(
         rewardedAndroidAdUnitId: _rewardedAndroidIdController.text.trim(),
         rewardedIosAdUnitId: _rewardedIosIdController.text.trim(),
+        rewardedAdsEnabled: _rewardedAdsEnabled,
         rewardDailyMax: rewardDailyMax < 1 ? 3 : rewardDailyMax,
-        rewardCooldownMinutes: rewardCooldownMinutes < 1
-            ? 10
-            : rewardCooldownMinutes,
+        rewardCooldownMinutes: rewardCooldownMinutes,
         paidPackages: paidPackages,
       );
 
@@ -1271,6 +1292,20 @@ class _AdminAdsTabState extends State<_AdminAdsTab> {
             style: LocalFonts.poppins(fontSize: 12, color: Colors.grey[700]),
           ),
           const SizedBox(height: 10),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              tr('rewarded_ads_enabled'),
+              style: LocalFonts.poppins(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              tr('rewarded_ads_toggle_hint'),
+              style: LocalFonts.poppins(fontSize: 12),
+            ),
+            value: _rewardedAdsEnabled,
+            onChanged: (value) => setState(() => _rewardedAdsEnabled = value),
+            activeThumbColor: Colors.green,
+          ),
           TextField(
             controller: _paidPackagesController,
             maxLines: 4,

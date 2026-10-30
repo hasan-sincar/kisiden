@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import '../services/database_service.dart';
 import '../utils/translations.dart';
 import '../utils/chat_risk_detector.dart';
@@ -22,6 +23,7 @@ class ChatScreen extends StatefulWidget {
   final String? listingPrice;
   final double? listingLatitude;
   final double? listingLongitude;
+  final String? initialMessageId;
 
   const ChatScreen({
     super.key,
@@ -33,6 +35,7 @@ class ChatScreen extends StatefulWidget {
     this.listingPrice,
     this.listingLatitude,
     this.listingLongitude,
+    this.initialMessageId,
   });
 
   @override
@@ -87,9 +90,13 @@ class _CounterOfferDialogState extends State<_CounterOfferDialog> {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final ItemScrollController _messageScrollController = ItemScrollController();
   final DatabaseService _dbService = DatabaseService();
   final String currentUserId = FirebaseAuth.instance.currentUser!.uid;
   final stt.SpeechToText _speechToText = stt.SpeechToText();
+  late final Future<void> _chatRestrictionsFuture;
+  String? _chatSetupRoomId;
+  Future<bool>? _chatSetupFuture;
   bool _isListening = false;
   bool _isLoadingReadyMessages = true;
   List<String> _customReadyMessages = <String>[];
@@ -101,6 +108,7 @@ class _ChatScreenState extends State<ChatScreen> {
   double? _chatListingLongitude;
   ChatRiskAnalysis _composerRisk = ChatRiskDetector.analyze('');
   bool _isRestrictionLoading = true;
+  bool _restrictionCheckFailed = false;
   bool _canSendMessage = true;
   bool _canStartNewChat = true;
   bool _isLoadingMeetingPoints = false;
@@ -108,6 +116,7 @@ class _ChatScreenState extends State<ChatScreen> {
   int _restrictionLevel = 0;
   String _restrictionReason = '';
   int _restrictionSecondsLeft = 0;
+  bool _initialMessageScrollRequested = false;
 
   String get _chatRoomId {
     return DatabaseService.buildChatRoomId(
@@ -185,9 +194,8 @@ class _ChatScreenState extends State<ChatScreen> {
     _chatListingLatitude = widget.listingLatitude;
     _chatListingLongitude = widget.listingLongitude;
     _initSpeech();
-    _loadChatRestrictions();
+    _chatRestrictionsFuture = _loadChatRestrictions();
     _loadCustomReadyMessages();
-    _ensureChatRoomExists();
     _hydrateChatListingMeta();
   }
 
@@ -212,38 +220,81 @@ class _ChatScreenState extends State<ChatScreen> {
         _restrictionSecondsLeft = (data['secondsLeft'] as num?)?.toInt() ?? 0;
         _isRestrictionLoading = false;
       });
-    } catch (_) {
+    } catch (error) {
+      debugPrint('Chat restrictions check failed: $error');
       if (!mounted) return;
       setState(() {
+        _restrictionCheckFailed = true;
+        _canSendMessage = false;
+        _canStartNewChat = false;
         _isRestrictionLoading = false;
       });
     }
   }
 
-  Future<void> _ensureChatRoomExists() async {
-    if (!_canStartNewChat) {
-      return;
-    }
+  Future<bool> _ensureChatRoomExists(String chatRoomId) async {
+    final chatRef = FirebaseFirestore.instance
+        .collection('chats')
+        .doc(chatRoomId);
+
     try {
-      final ids = <String>[currentUserId, widget.receiverId]..sort();
-      await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(_chatRoomId)
-          .set({
-            'participants': ids,
-            'listingTitle': _chatListingTitle ?? '',
-            'listingId': _chatListingId ?? '',
-            'listingImage': _chatListingImage ?? '',
-            'listingPrice': _chatListingPrice ?? '',
-            if (_chatListingLatitude != null)
-              'listingLatitude': _chatListingLatitude,
-            if (_chatListingLongitude != null)
-              'listingLongitude': _chatListingLongitude,
-            'unreadBy': <String>[],
-          }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('Ensure chat room failed: $e');
+      final existingChat = await chatRef.get();
+      if (existingChat.exists) return true;
+    } on FirebaseException catch (error) {
+      // A missing chat can also be denied by participant-only read rules.
+      if (error.code != 'permission-denied') rethrow;
     }
+
+    await _chatRestrictionsFuture;
+    if (_restrictionCheckFailed) return false;
+    if (!_canStartNewChat) return false;
+
+    final ids = <String>[currentUserId, widget.receiverId]..sort();
+    try {
+      await chatRef.set({
+        'participants': ids,
+        'listingTitle': _chatListingTitle ?? '',
+        'listingId': _chatListingId ?? '',
+        'listingImage': _chatListingImage ?? '',
+        'listingPrice': _chatListingPrice ?? '',
+        if (_chatListingLatitude != null)
+          'listingLatitude': _chatListingLatitude,
+        if (_chatListingLongitude != null)
+          'listingLongitude': _chatListingLongitude,
+        'unreadBy': <String>[],
+      });
+      return true;
+    } catch (error) {
+      debugPrint('Create chat room failed: $error');
+      rethrow;
+    }
+  }
+
+  Future<bool> _prepareChatRoom(String chatRoomId) {
+    if (_chatSetupRoomId != chatRoomId || _chatSetupFuture == null) {
+      _chatSetupRoomId = chatRoomId;
+      _chatSetupFuture = _ensureChatRoomExists(chatRoomId);
+    }
+    return _chatSetupFuture!;
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _watchChatMessages(
+    String chatRoomId,
+  ) async* {
+    final chatRoomReady = await _prepareChatRoom(chatRoomId);
+    if (!chatRoomReady) {
+      throw StateError(
+        _restrictionCheckFailed
+            ? 'chat_restrictions_unavailable'
+            : 'chat_new_thread_restricted',
+      );
+    }
+    yield* FirebaseFirestore.instance
+        .collection('chats')
+        .doc(chatRoomId)
+        .collection('messages')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
   }
 
   Future<void> _hydrateChatListingMeta() async {
@@ -555,6 +606,23 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
+    if (!await _prepareChatRoom(_chatRoomId)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _restrictionCheckFailed
+                  ? tr('chat_restriction_check_failed')
+                  : _restrictionReason.isNotEmpty
+                  ? _restrictionReason
+                  : tr('chat_restriction_temporary_active'),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     if (!_canSendMessage) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -600,17 +668,35 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
 
-      await _dbService.sendMessage(
-        widget.receiverId,
-        text,
-        _chatListingTitle ?? '',
-        listingId: _chatListingId,
-        listingImage: _chatListingImage,
-        listingPrice: _chatListingPrice,
-        riskScore: risk.score,
-        riskLevel: risk.level,
-        riskSignals: risk.signals,
-      );
+      try {
+        await _dbService.sendMessage(
+          widget.receiverId,
+          text,
+          _chatListingTitle ?? '',
+          listingId: _chatListingId,
+          listingImage: _chatListingImage,
+          listingPrice: _chatListingPrice,
+          riskScore: risk.score,
+          riskLevel: risk.level,
+          riskSignals: risk.signals,
+        );
+      } on FirebaseException catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${tr('chat_send_failed')} (${error.code})'),
+            ),
+          );
+        }
+        return;
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${tr('chat_send_failed')}: $error')),
+          );
+        }
+        return;
+      }
       _messageController.clear();
       if (mounted) {
         setState(() {
@@ -1096,25 +1182,92 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('chats')
-                      .doc(chatRoomId)
-                      .collection('messages')
-                      .orderBy('timestamp', descending: true)
-                      .snapshots(),
+                  stream: _watchChatMessages(chatRoomId),
                   builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      final streamError = snapshot.error;
+                      final stateErrorMessage = streamError is StateError
+                          ? streamError.message
+                          : '';
+                      final isRestrictionCheckUnavailable =
+                          stateErrorMessage == 'chat_restrictions_unavailable';
+                      final isNewThreadRestricted =
+                          stateErrorMessage == 'chat_new_thread_restricted';
+                      final errorCode = switch (snapshot.error) {
+                        FirebaseException(:final code) => code,
+                        _ => 'unknown',
+                      };
+                      debugPrint(
+                        'Chat messages stream failed: ${snapshot.error}',
+                      );
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Colors.red,
+                                size: 36,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                isRestrictionCheckUnavailable
+                                    ? tr('chat_restriction_check_failed')
+                                    : isNewThreadRestricted
+                                    ? (_restrictionReason.isNotEmpty
+                                          ? _restrictionReason
+                                          : tr(
+                                              'chat_restriction_temporary_active',
+                                            ))
+                                    : '${tr('chat_messages_load_failed')} ($errorCode)',
+                                textAlign: TextAlign.center,
+                                style: LocalFonts.poppins(
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
                     if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
                     var messages = snapshot.data!.docs;
+                    final targetMessageIndex = widget.initialMessageId == null
+                        ? -1
+                        : messages.indexWhere(
+                            (message) => message.id == widget.initialMessageId,
+                          );
+                    if (targetMessageIndex >= 0 &&
+                        !_initialMessageScrollRequested) {
+                      _initialMessageScrollRequested = true;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        if (!_messageScrollController.isAttached) {
+                          _initialMessageScrollRequested = false;
+                          return;
+                        }
+                        _messageScrollController.scrollTo(
+                          index: targetMessageIndex,
+                          alignment: 0.5,
+                          duration: const Duration(milliseconds: 350),
+                        );
+                      });
+                    }
 
-                    return ListView.builder(
+                    return ScrollablePositionedList.builder(
+                      itemScrollController: _messageScrollController,
                       reverse: true,
                       itemCount: messages.length,
                       itemBuilder: (context, index) {
                         var data =
                             messages[index].data() as Map<String, dynamic>;
                         bool isMe = data['senderId'] == currentUserId;
+                        final isTargetMessage =
+                            messages[index].id == widget.initialMessageId;
 
                         // --- YENİ: ÖZEL TEKLİF BALONCUĞU UI ---
                         if (data['type'] == 'offer') {
@@ -1468,6 +1621,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                   color: isMe
                                       ? Colors.green[600]
                                       : Colors.blue[600],
+                                  border: isTargetMessage
+                                      ? Border.all(
+                                          color: Colors.amber,
+                                          width: 2,
+                                        )
+                                      : null,
                                   borderRadius: BorderRadius.only(
                                     topLeft: const Radius.circular(16),
                                     topRight: const Radius.circular(16),

@@ -341,6 +341,32 @@ class _KisidenAppState extends State<KisidenApp> {
     }
   }
 
+  Future<void> _handlePushNotificationOpen(RemoteMessage message) async {
+    final data = message.data;
+    if (data['type'] == 'chat') {
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      final context = navigatorKey.currentContext;
+      final chatId = data['targetId']?.toString() ?? '';
+      if (currentUserId != null && context != null && chatId.isNotEmpty) {
+        try {
+          final opened = await openChatNotification(
+            context,
+            currentUserId,
+            chatId,
+            messageId: data['messageId']?.toString(),
+          );
+          if (opened) return;
+        } catch (e) {
+          debugPrint('Chat Push Navigation Error: $e');
+        }
+      }
+    }
+
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+    );
+  }
+
   void _setupPushNotificationHandlers() async {
     try {
       await requestNotificationPermission();
@@ -371,10 +397,10 @@ class _KisidenAppState extends State<KisidenApp> {
         }
       });
 
-      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-        navigatorKey.currentState?.push(
-          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-        );
+      FirebaseMessaging.onMessageOpenedApp.listen((
+        RemoteMessage message,
+      ) async {
+        await _handlePushNotificationOpen(message);
       });
 
       FirebaseMessaging.instance.getInitialMessage().then((
@@ -382,9 +408,7 @@ class _KisidenAppState extends State<KisidenApp> {
       ) {
         if (message != null) {
           Future.delayed(const Duration(milliseconds: 500), () {
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-            );
+            _handlePushNotificationOpen(message);
           });
         }
       });

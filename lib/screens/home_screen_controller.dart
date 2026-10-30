@@ -569,6 +569,7 @@ extension _HomeScreenController on _HomeScreenState {
             minPrice: _minPriceController.text,
             maxPrice: _maxPriceController.text,
             distance: _distance,
+            createdWithinHours: _createdWithinHours,
             city: _filterCity,
             district: _filterDistrict,
             neighborhood: _filterNeighborhood ?? '',
@@ -586,6 +587,7 @@ extension _HomeScreenController on _HomeScreenState {
           _minPriceController.text = result.minPrice;
           _maxPriceController.text = result.maxPrice;
           _distance = result.distance;
+          _createdWithinHours = result.createdWithinHours;
           _filterCity = result.city;
           _filterDistrict = result.district;
           _filterNeighborhood = result.neighborhood;
@@ -1222,6 +1224,7 @@ class _HomeFilterResult {
     required this.minPrice,
     required this.maxPrice,
     required this.distance,
+    required this.createdWithinHours,
     required this.city,
     required this.district,
     required this.neighborhood,
@@ -1232,6 +1235,7 @@ class _HomeFilterResult {
   final String minPrice;
   final String maxPrice;
   final double distance;
+  final int? createdWithinHours;
   final String? city;
   final String? district;
   final String neighborhood;
@@ -1256,6 +1260,7 @@ class _HomeFilterPage extends StatefulWidget {
     required this.minPrice,
     required this.maxPrice,
     required this.distance,
+    required this.createdWithinHours,
     required this.city,
     required this.district,
     required this.neighborhood,
@@ -1267,6 +1272,7 @@ class _HomeFilterPage extends StatefulWidget {
   final String minPrice;
   final String maxPrice;
   final double distance;
+  final int? createdWithinHours;
   final String? city;
   final String? district;
   final String neighborhood;
@@ -1283,6 +1289,7 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
   late final TextEditingController _maxPriceController;
   late final TextEditingController _neighborhoodController;
   late double _distance;
+  int? _createdWithinHours;
   String? _city;
   String? _district;
   late final Map<String, String?> _featureValues;
@@ -1296,6 +1303,7 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
     _maxPriceController = TextEditingController(text: widget.maxPrice);
     _neighborhoodController = TextEditingController(text: widget.neighborhood);
     _distance = widget.distance.clamp(0.1, 30.0).toDouble();
+    _createdWithinHours = widget.createdWithinHours;
     _city = widget.city;
     _district = widget.district;
     _featureValues = Map<String, String?>.from(widget.featureValues);
@@ -1309,183 +1317,347 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
     super.dispose();
   }
 
+  void _clearFilters() {
+    setState(() {
+      _minPriceController.clear();
+      _maxPriceController.clear();
+      _neighborhoodController.clear();
+      _distance = 30;
+      _createdWithinHours = null;
+      _city = null;
+      _district = null;
+      _clearCategory = true;
+      for (final key in _featureValues.keys) {
+        _featureValues[key] = null;
+      }
+    });
+  }
+
+  Widget _filterSection({required String title, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: LocalFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final districts = _city == null
         ? const <String>[]
         : turkeyLocations[_city] ?? const <String>[];
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(
         title: Text(tr('filter')),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
         ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          Text(tr('price_range')),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _minPriceController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: tr('min_price'),
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: TextField(
-                  controller: _maxPriceController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: tr('max_price'),
-                    border: const OutlineInputBorder(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Text(
-            '${tr('distance')}: ${_distance >= 30.0 ? tr('all') : '${_distance.toStringAsFixed(1)} km'}',
-          ),
-          Slider(
-            value: _distance,
-            min: 0.1,
-            max: 30,
-            divisions: 300,
-            onChanged: (value) => setState(() => _distance = value),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: _city,
-            decoration: InputDecoration(
-              labelText: tr('city'),
-              border: const OutlineInputBorder(),
-            ),
-            items: [
-              DropdownMenuItem(value: null, child: Text(tr('all'))),
-              ...turkeyLocations.keys.map(
-                (city) => DropdownMenuItem(value: city, child: Text(city)),
-              ),
-            ],
-            onChanged: (value) => setState(() {
-              _city = value;
-              _district = null;
-            }),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: _district,
-            decoration: InputDecoration(
-              labelText: tr('district'),
-              border: const OutlineInputBorder(),
-            ),
-            items: [
-              DropdownMenuItem(value: null, child: Text(tr('all'))),
-              ...districts.map(
-                (district) =>
-                    DropdownMenuItem(value: district, child: Text(district)),
-              ),
-            ],
-            onChanged: (value) => setState(() => _district = value),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _neighborhoodController,
-            decoration: InputDecoration(
-              labelText: tr('neighborhood_optional'),
-              border: const OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: _isLocating
-                ? null
-                : () async {
-                    setState(() => _isLocating = true);
-                    try {
-                      final location = await widget.onUseCurrentLocation();
-                      if (!mounted) return;
-                      if (location != null) {
-                        setState(() {
-                          _city = location.city;
-                          _district = location.district;
-                          _neighborhoodController.text = location.neighborhood;
-                        });
-                      }
-                    } finally {
-                      if (mounted) setState(() => _isLocating = false);
-                    }
-                  },
-            icon: _isLocating
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.my_location),
-            label: Text(tr('use_current_location')),
-          ),
-          if (widget.categoryFeatures.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text(
-              tr('category_specific_filters'),
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ...widget.categoryFeatures.map((feature) {
-              final name = feature['name'] as String;
-              final options = List<String>.from(feature['options'] as List);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: DropdownButtonFormField<String>(
-                  initialValue: _featureValues[name],
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: name,
-                    border: const OutlineInputBorder(),
-                  ),
-                  items: [
-                    DropdownMenuItem(value: null, child: Text(tr('all'))),
-                    ...options.toSet().map(
-                      (option) =>
-                          DropdownMenuItem(value: option, child: Text(option)),
-                    ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _featureValues[name] = value),
-                ),
-              );
-            }),
-          ],
-          const SizedBox(height: 30),
-          OutlinedButton(
-            onPressed: () {
-              setState(() {
-                _minPriceController.clear();
-                _maxPriceController.clear();
-                _neighborhoodController.clear();
-                _distance = 30;
-                _city = null;
-                _district = null;
-                _clearCategory = true;
-                for (final key in _featureValues.keys) {
-                  _featureValues[key] = null;
-                }
-              });
-            },
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+        actions: [
+          TextButton(
+            onPressed: _clearFilters,
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: Text(tr('clear_filter')),
           ),
-          const SizedBox(height: 12),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _filterSection(
+            title: tr('price_range'),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _minPriceController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: tr('min_price'),
+                      filled: true,
+                      fillColor: const Color(0xFFF7F8FA),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 11,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _maxPriceController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: tr('max_price'),
+                      filled: true,
+                      fillColor: const Color(0xFFF7F8FA),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 11,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _filterSection(
+            title: tr('listing_time_filter'),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (final option in <({int? hours, String key})>[
+                  (hours: null, key: 'any_date'),
+                  (hours: 24, key: 'last_24_hours'),
+                  (hours: 48, key: 'last_48_hours'),
+                ])
+                  ChoiceChip(
+                    label: Text(tr(option.key)),
+                    selected: _createdWithinHours == option.hours,
+                    onSelected: (selected) => setState(
+                      () =>
+                          _createdWithinHours = selected ? option.hours : null,
+                    ),
+                    selectedColor: AppColors.primary.withValues(alpha: 0.12),
+                    side: BorderSide(
+                      color: _createdWithinHours == option.hours
+                          ? AppColors.primary.withValues(alpha: 0.45)
+                          : Colors.grey.shade300,
+                    ),
+                    labelStyle: LocalFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: _createdWithinHours == option.hours
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                      color: _createdWithinHours == option.hours
+                          ? AppColors.primary
+                          : Colors.black87,
+                    ),
+                    showCheckmark: false,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+              ],
+            ),
+          ),
+          _filterSection(
+            title: tr('distance'),
+            child: Column(
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    _distance >= 30.0
+                        ? tr('all')
+                        : '${_distance.toStringAsFixed(1)} km',
+                    style: LocalFonts.poppins(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Slider(
+                  value: _distance,
+                  min: 0.1,
+                  max: 30,
+                  divisions: 300,
+                  activeColor: AppColors.primary,
+                  onChanged: (value) => setState(() => _distance = value),
+                ),
+              ],
+            ),
+          ),
+          _filterSection(
+            title: tr('location_filter'),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: _city,
+                        decoration: InputDecoration(
+                          labelText: tr('city'),
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 12,
+                          ),
+                        ),
+                        items: [
+                          DropdownMenuItem(value: null, child: Text(tr('all'))),
+                          ...turkeyLocations.keys.map(
+                            (city) => DropdownMenuItem(
+                              value: city,
+                              child: Text(
+                                city,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) => setState(() {
+                          _city = value;
+                          _district = null;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: _district,
+                        decoration: InputDecoration(
+                          labelText: tr('district'),
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 12,
+                          ),
+                        ),
+                        items: [
+                          DropdownMenuItem(value: null, child: Text(tr('all'))),
+                          ...districts.map(
+                            (district) => DropdownMenuItem(
+                              value: district,
+                              child: Text(
+                                district,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) => setState(() => _district = value),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _neighborhoodController,
+                  decoration: InputDecoration(
+                    labelText: tr('neighborhood_optional'),
+                    filled: true,
+                    fillColor: const Color(0xFFF7F8FA),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _isLocating
+                        ? null
+                        : () async {
+                            setState(() => _isLocating = true);
+                            try {
+                              final location = await widget
+                                  .onUseCurrentLocation();
+                              if (!mounted) return;
+                              if (location != null) {
+                                setState(() {
+                                  _city = location.city;
+                                  _district = location.district;
+                                  _neighborhoodController.text =
+                                      location.neighborhood;
+                                });
+                              }
+                            } finally {
+                              if (mounted) {
+                                setState(() => _isLocating = false);
+                              }
+                            }
+                          },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isLocating) ...[
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(tr('use_current_location')),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (widget.categoryFeatures.isNotEmpty) ...[
+            _filterSection(
+              title: tr('category_specific_filters'),
+              child: Column(
+                children: [
+                  ...widget.categoryFeatures.map((feature) {
+                    final name = feature['name'] as String;
+                    final options = List<String>.from(
+                      feature['options'] as List,
+                    );
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _featureValues[name],
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: name,
+                          border: const OutlineInputBorder(),
+                        ),
+                        items: [
+                          DropdownMenuItem(value: null, child: Text(tr('all'))),
+                          ...options.toSet().map(
+                            (option) => DropdownMenuItem(
+                              value: option,
+                              child: Text(option),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => _featureValues[name] = value),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
           ElevatedButton(
             onPressed: () => Navigator.pop(
               context,
@@ -1493,6 +1665,7 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
                 minPrice: _minPriceController.text,
                 maxPrice: _maxPriceController.text,
                 distance: _distance,
+                createdWithinHours: _createdWithinHours,
                 city: _city,
                 district: _district,
                 neighborhood: _neighborhoodController.text,
@@ -1500,8 +1673,22 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
                 clearCategory: _clearCategory,
               ),
             ),
-            child: Text(tr('show_results')),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: Text(
+              tr('show_results'),
+              style: LocalFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
+          const SizedBox(height: 12),
         ],
       ),
     );

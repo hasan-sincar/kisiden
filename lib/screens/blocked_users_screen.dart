@@ -47,15 +47,11 @@ class BlockedUsersScreen extends StatelessWidget {
             itemBuilder: (context, index) {
               String blockedUid = blockedUsers[index];
 
-              return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(blockedUid)
-                    .get(),
+              return FutureBuilder<Map<String, dynamic>?>(
+                future: DatabaseService().getPublicUserProfile(blockedUid),
                 builder: (context, userSnap) {
                   if (!userSnap.hasData) return const SizedBox();
-                  var bData =
-                      userSnap.data!.data() as Map<String, dynamic>? ?? {};
+                  final bData = userSnap.data ?? <String, dynamic>{};
 
                   String? photoUrl = bData['photoUrl']?.toString().trim();
                   bool hasPhoto = photoUrl != null && photoUrl.isNotEmpty;

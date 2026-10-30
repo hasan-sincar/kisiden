@@ -7,14 +7,44 @@ import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.google.android.gms.auth.api.identity.GetPhoneNumberHintIntentRequest
+import com.google.android.gms.auth.api.identity.Identity
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import me.leolin.shortcutbadger.ShortcutBadger
 
 class MainActivity : FlutterFragmentActivity() {
+    private var phoneNumberHintResult: MethodChannel.Result? = null
+
+    private val phoneNumberHintLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { activityResult ->
+        val result = phoneNumberHintResult ?: return@registerForActivityResult
+        phoneNumberHintResult = null
+
+        if (activityResult.resultCode != RESULT_OK || activityResult.data == null) {
+            result.success(null)
+            return@registerForActivityResult
+        }
+
+        try {
+            val phoneNumber = Identity.getSignInClient(this)
+                .getPhoneNumberFromIntent(activityResult.data)
+            result.success(phoneNumber)
+        } catch (error: Exception) {
+            result.error(
+                "phone_hint_read_failed",
+                error.localizedMessage ?: "Selected phone number could not be read.",
+                null,
+            )
+        }
+    }
+
     companion object {
         private const val CHANNEL = "appim/widget"
         private const val PREF_NAME = "appim_widget_prefs"
@@ -61,6 +91,51 @@ class MainActivity : FlutterFragmentActivity() {
                     "refreshHomeWidget" -> {
                         AppimHomeWidgetProvider.forceUpdate(this)
                         result.success(true)
+                    }
+
+                    "pickPhoneNumber" -> {
+                        if (phoneNumberHintResult != null) {
+                            result.error(
+                                "phone_hint_in_progress",
+                                "A phone number selection is already in progress.",
+                                null,
+                            )
+                            return@setMethodCallHandler
+                        }
+
+                        phoneNumberHintResult = result
+                        val request = GetPhoneNumberHintIntentRequest.builder().build()
+                        Identity.getSignInClient(this)
+                            .getPhoneNumberHintIntent(request)
+                            .addOnSuccessListener { pendingIntent ->
+                                if (phoneNumberHintResult !== result) return@addOnSuccessListener
+                                try {
+                                    phoneNumberHintLauncher.launch(
+                                        IntentSenderRequest.Builder(
+                                            pendingIntent.intentSender,
+                                        ).build(),
+                                    )
+                                } catch (error: Exception) {
+                                    phoneNumberHintResult = null
+                                    result.error(
+                                        "phone_hint_launch_failed",
+                                        error.localizedMessage
+                                            ?: "Phone number selection could not be opened.",
+                                        null,
+                                    )
+                                }
+                            }
+                            .addOnFailureListener { error ->
+                                if (phoneNumberHintResult === result) {
+                                    phoneNumberHintResult = null
+                                    result.error(
+                                        "phone_hint_unavailable",
+                                        error.localizedMessage
+                                            ?: "No phone number is available to select.",
+                                        null,
+                                    )
+                                }
+                            }
                     }
 
                     else -> result.notImplemented()
@@ -141,8 +216,8 @@ class MainActivity : FlutterFragmentActivity() {
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setSilent(true)
             .setOnlyAlertOnce(true)
-            .setOngoing(true)
-            .setAutoCancel(false)
+            .setOngoing(false)
+            .setAutoCancel(true)
             .setShowWhen(false)
             .setContentIntent(contentIntent)
             .build()

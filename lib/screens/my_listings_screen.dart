@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:appim/utils/local_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,6 +20,7 @@ class MyListingsScreen extends StatelessWidget {
     String listingId,
     bool isActive,
     String listingTitle,
+    String? transferRequestId,
   ) {
     showModalBottomSheet(
       context: context,
@@ -123,6 +126,10 @@ class MyListingsScreen extends StatelessWidget {
                     color: Colors.red[800],
                   ),
                 ),
+                subtitle: transferRequestId == null
+                    ? null
+                    : Text(tr('cancel_transfer_before_delete')),
+                enabled: transferRequestId == null,
                 onTap: () async {
                   await DatabaseService().deleteListing(listingId);
                   if (context.mounted) Navigator.pop(context);
@@ -133,6 +140,43 @@ class MyListingsScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _handleTransferAction(
+    BuildContext context, {
+    required String listingId,
+    required String listingTitle,
+    required String listingImage,
+    required String sellerName,
+    required String? transferRequestId,
+  }) async {
+    if (transferRequestId == null) {
+      _showTransferRecipientDialog(
+        context,
+        listingId: listingId,
+        listingTitle: listingTitle,
+        listingImage: listingImage,
+        sellerName: sellerName,
+      );
+      return;
+    }
+
+    try {
+      await DatabaseService().cancelListingTransfer(
+        listingId: listingId,
+        transferId: transferRequestId,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('transfer_cancelled'))));
+    } catch (error) {
+      debugPrint('Listing transfer cancellation failed: $error');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('transfer_response_failed'))));
+    }
   }
 
   // --- YENİ: ALICI SEÇME VE YORUM HAKKI TANIMA EKRANI ---
@@ -222,7 +266,6 @@ class MyListingsScreen extends StatelessWidget {
                               .markAsSoldAndGrantReviewPermission(
                                 listingId,
                                 buyerId,
-                                listingTitle,
                               );
                           if (context.mounted) {
                             Navigator.pop(context); // Dialogu kapat
@@ -256,12 +299,292 @@ class MyListingsScreen extends StatelessWidget {
     );
   }
 
+  void _showTransferRecipientDialog(
+    BuildContext context, {
+    required String listingId,
+    required String listingTitle,
+    required String listingImage,
+    required String sellerName,
+  }) {
+    String query = '';
+    Future<List<Map<String, dynamic>>>? usersFuture;
+    Timer? searchDebounce;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(tr('find_transfer_recipient')),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 360,
+            child: Column(
+              children: [
+                TextField(
+                  decoration: InputDecoration(
+                    hintText: tr('transfer_recipient_search_hint'),
+                    prefixIcon: const Icon(Icons.search),
+                  ),
+                  onChanged: (value) {
+                    query = value.trim();
+                    searchDebounce?.cancel();
+                    setState(() {
+                      usersFuture = null;
+                    });
+                    if (query.length >= 2) {
+                      final requestedQuery = query;
+                      searchDebounce = Timer(
+                        const Duration(milliseconds: 600),
+                        () {
+                          if (!dialogContext.mounted ||
+                              requestedQuery != query) {
+                            return;
+                          }
+                          setState(() {
+                            usersFuture = DatabaseService()
+                                .searchListingTransferRecipients(
+                                  requestedQuery,
+                                );
+                          });
+                        },
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: usersFuture == null
+                      ? Center(
+                          child: query.length < 2
+                              ? Text(tr('transfer_search_min_chars'))
+                              : const CircularProgressIndicator(),
+                        )
+                      : FutureBuilder<List<Map<String, dynamic>>>(
+                          future: usersFuture,
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return Center(
+                                child: Text(tr('transfer_search_failed')),
+                              );
+                            }
+                            if (!snapshot.hasData) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+                            final users = snapshot.data!;
+                            if (users.isEmpty) {
+                              return Center(
+                                child: Text(tr('transfer_no_users_found')),
+                              );
+                            }
+                            return ListView.builder(
+                              itemCount: users.length,
+                              itemBuilder: (context, index) {
+                                final user = users[index];
+                                final name = (user['name'] ?? tr('user'))
+                                    .toString();
+                                return ListTile(
+                                  leading: const CircleAvatar(
+                                    child: Icon(Icons.person_outline),
+                                  ),
+                                  title: Text(name),
+                                  onTap: () async {
+                                    try {
+                                      await DatabaseService()
+                                          .createListingTransfer(
+                                            listingId: listingId,
+                                            receiverId: user['uid'] as String,
+                                            listingTitle: listingTitle,
+                                            listingImage: listingImage,
+                                            senderName: sellerName,
+                                          );
+                                      if (!context.mounted) return;
+                                      Navigator.pop(dialogContext);
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            tr('transfer_invitation_sent'),
+                                          ),
+                                        ),
+                                      );
+                                    } catch (error) {
+                                      debugPrint(
+                                        'Listing transfer invitation failed: $error',
+                                      );
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            tr('transfer_invitation_failed'),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                );
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(tr('cancel')),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) => searchDebounce?.cancel());
+  }
+
+  Widget _buildIncomingTransfers(String uid) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('listing_transfers')
+          .where('receiverId', isEqualTo: uid)
+          .where('status', isEqualTo: 'pending')
+          .limit(50)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text(tr('transfer_load_failed')));
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final transfers = snapshot.data!.docs
+            .where((doc) => doc.data()['status'] == 'pending')
+            .toList();
+        if (transfers.isEmpty) {
+          return Center(child: Text(tr('no_transfer_invitations')));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: transfers.length,
+          itemBuilder: (context, index) {
+            final transfer = transfers[index];
+            final data = transfer.data();
+            final listingId = (data['listingId'] ?? '').toString();
+            final title = (data['listingTitle'] ?? '').toString();
+            return Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundImage:
+                      (data['listingImage'] ?? '').toString().isNotEmpty
+                      ? NetworkImage(data['listingImage'].toString())
+                      : null,
+                  child: (data['listingImage'] ?? '').toString().isEmpty
+                      ? const Icon(Icons.inventory_2_outlined)
+                      : null,
+                ),
+                title: Text(title),
+                subtitle: Text(
+                  tr('transfer_invitation_from').replaceFirst(
+                    '%s',
+                    (data['senderName'] ?? tr('user')).toString(),
+                  ),
+                ),
+                isThreeLine: true,
+                trailing: PopupMenuButton<String>(
+                  tooltip: tr('transfer_invitation_actions'),
+                  onSelected: (action) => _respondToTransfer(
+                    context,
+                    transfer.id,
+                    data,
+                    action == 'accept',
+                  ),
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'accept',
+                      child: Text(tr('accept_transfer')),
+                    ),
+                    PopupMenuItem(
+                      value: 'reject',
+                      child: Text(tr('reject_transfer')),
+                    ),
+                  ],
+                ),
+                onTap: listingId.isEmpty
+                    ? null
+                    : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ListingDetailScreen(
+                            data: data,
+                            listingId: listingId,
+                          ),
+                        ),
+                      ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _respondToTransfer(
+    BuildContext context,
+    String transferId,
+    Map<String, dynamic> data,
+    bool accept,
+  ) async {
+    if (accept) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(tr('accept_transfer')),
+          content: Text(tr('accept_transfer_confirmation')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(tr('cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(tr('accept_transfer')),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    try {
+      await DatabaseService().respondToListingTransfer(
+        transferId: transferId,
+        listingId: (data['listingId'] ?? '').toString(),
+        senderId: (data['senderId'] ?? '').toString(),
+        accept: accept,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr(accept ? 'transfer_accepted' : 'transfer_rejected')),
+        ),
+      );
+    } catch (error) {
+      debugPrint('Listing transfer response failed: $error');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('transfer_response_failed'))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         backgroundColor: Colors.grey[50],
         appBar: AppBar(
@@ -276,6 +599,7 @@ class MyListingsScreen extends StatelessWidget {
             tabs: [
               Tab(text: tr('active_listings')),
               Tab(text: tr('passive_listings')),
+              Tab(text: tr('transfer_invitations')),
             ],
           ),
         ),
@@ -283,6 +607,7 @@ class MyListingsScreen extends StatelessWidget {
           children: [
             _buildListingList(uid, isActive: true),
             _buildListingList(uid, isActive: false),
+            _buildIncomingTransfers(uid),
           ],
         ),
       ),
@@ -549,7 +874,9 @@ class MyListingsScreen extends StatelessWidget {
                                 if (context.mounted)
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(tr('listing_sent_to_admin')),
+                                      content: Text(
+                                        tr('listing_sent_to_admin'),
+                                      ),
                                     ),
                                   );
                               } catch (e) {
@@ -580,6 +907,32 @@ class MyListingsScreen extends StatelessWidget {
                               ),
                             ),
                           ),
+                        if (isActive)
+                          _buildActionButton(
+                            context,
+                            (data['transferRequestId'] ?? '').toString().isEmpty
+                                ? Icons.swap_horiz
+                                : Icons.cancel_outlined,
+                            (data['transferRequestId'] ?? '').toString().isEmpty
+                                ? tr('transfer_listing')
+                                : tr('cancel_transfer_invitation'),
+                            (data['transferRequestId'] ?? '').toString().isEmpty
+                                ? Colors.indigo
+                                : Colors.red,
+                            () => _handleTransferAction(
+                              context,
+                              listingId: docId,
+                              listingTitle: (data['title'] ?? '').toString(),
+                              listingImage: (data['imageUrl'] ?? '').toString(),
+                              sellerName: (data['sellerName'] ?? '').toString(),
+                              transferRequestId:
+                                  (data['transferRequestId'] ?? '')
+                                      .toString()
+                                      .isEmpty
+                                  ? null
+                                  : data['transferRequestId'].toString(),
+                            ),
+                          ),
                         if (isActive || (!isActive && !isPending))
                           _buildActionButton(
                             context,
@@ -606,6 +959,9 @@ class MyListingsScreen extends StatelessWidget {
                             docId,
                             isActive,
                             data['title'] ?? '',
+                            (data['transferRequestId'] ?? '').toString().isEmpty
+                                ? null
+                                : data['transferRequestId'].toString(),
                           ),
                         ),
                       ],

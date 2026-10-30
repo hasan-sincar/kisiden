@@ -242,11 +242,11 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
 
     return DefaultTabController(
       length: 2,
-      child: FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.sellerId)
-            .get(),
+      child: FutureBuilder<Map<String, dynamic>?>(
+        future: DatabaseService().getPublicUserProfile(
+          widget.sellerId,
+          refresh: true,
+        ),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Scaffold(
@@ -269,7 +269,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
               body: Center(child: CircularProgressIndicator()),
             );
 
-          if (!snapshot.hasData || !snapshot.data!.exists) {
+          if (!snapshot.hasData || snapshot.data == null) {
             return Scaffold(
               appBar: AppBar(title: Text(tr('seller_profile'))),
               body: Center(
@@ -281,14 +281,10 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
             );
           }
 
-          var sellerData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+          final sellerData = snapshot.data!;
           int soldCount = sellerData['soldCount'] ?? 0;
           int followerCount = sellerData['followerCount'] ?? 0;
-          bool isPro =
-              sellerData['proUntil'] != null &&
-              (sellerData['proUntil'] as Timestamp).toDate().isAfter(
-                DateTime.now(),
-              );
+          bool isPro = sellerData['isPro'] == true;
 
           int membershipDays = 0;
           if (sellerData['createdAt'] != null) {
@@ -694,15 +690,24 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
+                                      horizontal: 14,
+                                      vertical: 13,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.blue[50],
-                                      borderRadius: BorderRadius.circular(12),
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
                                       border: Border.all(
-                                        color: Colors.blue.shade100,
+                                        color: const Color(0xFFE3EAF5),
                                       ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.blueGrey.withValues(
+                                            alpha: 0.07,
+                                          ),
+                                          blurRadius: 14,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                      ],
                                     ),
                                     child: Column(
                                       crossAxisAlignment:
@@ -712,12 +717,27 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.center,
                                           children: [
+                                            Container(
+                                              width: 36,
+                                              height: 36,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFEAF2FF),
+                                                borderRadius:
+                                                    BorderRadius.circular(11),
+                                              ),
+                                              child: const Icon(
+                                                Icons.shield_rounded,
+                                                size: 20,
+                                                color: Color(0xFF2765C5),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
                                             Text(
                                               tr('trust_score'),
                                               style: LocalFonts.poppins(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.blue[900],
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w700,
+                                                color: const Color(0xFF24334D),
                                               ),
                                             ),
                                             const SizedBox(width: 6),
@@ -813,48 +833,73 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
                                             ),
                                             const SizedBox(width: 6),
                                             Expanded(
-                                              child: SizedBox(
-                                                height: 22,
-                                                child: Stack(
-                                                  alignment: Alignment.center,
-                                                  children: [
-                                                    ClipRRect(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            6,
-                                                          ),
-                                                      child:
-                                                          LinearProgressIndicator(
-                                                            value:
-                                                                trustScore /
-                                                                100,
-                                                            backgroundColor:
-                                                                Colors
-                                                                    .blue[100],
-                                                            color:
-                                                                trustScore >= 80
-                                                                ? Colors.green
-                                                                : trustScore >=
-                                                                      60
-                                                                ? Colors.orange
-                                                                : Colors.blue,
-                                                            minHeight: 10,
-                                                          ),
-                                                    ),
-                                                    Text(
-                                                      '$trustScore/100',
-                                                      style: LocalFonts.poppins(
-                                                        fontSize: 11.5,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: Colors.blue[900],
+                                              child: Align(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 5,
                                                       ),
+                                                  decoration: BoxDecoration(
+                                                    color: trustScore >= 80
+                                                        ? const Color(
+                                                            0xFFE8F6EE,
+                                                          )
+                                                        : trustScore >= 60
+                                                        ? const Color(
+                                                            0xFFFFF4E3,
+                                                          )
+                                                        : const Color(
+                                                            0xFFEAF2FF,
+                                                          ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          20,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    '$trustScore/100',
+                                                    style: LocalFonts.poppins(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: trustScore >= 80
+                                                          ? const Color(
+                                                              0xFF23834C,
+                                                            )
+                                                          : trustScore >= 60
+                                                          ? const Color(
+                                                              0xFFB36A13,
+                                                            )
+                                                          : const Color(
+                                                              0xFF2765C5,
+                                                            ),
                                                     ),
-                                                  ],
+                                                  ),
                                                 ),
                                               ),
                                             ),
                                           ],
+                                        ),
+                                        const SizedBox(height: 14),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: LinearProgressIndicator(
+                                            value: trustScore / 100,
+                                            backgroundColor: const Color(
+                                              0xFFE9EEF6,
+                                            ),
+                                            color: trustScore >= 80
+                                                ? const Color(0xFF36A66A)
+                                                : trustScore >= 60
+                                                ? const Color(0xFFF0A33A)
+                                                : const Color(0xFF4380DF),
+                                            minHeight: 9,
+                                          ),
                                         ),
                                       ],
                                     ),

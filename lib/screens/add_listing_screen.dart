@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:appim/utils/local_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'listing_camera_screen.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart'
     as image_compress; // YENİ
 import 'package:firebase_auth/firebase_auth.dart';
@@ -20,10 +21,13 @@ import '../utils/translations.dart'; // YENİ: Çeviri için
 import 'pro_purchase_screen.dart';
 import '../utils/theme_colors.dart';
 import 'listing_success_screen.dart'; // YENİ: Başarı Ekranı
+import '../widgets/defect_marker_tools.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AddListingScreen extends StatefulWidget {
   const AddListingScreen({super.key});
@@ -38,6 +42,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
   final _priceController = TextEditingController();
   bool _offersEnabled = false;
   bool _tradeEnabled = false;
+  bool _cashOnDeliveryAvailable = false;
   int _offerValidityHours = 24;
   int _offerMinimumPercent = 70;
   final _offerMinimumAmountController = TextEditingController();
@@ -48,8 +53,17 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
   final List<Uint8List> _optimizedImages =
       []; // YENİ: Web uyumluluğu için File yerine Byte Listesi kullanıyoruz
+  List<DefectMarker> _defectMarkers = <DefectMarker>[];
   bool _isLoading = false;
   String _loadingText = "";
+  bool _showStep1Validation = false;
+  bool _showCategoryValidation = false;
+  bool _draftReady = false;
+  bool _isApplyingDraft = false;
+  bool _hasLocalDraft = false;
+  bool _draftSaveErrorShown = false;
+  Timer? _draftSaveTimer;
+  String? _draftOwnerUid;
   String? selectedCategoryId;
   String selectedCategoryName = "";
   String fullCategoryPath = "";
@@ -79,6 +93,8 @@ class _AddListingScreenState extends State<AddListingScreen> {
   _userLimitSubscription;
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _listingRightSettingsSubscription;
   List<String> _listingRightProductIds = <String>[
     'ilan_hakkii_5',
     'ilan_hakkii_10',
@@ -98,76 +114,503 @@ class _AddListingScreenState extends State<AddListingScreen> {
   bool _isStoreReady = false;
   bool _isBuyingListingRight = false;
   bool _isRewardLoading = false;
+  bool _rewardedAdSettingsLoaded = false;
+  bool _rewardedAdsEnabled = true;
   final Set<String> _processedPurchaseIds = <String>{};
   String _rewardedAndroidAdUnitId = 'ca-app-pub-3940256099942544/5224354917';
   String _rewardedIosAdUnitId = 'ca-app-pub-3940256099942544/1712485313';
   int _rewardDailyMax = 3;
-  int _rewardCooldownMinutes = 10;
+  int _rewardCooldownMinutes = 1;
 
   @override
   void initState() {
     super.initState();
+    _draftOwnerUid = FirebaseAuth.instance.currentUser?.uid;
+    _titleController.addListener(_scheduleDraftSave);
+    _descriptionController.addListener(_scheduleDraftSave);
+    _priceController.addListener(_scheduleDraftSave);
+    _offerMinimumAmountController.addListener(_scheduleDraftSave);
+    _neighborhoodController.addListener(_scheduleDraftSave);
     _checkUserLimit();
     _listenForListingRightChanges();
     _bootstrapListingRightMonetization();
+    _loadListingDraft();
+  }
+
+  String _listingDraftKey(String uid) => 'listing_draft_$uid';
+
+  void _scheduleDraftSave() {
+    if (!_draftReady || _isApplyingDraft) return;
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(
+      const Duration(milliseconds: 300),
+      _persistListingDraft,
+    );
+  }
+
+  Map<String, dynamic> _listingDraftData() {
+    return {
+      'title': _titleController.text,
+      'description': _descriptionController.text,
+      'price': _priceController.text,
+      'city': _selectedCity,
+      'district': _selectedDistrict,
+      'neighborhood': _neighborhoodController.text,
+      'selectedNeighborhood': _selectedNeighborhood,
+      'categoryId': selectedCategoryId,
+      'categoryName': selectedCategoryName,
+      'categoryPath': fullCategoryPath,
+      'categoryDisplayPath': fullCategoryDisplayPath,
+      'autoAttributes': _autoAttributes,
+      'featureTextValues': {
+        for (final entry in _featureTextControllers.entries)
+          entry.key: entry.value.text,
+      },
+      'featureDropdownValues': _featureDropdownValues,
+      'offersEnabled': _offersEnabled,
+      'tradeEnabled': _tradeEnabled,
+      'cashOnDeliveryAvailable': _cashOnDeliveryAvailable,
+      'offerValidityHours': _offerValidityHours,
+      'offerMinimumPercent': _offerMinimumPercent,
+      'offerMinimumAmount': _offerMinimumAmountController.text,
+      'currentStep': _currentStep,
+    };
+  }
+
+  bool _hasDraftContent(Map<String, dynamic> data) {
+    return [
+      data['title'],
+      data['description'],
+      data['price'],
+      data['city'],
+      data['district'],
+      data['categoryId'],
+    ].any((value) => value is String && value.trim().isNotEmpty);
+  }
+
+  Future<void> _persistListingDraft() async {
+    if (!_draftReady || _isApplyingDraft) return;
+    final uid = _draftOwnerUid;
+    if (uid == null) return;
+
+    try {
+      final data = _listingDraftData();
+      final preferences = await SharedPreferences.getInstance();
+      if (_hasDraftContent(data)) {
+        await preferences.setString(_listingDraftKey(uid), jsonEncode(data));
+        if (mounted && !_hasLocalDraft) {
+          setState(() => _hasLocalDraft = true);
+        }
+      } else {
+        await preferences.remove(_listingDraftKey(uid));
+        if (mounted && _hasLocalDraft) {
+          setState(() => _hasLocalDraft = false);
+        }
+      }
+    } catch (error) {
+      debugPrint('İlan taslağı kaydedilemedi: $error');
+      if (mounted && !_draftSaveErrorShown) {
+        _draftSaveErrorShown = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('listing_draft_save_failed'))),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadListingDraft() async {
+    final uid = _draftOwnerUid;
+    if (uid == null) {
+      _draftReady = true;
+      return;
+    }
+
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final storedDraft = preferences.getString(_listingDraftKey(uid));
+      if (storedDraft == null) {
+        _draftReady = true;
+        return;
+      }
+
+      final decoded = jsonDecode(storedDraft);
+      if (decoded is! Map) {
+        throw const FormatException('Invalid listing draft');
+      }
+      final draft = Map<String, dynamic>.from(decoded);
+      if (!mounted) return;
+      setState(() => _hasLocalDraft = true);
+
+      final action = await showDialog<int>(
+        context: context,
+        builder: (dialogContext) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 22),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppColors.primary, Color(0xFF3268E8)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.edit_note_rounded,
+                          color: Colors.white,
+                          size: 36,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        tr('listing_draft_available'),
+                        textAlign: TextAlign.center,
+                        style: LocalFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        tr('listing_draft_restore_prompt'),
+                        textAlign: TextAlign.center,
+                        style: LocalFonts.poppins(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.info_outline_rounded,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                tr('listing_draft_local_notice'),
+                                style: LocalFonts.poppins(
+                                  color: Colors.black87,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.pop(dialogContext, 1),
+                          icon: const Icon(Icons.restore_rounded),
+                          label: Text(tr('restore_draft')),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            textStyle: LocalFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(dialogContext, 0),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.black54,
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(tr('not_now')),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextButton.icon(
+                              onPressed: () => Navigator.pop(dialogContext, 2),
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 18,
+                              ),
+                              label: Text(tr('delete_draft')),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red.shade700,
+                                minimumSize: const Size.fromHeight(44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      if (action == 1) {
+        await _applyListingDraft(draft);
+      } else if (action == 2) {
+        await preferences.remove(_listingDraftKey(uid));
+        if (mounted) setState(() => _hasLocalDraft = false);
+      }
+    } on FormatException catch (error) {
+      debugPrint('İlan taslağı okunamadı: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('listing_draft_load_failed'))),
+        );
+      }
+    } catch (error) {
+      debugPrint('İlan taslağı yüklenemedi: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('listing_draft_load_failed'))),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _draftReady = true);
+      } else {
+        _draftReady = true;
+      }
+    }
+  }
+
+  Future<void> _applyListingDraft(Map<String, dynamic> draft) async {
+    _isApplyingDraft = true;
+    try {
+      String draftString(String key) =>
+          draft[key] is String ? draft[key] as String : '';
+
+      _titleController.text = draftString('title');
+      _descriptionController.text = draftString('description');
+      _priceController.text = draftString('price');
+      _neighborhoodController.text = draftString('neighborhood');
+      _offerMinimumAmountController.text = draftString('offerMinimumAmount');
+
+      final city = draftString('city');
+      final district = draftString('district');
+      _selectedCity = turkeyLocations.containsKey(city) ? city : null;
+      final districts = _selectedCity == null
+          ? null
+          : turkeyLocations[_selectedCity!];
+      _selectedDistrict = districts != null && districts.contains(district)
+          ? district
+          : null;
+      _selectedNeighborhood = draft['selectedNeighborhood'] is String
+          ? draft['selectedNeighborhood'] as String
+          : null;
+
+      selectedCategoryId = draft['categoryId'] is String
+          ? draft['categoryId'] as String
+          : null;
+      selectedCategoryName = draftString('categoryName');
+      fullCategoryPath = draftString('categoryPath');
+      fullCategoryDisplayPath = draftString('categoryDisplayPath');
+      _autoAttributes = draft['autoAttributes'] is Map
+          ? Map<String, String>.from(draft['autoAttributes'] as Map)
+          : {};
+      _offersEnabled = draft['offersEnabled'] == true;
+      _tradeEnabled = draft['tradeEnabled'] == true;
+      _cashOnDeliveryAvailable = draft['cashOnDeliveryAvailable'] == true;
+      _offerValidityHours = draft['offerValidityHours'] == 48 ? 48 : 24;
+      _offerMinimumPercent = [70, 80, 90].contains(draft['offerMinimumPercent'])
+          ? draft['offerMinimumPercent'] as int
+          : 70;
+      _currentStep = draft['currentStep'] == 2 ? 2 : 1;
+
+      final categoryId = selectedCategoryId;
+      if (categoryId != null && categoryId.isNotEmpty) {
+        await _fetchCategoryFeatures(categoryId);
+        final rawTextValues = draft['featureTextValues'];
+        if (rawTextValues is Map) {
+          for (final entry in rawTextValues.entries) {
+            final controller = _featureTextControllers[entry.key.toString()];
+            if (controller != null && entry.value is String) {
+              controller.text = entry.value as String;
+            }
+          }
+        }
+        final rawDropdownValues = draft['featureDropdownValues'];
+        if (rawDropdownValues is Map) {
+          for (final entry in rawDropdownValues.entries) {
+            final key = entry.key.toString();
+            final value = entry.value;
+            if (_featureDropdownValues.containsKey(key) && value is String) {
+              for (final feature in _categoryFeatures) {
+                if (feature['name'] == key &&
+                    (feature['options'] as List).contains(value)) {
+                  _featureDropdownValues[key] = value;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+      if (mounted) setState(() {});
+    } finally {
+      _isApplyingDraft = false;
+    }
+  }
+
+  Future<void> _deleteListingDraft() async {
+    final uid = _draftOwnerUid;
+    if (uid == null) return;
+    _draftSaveTimer?.cancel();
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.remove(_listingDraftKey(uid));
+      if (mounted) setState(() => _hasLocalDraft = false);
+    } catch (error) {
+      debugPrint('İlan taslağı silinemedi: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('listing_draft_delete_failed'))),
+        );
+      }
+    }
   }
 
   Future<void> _bootstrapListingRightMonetization() async {
-    await _loadListingRightSettings();
+    final settingsRef = FirebaseFirestore.instance
+        .collection('settings')
+        .doc('listing_rights');
+    try {
+      final settings = await settingsRef.get();
+      _applyListingRightSettings(settings);
+    } catch (error) {
+      debugPrint('İlan hakkı ayarları alınamadı: $error');
+      if (mounted) {
+        setState(() {
+          _rewardedAdsEnabled = false;
+          _rewardedAdSettingsLoaded = true;
+        });
+      }
+    }
+
+    _listingRightSettingsSubscription = settingsRef.snapshots().listen(
+      _applyListingRightSettings,
+      onError: (Object error) {
+        debugPrint('İlan hakkı ayarları dinlenemedi: $error');
+        if (!mounted) return;
+        setState(() {
+          _rewardedAdsEnabled = false;
+          _rewardedAdSettingsLoaded = true;
+        });
+      },
+    );
     await _initListingRightPurchaseFlow();
   }
 
-  Future<void> _loadListingRightSettings() async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('listing_rights')
-          .get();
-      if (!doc.exists) return;
+  void _applyListingRightSettings(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? <String, dynamic>{};
+    final configuredPackages = data['paidPackages'];
+    final rawPackages = configuredPackages is List
+        ? configuredPackages.whereType<Map>().toList()
+        : <Map>[];
 
-      final data = doc.data() as Map<String, dynamic>;
-      final rawPackages =
-          (data['paidPackages'] as List<dynamic>? ?? <dynamic>[])
-              .whereType<Map>()
-              .toList();
+    final grants = <String, int>{};
+    final titles = <String, String>{};
+    for (final raw in rawPackages) {
+      final productId = (raw['productId'] ?? '').toString().trim();
+      final grantValue = raw['grantCount'];
+      final grantCount = grantValue is num ? grantValue.toInt() : 0;
+      final title = (raw['title'] ?? '').toString().trim();
+      if (productId.isEmpty || grantCount <= 0) continue;
+      grants[productId] = grantCount;
+      titles[productId] = title.isNotEmpty
+          ? title
+          : '$grantCount ${tr('listing_rights_unit')}';
+    }
 
-      final grants = <String, int>{};
-      final titles = <String, String>{};
-      for (final raw in rawPackages) {
-        final productId = (raw['productId'] ?? '').toString().trim();
-        final grantCount = (raw['grantCount'] as num?)?.toInt() ?? 0;
-        final title = (raw['title'] ?? '').toString().trim();
-        if (productId.isEmpty || grantCount <= 0) continue;
-        grants[productId] = grantCount;
-        titles[productId] = title.isNotEmpty
-            ? title
-            : '$grantCount ${tr('listing_rights_unit')}';
+    if (!mounted) return;
+    setState(() {
+      if (grants.isNotEmpty) {
+        _listingRightPackageGrants = grants;
+        _listingRightPackageTitles = titles;
+        _listingRightProductIds = grants.keys.toList();
       }
 
-      if (mounted) {
-        setState(() {
-          if (grants.isNotEmpty) {
-            _listingRightPackageGrants = grants;
-            _listingRightPackageTitles = titles;
-            _listingRightProductIds = grants.keys.toList();
-          }
-
-          _rewardedAndroidAdUnitId =
-              (data['rewardedAndroidAdUnitId'] ?? _rewardedAndroidAdUnitId)
-                  .toString()
-                  .trim();
-          _rewardedIosAdUnitId =
-              (data['rewardedIosAdUnitId'] ?? _rewardedIosAdUnitId)
-                  .toString()
-                  .trim();
-          _rewardDailyMax =
-              ((data['rewardDailyMax'] as num?)?.toInt() ?? _rewardDailyMax);
-          _rewardCooldownMinutes =
-              ((data['rewardCooldownMinutes'] as num?)?.toInt() ??
-              _rewardCooldownMinutes);
-        });
-      }
-    } catch (_) {}
+      _rewardedAndroidAdUnitId =
+          (data['rewardedAndroidAdUnitId'] ?? _rewardedAndroidAdUnitId)
+              .toString()
+              .trim();
+      _rewardedIosAdUnitId =
+          (data['rewardedIosAdUnitId'] ?? _rewardedIosAdUnitId)
+              .toString()
+              .trim();
+      final dailyMax = data['rewardDailyMax'];
+      _rewardDailyMax = dailyMax is num
+          ? dailyMax.toInt()
+          : int.tryParse(dailyMax?.toString() ?? '') ?? _rewardDailyMax;
+      final cooldown = data['rewardCooldownMinutes'];
+      final cooldownMinutes = cooldown is num
+          ? cooldown.toInt()
+          : int.tryParse(cooldown?.toString() ?? '');
+      _rewardCooldownMinutes = cooldownMinutes != null && cooldownMinutes >= 1
+          ? cooldownMinutes
+          : 1;
+      _rewardedAdsEnabled = data['rewardedAdsEnabled'] != false;
+      _rewardedAdSettingsLoaded = true;
+    });
   }
 
   Future<void> _initListingRightPurchaseFlow() async {
@@ -321,8 +764,20 @@ class _AddListingScreenState extends State<AddListingScreen> {
     return '';
   }
 
+  Future<void> _cancelRewardChallenge(String? challengeId) async {
+    if (challengeId == null || challengeId.isEmpty) return;
+    try {
+      await FirebaseFunctions.instanceFor(region: 'europe-west1')
+          .httpsCallable('cancelListingRewardChallenge')
+          .call({'challengeId': challengeId});
+    } catch (error) {
+      debugPrint('Tamamlanmayan reklam oturumu iptal edilemedi: $error');
+    }
+  }
+
   Future<void> _watchRewardedAdForListingRight() async {
     if (_isRewardLoading) return;
+    if (!_rewardedAdsEnabled) return;
     setState(() => _isRewardLoading = true);
 
     final adUnitId = _resolveRewardedAdUnitId();
@@ -336,103 +791,148 @@ class _AddListingScreenState extends State<AddListingScreen> {
       return;
     }
 
-    RewardedAd.load(
-      adUnitId: adUnitId,
-      request: const AdRequest(),
-      rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (ad) {
-          var hasEarnedReward = false;
-          ad.fullScreenContentCallback = FullScreenContentCallback(
-            onAdDismissedFullScreenContent: (ad) {
-              ad.dispose();
-              if (mounted) {
-                setState(() => _isRewardLoading = false);
-                if (!hasEarnedReward) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        setState(() => _isRewardLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('login_required_create_listing'))),
+        );
+      }
+      return;
+    }
+
+    String? activeChallengeId;
+    try {
+      await FirebaseAppCheck.instance.getToken(true);
+      final challenge =
+          await FirebaseFunctions.instanceFor(region: 'europe-west1')
+              .httpsCallable('startListingRewardChallenge')
+              .call({'adUnitId': adUnitId});
+      final challengeData = challenge.data;
+      final customData = challengeData is Map
+          ? (challengeData['customData'] ?? challengeData['challengeId'])
+                ?.toString()
+                .trim()
+          : null;
+      if (customData == null || customData.isEmpty) {
+        throw StateError('reward_verification_session_missing');
+      }
+      activeChallengeId = customData;
+
+      RewardedAd.load(
+        adUnitId: adUnitId,
+        request: const AdRequest(),
+        rewardedAdLoadCallback: RewardedAdLoadCallback(
+          onAdLoaded: (ad) async {
+            var hasEarnedReward = false;
+            ad.fullScreenContentCallback = FullScreenContentCallback(
+              onAdDismissedFullScreenContent: (ad) {
+                ad.dispose();
+                if (mounted) {
+                  setState(() => _isRewardLoading = false);
+                  if (!hasEarnedReward) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(tr('watch_ad_until_end_for_reward')),
+                      ),
+                    );
+                  }
+                }
+              },
+              onAdFailedToShowFullScreenContent: (ad, error) {
+                ad.dispose();
+                if (mounted) {
+                  setState(() => _isRewardLoading = false);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(tr('watch_ad_until_end_for_reward')),
+                      content: Text(
+                        '${tr('ad_open_failed_prefix')}: ${error.message}',
+                      ),
                     ),
                   );
                 }
-              }
-            },
-            onAdFailedToShowFullScreenContent: (ad, error) {
+              },
+            );
+
+            try {
+              await ad.setServerSideOptions(
+                ServerSideVerificationOptions(
+                  userId: user.uid,
+                  customData: customData,
+                ),
+              );
+              await ad.show(
+                onUserEarnedReward: (ad, reward) {
+                  hasEarnedReward = true;
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          tr('rewarded_ad_server_verification_pending'),
+                          style: LocalFonts.poppins(),
+                        ),
+                      ),
+                    );
+                  }
+                },
+              );
+            } catch (error) {
               ad.dispose();
               if (mounted) {
                 setState(() => _isRewardLoading = false);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(
-                      '${tr('ad_open_failed_prefix')}: ${error.message}',
-                    ),
+                    content: Text('${tr('ad_open_failed_prefix')}: $error'),
                   ),
                 );
               }
-            },
-          );
-
-          ad.show(
-            onUserEarnedReward: (ad, reward) async {
-              hasEarnedReward = true;
-              try {
-                final callable = FirebaseFunctions.instanceFor(
-                  region: 'europe-west1',
-                ).httpsCallable('grantListingRights');
-                await callable.call({'mode': 'rewarded_1'});
-                await _checkUserLimit();
-
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        tr('rewarded_ad_success_plus_one_right'),
-                        style: LocalFonts.poppins(),
-                      ),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } on FirebaseFunctionsException catch (e) {
-                final message = e.message ?? tr('unknown_server_error');
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        '${tr('rewarded_ad_assign_failed_prefix')} (${e.code}): $message',
-                      ),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        '${tr('rewarded_ad_assign_failed_prefix')}: $e',
-                      ),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-          );
-        },
-        onAdFailedToLoad: (error) {
-          if (mounted) {
-            setState(() => _isRewardLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '${tr('ad_load_failed_prefix')}: ${error.message}',
+            }
+          },
+          onAdFailedToLoad: (error) {
+            unawaited(_cancelRewardChallenge(activeChallengeId));
+            if (mounted) {
+              setState(() => _isRewardLoading = false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '${tr('ad_load_failed_prefix')}: ${error.message}',
+                  ),
                 ),
-              ),
-            );
-          }
-        },
-      ),
-    );
+              );
+            }
+          },
+        ),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      await _cancelRewardChallenge(activeChallengeId);
+      if (mounted) {
+        setState(() => _isRewardLoading = false);
+        final serverMessage = e.message ?? '';
+        final message = e.code == 'resource-exhausted'
+            ? serverMessage.toLowerCase().contains('gunluk')
+                  ? tr(
+                      'rewarded_ad_daily_limit_reached',
+                    ).replaceFirst('%s', _rewardDailyMax.toString())
+                  : tr(
+                      'rewarded_ad_cooldown_wait',
+                    ).replaceFirst('%s', _rewardCooldownMinutes.toString())
+            : '${tr('rewarded_ad_assign_failed_prefix')} (${e.code}): ${serverMessage.isEmpty ? tr('unknown_server_error') : serverMessage}';
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } catch (error) {
+      await _cancelRewardChallenge(activeChallengeId);
+      if (mounted) {
+        setState(() => _isRewardLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${tr('rewarded_ad_assign_failed_prefix')}: $error'),
+          ),
+        );
+      }
+    }
   }
 
   void _listenForListingRightChanges() {
@@ -505,8 +1005,13 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
   @override
   void dispose() {
+    _draftSaveTimer?.cancel();
+    if (_draftReady && _draftOwnerUid != null) {
+      unawaited(_persistListingDraft());
+    }
     _userLimitSubscription?.cancel();
     _purchaseSubscription?.cancel();
+    _listingRightSettingsSubscription?.cancel();
     _titleController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
@@ -598,56 +1103,117 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
   // YENİ: TOPLU RESİM SEÇME VE OTOMATİK İŞLEME FONKSİYONU
   Future<void> _pickMultipleImages() async {
-    // KESİN ÇÖZÜM: Resimleri cihazın galerisinden çıkarırken İşletim Sisteminin (Native) gücüyle küçültüyoruz.
-    // Böylece uygulamanın RAM'ine ve GPU'suna asla 4K orijinal dosyalar girmiyor, çökme tamamen ortadan kalkıyor!
     final List<XFile> pickedFiles = await _picker.pickMultiImage(
       maxWidth: 1080,
       maxHeight: 1080,
       imageQuality: 85,
     );
+    await _processPickedImages(pickedFiles);
+  }
 
+  Future<void> _takeListingPhoto() async {
+    if (_optimizedImages.length >= 15) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('photo_limit_reached'))));
+      return;
+    }
+    final photo = await Navigator.push<XFile>(
+      context,
+      MaterialPageRoute(builder: (_) => const ListingCameraScreen()),
+    );
+    if (photo != null && mounted) {
+      await _processPickedImages([photo]);
+    }
+  }
+
+  Future<void> _showPhotoSourceOptions() async {
+    if (_isLoading) return;
+    final source = await showModalBottomSheet<_ListingPhotoSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: Text(tr('take_photo')),
+              onTap: () =>
+                  Navigator.pop(sheetContext, _ListingPhotoSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(tr('choose_from_gallery')),
+              onTap: () =>
+                  Navigator.pop(sheetContext, _ListingPhotoSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (source == _ListingPhotoSource.camera) {
+      await _takeListingPhoto();
+    } else if (source == _ListingPhotoSource.gallery) {
+      await _pickMultipleImages();
+    }
+  }
+
+  Future<void> _processPickedImages(List<XFile> pickedFiles) async {
     if (pickedFiles.isNotEmpty) {
       setState(() {
         _isLoading = true;
         _loadingText = tr('processing_photos_wait');
       });
 
-      // Maksimum 15 sınırını seçilen dosya sayısıyla kıyaslayalım
-      int loopCount = pickedFiles.length > 15 ? 15 : pickedFiles.length;
+      final loopCount = pickedFiles.length > 15 ? 15 : pickedFiles.length;
+      try {
+        for (int i = 0; i < loopCount; i++) {
+          if (_optimizedImages.length >= 15) break;
 
-      for (int i = 0; i < loopCount; i++) {
-        if (_optimizedImages.length >= 15) break; // Maksimum 15 fotoğraf sınırı
+          setState(() {
+            _loadingText = "${tr('processing_photos')} (${i + 1}/$loopCount)";
+          });
+          await Future.delayed(const Duration(milliseconds: 300));
 
-        // İlerleme durumunu kullanıcıya gösterelim (Örn: Fotoğraflar işleniyor... 1/5)
-        setState(() {
-          _loadingText = "${tr('processing_photos')} (${i + 1}/$loopCount)";
-        });
-
-        // Cihazın render kuyruğunu tam olarak boşaltması için çok kısa bir bekleme
-        await Future.delayed(const Duration(milliseconds: 300));
-
-        Uint8List originalBytes = await pickedFiles[i].readAsBytes();
-        Uint8List watermarkedBytes = await _addWatermark(
-          originalBytes,
-        ); // Arka planda filigranı ekle
-        Uint8List? compressedBytes = await _compressImage(
-          watermarkedBytes,
-        ); // Boyutunu küçült ve sıkıştır
-
-        if (compressedBytes != null) {
-          _optimizedImages.add(compressedBytes);
-        } else {
-          _optimizedImages.add(
-            watermarkedBytes,
-          ); // Sıkıştırma hatası olursa fall-back
+          final originalBytes = await pickedFiles[i].readAsBytes();
+          final watermarkedBytes = await _addWatermark(originalBytes);
+          final compressedBytes = await _compressImage(watermarkedBytes);
+          _optimizedImages.add(compressedBytes ?? watermarkedBytes);
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _loadingText = "";
+          });
         }
       }
-
-      setState(() {
-        _isLoading = false;
-        _loadingText = "";
-      });
+      if (mounted) setState(() {});
     }
+  }
+
+  Future<void> _editDefectMarkers() async {
+    final markers = await Navigator.push<List<DefectMarker>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DefectMarkerEditorScreen(
+          images: _optimizedImages.map<ImageProvider>(MemoryImage.new).toList(),
+          initialMarkers: _defectMarkers,
+        ),
+      ),
+    );
+    if (markers != null && mounted) {
+      setState(() => _defectMarkers = markers);
+    }
+  }
+
+  void _removePhotoAt(int index) {
+    setState(() {
+      _optimizedImages.removeAt(index);
+      _defectMarkers = removeDefectMarkerImage(_defectMarkers, index);
+    });
   }
 
   Future<void> _fetchCategoryFeatures(String categoryId) async {
@@ -666,12 +1232,14 @@ class _AddListingScreenState extends State<AddListingScreen> {
           if (f is String) {
             _categoryFeatures.add({'name': f, 'options': []});
             _featureTextControllers[f] = TextEditingController();
+            _featureTextControllers[f]!.addListener(_scheduleDraftSave);
           } else if (f is Map) {
             String name = f['name'];
             List<String> options = List<String>.from(f['options'] ?? []);
             _categoryFeatures.add({'name': name, 'options': options});
             if (options.isEmpty) {
               _featureTextControllers[name] = TextEditingController();
+              _featureTextControllers[name]!.addListener(_scheduleDraftSave);
             } else {
               _featureDropdownValues[name] = null;
             }
@@ -681,13 +1249,14 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
   }
 
-  void _showCategoryPicker(
+  Future<void> _showCategoryPicker(
     String parentId,
     String currentPath, [
     String currentDisplayPath = "",
     Map<String, String>? currentAttributes,
-  ]) {
-    showModalBottomSheet(
+  ]) async {
+    var emptyCategorySubmitted = false;
+    final action = await showModalBottomSheet<_CategoryPickerAction>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -696,8 +1265,20 @@ class _AddListingScreenState extends State<AddListingScreen> {
         return StreamBuilder<QuerySnapshot>(
           stream: _dbService.getCategoriesStream(parentId),
           builder: (context, snapshot) {
-            if (!snapshot.hasData)
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    tr('categories_load_failed'),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+            if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
+            }
             var docs = snapshot.data!.docs.toList();
 
             docs.sort((a, b) {
@@ -713,17 +1294,21 @@ class _AddListingScreenState extends State<AddListingScreen> {
             });
 
             if (docs.isEmpty) {
-              Future.delayed(Duration.zero, () {
-                setState(() {
-                  selectedCategoryId = parentId;
-                  selectedCategoryName = currentPath.split(' > ').last;
-                  fullCategoryPath = currentPath;
-                  fullCategoryDisplayPath = currentDisplayPath;
-                  _autoAttributes = currentAttributes ?? {}; // YENİ
+              if (!emptyCategorySubmitted) {
+                emptyCategorySubmitted = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!context.mounted) return;
+                  Navigator.pop(
+                    context,
+                    _CategoryPickerAction.selectCategory(
+                      categoryId: parentId,
+                      path: currentPath,
+                      displayPath: currentDisplayPath,
+                      attributes: currentAttributes ?? {},
+                    ),
+                  );
                 });
-                _fetchCategoryFeatures(parentId);
-                Navigator.pop(context);
-              });
+              }
               return Center(
                 child: Text(tr('approving'), style: LocalFonts.poppins()),
               );
@@ -760,12 +1345,14 @@ class _AddListingScreenState extends State<AddListingScreen> {
                             if (displayParts.isNotEmpty) {
                               displayParts.removeLast();
                             }
-                            Navigator.pop(context);
-                            _showCategoryPicker(
-                              grandParentId,
-                              pathParts.join(' > '),
-                              displayParts.join(' > '),
-                              currentAttributes,
+                            Navigator.pop(
+                              context,
+                              _CategoryPickerAction.openCategory(
+                                parentId: grandParentId,
+                                path: pathParts.join(' > '),
+                                displayPath: displayParts.join(' > '),
+                                attributes: currentAttributes ?? {},
+                              ),
                             );
                           },
                         ),
@@ -841,24 +1428,22 @@ class _AddListingScreenState extends State<AddListingScreen> {
                           if (subCats.docs.isEmpty) {
                             Navigator.pop(
                               context,
-                            ); // Alt kategori kalmadıysa pencereyi tamamen kapat
-                            setState(() {
-                              selectedCategoryId = clickedId;
-                              selectedCategoryName = newPath.split(' > ').last;
-                              fullCategoryPath = newPath;
-                              fullCategoryDisplayPath = newDisplayPath;
-                              _autoAttributes = newAttributes;
-                            });
-                            _fetchCategoryFeatures(clickedId);
+                              _CategoryPickerAction.selectCategory(
+                                categoryId: clickedId,
+                                path: newPath,
+                                displayPath: newDisplayPath,
+                                attributes: newAttributes,
+                              ),
+                            );
                           } else {
                             Navigator.pop(
                               context,
-                            ); // Alt kategori varsa, bu pencereyi kapatıp hemen yeni pencereyi aç
-                            _showCategoryPicker(
-                              clickedId,
-                              newPath,
-                              newDisplayPath,
-                              newAttributes,
+                              _CategoryPickerAction.openCategory(
+                                parentId: clickedId,
+                                path: newPath,
+                                displayPath: newDisplayPath,
+                                attributes: newAttributes,
+                              ),
                             );
                           }
                         },
@@ -871,6 +1456,29 @@ class _AddListingScreenState extends State<AddListingScreen> {
           },
         );
       },
+    );
+    if (!mounted || action == null) return;
+
+    final categoryId = action.categoryId;
+    if (categoryId != null) {
+      setState(() {
+        selectedCategoryId = categoryId;
+        selectedCategoryName = action.path.split(' > ').last;
+        fullCategoryPath = action.path;
+        fullCategoryDisplayPath = action.displayPath;
+        _autoAttributes = action.attributes;
+        _showCategoryValidation = false;
+      });
+      _scheduleDraftSave();
+      _fetchCategoryFeatures(categoryId);
+      return;
+    }
+
+    await _showCategoryPicker(
+      action.parentId,
+      action.path,
+      action.displayPath,
+      action.attributes,
     );
   }
 
@@ -1005,16 +1613,20 @@ class _AddListingScreenState extends State<AddListingScreen> {
     if (_titleController.text.trim().isEmpty) {
       missingFields.add(tr('listing_title'));
     }
+    if (_titleController.text.trim().length > 120) {
+      missingFields.add(tr('listing_title'));
+    }
     if (_descriptionController.text.trim().isEmpty) {
       missingFields.add(tr('description'));
     }
-    if (_priceController.text.trim().isEmpty) {
+    final priceDigits = _priceController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (priceDigits.isEmpty || (int.tryParse(priceDigits) ?? 0) <= 0) {
       missingFields.add(tr('price_tl'));
     }
-    if (_selectedCity == null || _selectedCity!.trim().isEmpty) {
+    if (_selectedCity?.trim().isEmpty ?? true) {
       missingFields.add(tr('city'));
     }
-    if (_selectedDistrict == null || _selectedDistrict!.trim().isEmpty) {
+    if (_selectedDistrict?.trim().isEmpty ?? true) {
       missingFields.add(tr('district'));
     }
 
@@ -1022,6 +1634,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
   }
 
   void _nextStep() {
+    setState(() => _showStep1Validation = true);
     final missingFields = _getMissingRequiredFields();
     if (missingFields.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1068,6 +1681,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
       return;
     }
     setState(() => _currentStep = 2);
+    _scheduleDraftSave();
   }
 
   Future<Position?> _getUserLocation() async {
@@ -1148,6 +1762,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
         _selectedNeighborhood = neighborhood;
         _neighborhoodController.text = neighborhood ?? '';
       });
+      _scheduleDraftSave();
       await _loadNeighborhoods(city, district);
       if (!mounted) return;
       setState(() {
@@ -1172,13 +1787,160 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
   }
 
+  Future<_ListingPreviewAction?> _showListingPreview() {
+    final price =
+        double.tryParse(
+          _priceController.text.replaceAll(RegExp(r'[^0-9]'), ''),
+        ) ??
+        0;
+    final formattedPrice = NumberFormat.currency(
+      locale: 'tr_TR',
+      symbol: '₺',
+      decimalDigits: 0,
+    ).format(price);
+
+    return showDialog<_ListingPreviewAction>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('listing_preview_title')),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(
+                      _optimizedImages.first,
+                      width: 88,
+                      height: 88,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tr('listing_cover_photo'),
+                          style: LocalFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '${_optimizedImages.length} ${tr('listing_photos_count')}',
+                          style: LocalFonts.poppins(fontSize: 12),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(
+                            dialogContext,
+                            _ListingPreviewAction.editListingInfo,
+                          ),
+                          child: Text(tr('edit_listing_details')),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              Text(
+                _titleController.text.trim(),
+                style: LocalFonts.poppins(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                formattedPrice,
+                style: LocalFonts.poppins(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${_selectedCity ?? ''}, ${_selectedDistrict ?? ''}',
+                style: LocalFonts.poppins(fontSize: 12),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    _ListingPreviewAction.editListingInfo,
+                  ),
+                  child: Text(tr('edit_listing_details')),
+                ),
+              ),
+              const Divider(height: 16),
+              Text(
+                fullCategoryDisplayPath.isEmpty
+                    ? selectedCategoryName
+                    : fullCategoryDisplayPath,
+                style: LocalFonts.poppins(),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(
+                    dialogContext,
+                    _ListingPreviewAction.editCategory,
+                  ),
+                  child: Text(tr('edit_category')),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, _ListingPreviewAction.cancel),
+            child: Text(tr('cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, _ListingPreviewAction.publish),
+            child: Text(tr('confirm_publish')),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submitListing() async {
+    if (_getMissingRequiredFields().isNotEmpty) {
+      setState(() => _currentStep = 1);
+      _nextStep();
+      return;
+    }
+
     if (selectedCategoryId == null) {
+      setState(() {
+        _currentStep = 2;
+        _showCategoryValidation = true;
+      });
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(tr('please_select_category'))));
       return;
     }
+
+    final previewAction = await _showListingPreview();
+    if (!mounted) return;
+    if (previewAction == _ListingPreviewAction.editListingInfo) {
+      setState(() => _currentStep = 1);
+      _scheduleDraftSave();
+      return;
+    }
+    if (previewAction == _ListingPreviewAction.editCategory) {
+      setState(() => _currentStep = 2);
+      return;
+    }
+    if (previewAction != _ListingPreviewAction.publish) return;
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -1281,6 +2043,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
         String? mainImageUrl;
         List<String> additionalImages = [];
+        final uploadedImageIndices = <int, int>{};
         for (int i = 0; i < _optimizedImages.length; i++) {
           String fileName =
               "${user.uid}_${DateTime.now().millisecondsSinceEpoch}_$i";
@@ -1291,7 +2054,9 @@ class _AddListingScreenState extends State<AddListingScreen> {
           if (url != null) {
             if (i == 0) {
               mainImageUrl = url;
+              uploadedImageIndices[i] = 0;
             } else {
+              uploadedImageIndices[i] = additionalImages.length + 1;
               additionalImages.add(url);
             }
           }
@@ -1317,13 +2082,31 @@ class _AddListingScreenState extends State<AddListingScreen> {
               isOfferEnabled: _offersEnabled,
               offerValidityHours: _offerValidityHours,
               offerMinimumPercent: _offerMinimumPercent,
+              defectMarkers: _defectMarkers
+                  .where(
+                    (marker) =>
+                        uploadedImageIndices.containsKey(marker.imageIndex),
+                  )
+                  .map(
+                    (marker) => marker
+                        .copyWith(
+                          imageIndex: uploadedImageIndices[marker.imageIndex],
+                        )
+                        .toMap(),
+                  )
+                  .toList(),
               offerMinimumAmount: double.tryParse(
                 _offerMinimumAmountController.text.trim().replaceAll(',', '.'),
               ),
               autoRenew: false,
               tradeEnabled: _tradeEnabled,
+              cashOnDeliveryAvailable: _cashOnDeliveryAvailable,
             );
             if (success && mounted) {
+              _draftReady = false;
+              _draftSaveTimer?.cancel();
+              await _deleteListingDraft();
+              if (!mounted) return;
               // YENİ: Kullanıcıyı animasyonlu başarı ekranına yönlendir
               Navigator.pushReplacement(
                 context,
@@ -1597,7 +2380,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_checkingLimit) {
+    if (_checkingLimit || !_draftReady) {
       return Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
@@ -1781,31 +2564,37 @@ class _AddListingScreenState extends State<AddListingScreen> {
                           ),
                         ),
                       ),
-                    TextButton.icon(
-                      onPressed: _isRewardLoading
-                          ? null
-                          : _watchRewardedAdForListingRight,
-                      icon: _isRewardLoading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.ondemand_video_rounded),
-                      label: Text(
-                        tr('watch_ad_get_plus_one_right'),
-                        style: LocalFonts.poppins(fontWeight: FontWeight.w600),
+                    if (_rewardedAdSettingsLoaded && _rewardedAdsEnabled) ...[
+                      TextButton.icon(
+                        onPressed: _isRewardLoading
+                            ? null
+                            : _watchRewardedAdForListingRight,
+                        icon: _isRewardLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.ondemand_video_rounded),
+                        label: Text(
+                          tr('watch_ad_get_plus_one_right'),
+                          style: LocalFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${tr('rewarded_ad_daily_limit_prefix')}$_rewardDailyMax ${tr('rewarded_ad_daily_limit_middle')}$_rewardCooldownMinutes ${tr('rewarded_ad_daily_limit_suffix')}',
-                      textAlign: TextAlign.center,
-                      style: LocalFonts.poppins(
-                        fontSize: 12,
-                        color: Colors.grey[600],
+                      const SizedBox(height: 6),
+                      Text(
+                        '${tr('rewarded_ad_daily_limit_prefix')}$_rewardDailyMax ${tr('rewarded_ad_daily_limit_middle')}$_rewardCooldownMinutes ${tr('rewarded_ad_daily_limit_suffix')}',
+                        textAlign: TextAlign.center,
+                        style: LocalFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -1825,7 +2614,10 @@ class _AddListingScreenState extends State<AddListingScreen> {
         leading: _currentStep == 2
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => setState(() => _currentStep = 1),
+                onPressed: () {
+                  setState(() => _currentStep = 1);
+                  _scheduleDraftSave();
+                },
               )
             : null,
       ),
@@ -1849,8 +2641,42 @@ class _AddListingScreenState extends State<AddListingScreen> {
               )
             : SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                child: _currentStep == 1 ? _buildStep1() : _buildStep2(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildDraftNotice(),
+                    _currentStep == 1 ? _buildStep1() : _buildStep2(),
+                  ],
+                ),
               ),
+      ),
+    );
+  }
+
+  Widget _buildDraftNotice() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.save_outlined, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              tr(
+                _hasLocalDraft
+                    ? 'listing_draft_saved_notice'
+                    : 'listing_draft_local_notice',
+              ),
+              style: LocalFonts.poppins(fontSize: 12),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1860,7 +2686,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         GestureDetector(
-          onTap: _pickMultipleImages, // GÜNCELLENDİ: Artık toplu seçim yapıyor
+          onTap: _showPhotoSourceOptions,
           child: Container(
             height: 150,
             decoration: BoxDecoration(
@@ -1878,13 +2704,30 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  tr('bulk_photo_select'),
+                  tr('add_listing_photos'),
                   style: LocalFonts.poppins(color: AppColors.primary),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  tr('listing_photo_guidance'),
+                  textAlign: TextAlign.center,
+                  style: LocalFonts.poppins(
+                    color: Colors.grey[700],
+                    fontSize: 11,
+                  ),
                 ),
               ],
             ),
           ),
         ),
+        if (_showStep1Validation && _optimizedImages.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              tr('listing_photo_required'),
+              style: LocalFonts.poppins(color: Colors.red, fontSize: 12),
+            ),
+          ),
         const SizedBox(height: 12),
         if (_optimizedImages.isNotEmpty)
           SizedBox(
@@ -1897,6 +2740,11 @@ class _AddListingScreenState extends State<AddListingScreen> {
                   if (oldIndex < newIndex) {
                     newIndex -= 1;
                   }
+                  _defectMarkers = reorderDefectMarkerImage(
+                    _defectMarkers,
+                    oldIndex,
+                    newIndex,
+                  );
                   final Uint8List item = _optimizedImages.removeAt(oldIndex);
                   _optimizedImages.insert(newIndex, item);
                 });
@@ -1948,8 +2796,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
                     Align(
                       alignment: Alignment.topRight,
                       child: GestureDetector(
-                        onTap: () =>
-                            setState(() => _optimizedImages.removeAt(index)),
+                        onTap: () => _removePhotoAt(index),
                         child: Container(
                           margin: const EdgeInsets.all(4),
                           decoration: const BoxDecoration(
@@ -1969,12 +2816,28 @@ class _AddListingScreenState extends State<AddListingScreen> {
               ),
             ),
           ),
+        if (_optimizedImages.isNotEmpty)
+          OutlinedButton.icon(
+            onPressed: _editDefectMarkers,
+            icon: const Icon(Icons.warning_amber_rounded),
+            label: Text(
+              '${tr('mark_photo_defects')} (${_defectMarkers.length})',
+            ),
+          ),
         const SizedBox(height: 16),
         TextField(
           controller: _titleController,
           onChanged: (_) => setState(() {}),
+          maxLength: 120,
           decoration: InputDecoration(
             labelText: tr('listing_title'),
+            helperText: tr('listing_title_character_limit'),
+            errorText:
+                _showStep1Validation && _titleController.text.trim().isEmpty
+                ? tr('field_required')
+                : _titleController.text.trim().length > 120
+                ? tr('listing_title_too_long')
+                : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
@@ -1989,6 +2852,20 @@ class _AddListingScreenState extends State<AddListingScreen> {
           ],
           decoration: InputDecoration(
             labelText: tr('price_tl'),
+            errorText:
+                _showStep1Validation && _priceController.text.trim().isEmpty
+                ? tr('field_required')
+                : _priceController.text.trim().isNotEmpty &&
+                      (int.tryParse(
+                                _priceController.text.replaceAll(
+                                  RegExp(r'[^0-9]'),
+                                  '',
+                                ),
+                              ) ??
+                              0) <=
+                          0
+                ? tr('price_must_be_positive')
+                : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
@@ -2004,7 +2881,10 @@ class _AddListingScreenState extends State<AddListingScreen> {
                   title: Text(tr('offer_settings')),
                   subtitle: Text(tr('offer_settings_desc')),
                   value: _offersEnabled,
-                  onChanged: (value) => setState(() => _offersEnabled = value),
+                  onChanged: (value) {
+                    setState(() => _offersEnabled = value);
+                    _scheduleDraftSave();
+                  },
                 ),
                 if (_offersEnabled) ...[
                   DropdownButtonFormField<int>(
@@ -2016,8 +2896,10 @@ class _AddListingScreenState extends State<AddListingScreen> {
                       DropdownMenuItem(value: 24, child: Text('24 saat')),
                       DropdownMenuItem(value: 48, child: Text('48 saat')),
                     ],
-                    onChanged: (value) =>
-                        setState(() => _offerValidityHours = value ?? 24),
+                    onChanged: (value) {
+                      setState(() => _offerValidityHours = value ?? 24);
+                      _scheduleDraftSave();
+                    },
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<int>(
@@ -2030,8 +2912,10 @@ class _AddListingScreenState extends State<AddListingScreen> {
                       DropdownMenuItem(value: 80, child: Text('%80')),
                       DropdownMenuItem(value: 90, child: Text('%90')),
                     ],
-                    onChanged: (value) =>
-                        setState(() => _offerMinimumPercent = value ?? 70),
+                    onChanged: (value) {
+                      setState(() => _offerMinimumPercent = value ?? 70);
+                      _scheduleDraftSave();
+                    },
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -2053,7 +2937,21 @@ class _AddListingScreenState extends State<AddListingScreen> {
             title: Text(tr('trade_settings')),
             subtitle: Text(tr('trade_settings_desc')),
             value: _tradeEnabled,
-            onChanged: (value) => setState(() => _tradeEnabled = value),
+            onChanged: (value) {
+              setState(() => _tradeEnabled = value);
+              _scheduleDraftSave();
+            },
+          ),
+        ),
+        Card(
+          child: SwitchListTile(
+            title: Text(tr('cash_on_delivery_option')),
+            subtitle: Text(tr('cash_on_delivery_option_desc')),
+            value: _cashOnDeliveryAvailable,
+            onChanged: (value) {
+              setState(() => _cashOnDeliveryAvailable = value);
+              _scheduleDraftSave();
+            },
           ),
         ),
         SizedBox(
@@ -2083,6 +2981,11 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 isExpanded: true,
                 decoration: InputDecoration(
                   labelText: tr('city'),
+                  errorText:
+                      _showStep1Validation &&
+                          (_selectedCity?.trim().isEmpty ?? true)
+                      ? tr('field_required')
+                      : null,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -2109,6 +3012,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
                     _currentNeighborhoods =
                         []; // YENİ: Şehir değişince mahalleleri sıfırla
                   });
+                  _scheduleDraftSave();
                 },
               ),
             ),
@@ -2118,6 +3022,11 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 isExpanded: true,
                 decoration: InputDecoration(
                   labelText: tr('district'),
+                  errorText:
+                      _showStep1Validation &&
+                          (_selectedDistrict?.trim().isEmpty ?? true)
+                      ? tr('field_required')
+                      : null,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -2143,6 +3052,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
                     _selectedNeighborhood = null;
                     _neighborhoodController.clear();
                   });
+                  _scheduleDraftSave();
                   if (val != null && _selectedCity != null) {
                     _loadNeighborhoods(
                       _selectedCity!,
@@ -2188,6 +3098,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 _selectedNeighborhood = val;
                 _neighborhoodController.text = val ?? '';
               });
+              _scheduleDraftSave();
             },
           )
         else
@@ -2208,6 +3119,13 @@ class _AddListingScreenState extends State<AddListingScreen> {
           maxLines: 5,
           decoration: InputDecoration(
             labelText: tr('description'),
+            helperText: tr('description_character_count'),
+            counterText: '${_descriptionController.text.length}',
+            errorText:
+                _showStep1Validation &&
+                    _descriptionController.text.trim().isEmpty
+                ? tr('field_required')
+                : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
@@ -2250,6 +3168,12 @@ class _AddListingScreenState extends State<AddListingScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
+          subtitle: _showCategoryValidation && selectedCategoryId == null
+              ? Text(
+                  tr('please_select_category'),
+                  style: LocalFonts.poppins(color: Colors.red, fontSize: 12),
+                )
+              : null,
           trailing: const Icon(Icons.edit, size: 20),
           onTap: () => _showCategoryPicker("", "", ""),
         ),
@@ -2304,8 +3228,10 @@ class _AddListingScreenState extends State<AddListingScreen> {
                               ),
                             )
                             .toList(),
-                        onChanged: (val) =>
-                            setState(() => _featureDropdownValues[name] = val),
+                        onChanged: (val) {
+                          setState(() => _featureDropdownValues[name] = val);
+                          _scheduleDraftSave();
+                        },
                       ),
                     );
                   } else {
@@ -2348,6 +3274,32 @@ class _AddListingScreenState extends State<AddListingScreen> {
       ],
     );
   }
+}
+
+enum _ListingPhotoSource { camera, gallery }
+
+enum _ListingPreviewAction { cancel, publish, editListingInfo, editCategory }
+
+class _CategoryPickerAction {
+  final String parentId;
+  final String path;
+  final String displayPath;
+  final Map<String, String> attributes;
+  final String? categoryId;
+
+  const _CategoryPickerAction.openCategory({
+    required this.parentId,
+    required this.path,
+    required this.displayPath,
+    required this.attributes,
+  }) : categoryId = null;
+
+  const _CategoryPickerAction.selectCategory({
+    required this.path,
+    required this.displayPath,
+    required this.attributes,
+    required this.categoryId,
+  }) : parentId = '';
 }
 
 class CurrencyInputFormatter extends TextInputFormatter {

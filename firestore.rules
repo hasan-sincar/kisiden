@@ -12,7 +12,8 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.admin == true
-        || request.auth.token.email == 'hasanmardinn@gmail.com'
+        || (request.auth.token.email_verified == true
+          && request.auth.token.email == 'hasanmardinn@gmail.com')
       );
     }
 
@@ -52,6 +53,26 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/chats/$(chatId));
     }
 
+    function isAcceptedListingTransfer(listingId) {
+      return request.resource.data.sellerId == request.auth.uid
+        && resource.data.transferRequestId is string
+        && !request.resource.data.keys().hasAny(['transferRequestId'])
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name is string
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phoneNumber is string
+        && request.resource.data.sellerName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.name
+        && request.resource.data.sellerPhone == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.phoneNumber
+        && request.resource.data.proUntil == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('proUntil', null)
+        && request.resource.data.isPro == (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('proUntil', null) is timestamp
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('proUntil', null) > request.time
+        )
+        && getAfter(/databases/$(database)/documents/listing_transfers/$(resource.data.transferRequestId)).data.status == 'accepted'
+        && getAfter(/databases/$(database)/documents/listing_transfers/$(resource.data.transferRequestId)).data.listingId == listingId
+        && getAfter(/databases/$(database)/documents/listing_transfers/$(resource.data.transferRequestId)).data.senderId == resource.data.sellerId
+        && getAfter(/databases/$(database)/documents/listing_transfers/$(resource.data.transferRequestId)).data.receiverId == request.auth.uid;
+    }
+
     function isChatParticipant(chatId) {
       return isSignedIn() && (
         (chatExists(chatId)
@@ -62,9 +83,40 @@ service cloud.firestore {
     
     // KULLANICILAR: Sadece giriş yapmış olanlar kendi profilini düzenleyebilir
     match /users/{userId} {
-      // GÜVENLİK İYİLEŞTİRMESİ: Kullanıcı verilerini (profil detayları gibi) sadece giriş yapmış diğer kullanıcılar okuyabilir.
-      allow read: if isSignedIn(); 
-      allow create, delete: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAdmin() || (
+        isOwner(userId)
+        && request.resource.data.keys().hasOnly([
+          'uid', 'name', 'email', 'photoUrl', 'phoneNumber', 'createdAt',
+          'soldCount', 'bannedUntil', 'aboutMe', 'coverPhotoUrl',
+          'contactPreference', 'languageCode'
+        ])
+        && request.resource.data.keys().hasAll([
+          'uid', 'name', 'email', 'photoUrl', 'phoneNumber', 'createdAt',
+          'soldCount', 'bannedUntil', 'aboutMe', 'coverPhotoUrl',
+          'contactPreference', 'languageCode'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.photoUrl is string
+        && request.resource.data.photoUrl.size() <= 2000
+        && request.resource.data.phoneNumber is string
+        && request.resource.data.phoneNumber.size() <= 120
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.soldCount == 0
+        && request.resource.data.bannedUntil == null
+        && request.resource.data.aboutMe is string
+        && request.resource.data.aboutMe.size() <= 2000
+        && request.resource.data.coverPhotoUrl is string
+        && request.resource.data.coverPhotoUrl.size() <= 2000
+        && request.resource.data.contactPreference in ['both', 'message_only', 'call_only']
+        && request.resource.data.languageCode is string
+        && request.resource.data.languageCode.size() <= 20
+      );
+      allow delete: if isOwner(userId) || isAdmin();
 
       // GÜVENLİK İYİLEŞTİRMESİ: Kullanıcıların sadece belirli alanları güncelleyebilmesini sağlar.
       // Bu kural, kullanıcıların kendi kendilerine Pro üyelik veya ilan hakkı gibi kritik verileri atamasını engeller.
@@ -75,7 +127,32 @@ service cloud.firestore {
           'emailNotificationsEnabled', 'blockedUsers', 'languageCode',
           'phoneNumber', 'email', 'profileSetupSkipped',
           'profileSetupSkippedAt', 'customReadyMessages', 'updatedAt'
-      ]));
+      ])
+      || (
+        // İlan oluştururken yalnızca mevcut bir ek hakkın tüketilmesine izin ver.
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'adminExtraListingLimit', 'adminListingLimit', 'updatedAt'
+        ])
+        && resource.data.keys().hasAll([
+          'adminExtraListingLimit', 'adminListingLimit'
+        ])
+        && request.resource.data.adminExtraListingLimit is number
+        && request.resource.data.adminListingLimit is number
+        && resource.data.adminExtraListingLimit is number
+        && resource.data.adminListingLimit is number
+        && resource.data.adminExtraListingLimit > 0
+        && request.resource.data.adminExtraListingLimit
+             == resource.data.adminExtraListingLimit - 1
+        && request.resource.data.adminListingLimit
+             == resource.data.adminListingLimit - 1
+      )
+     );
+    }
+
+    match /public_profiles/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow write: if false;
     }
 
     match /users/{userId}/favorites/{listingId} {
@@ -87,9 +164,9 @@ service cloud.firestore {
     }
 
     match /users/{userId}/followers/{followerId} {
-      allow read: if isSignedIn() || isAdmin();
-      allow create, delete: if (isSignedIn() && request.auth.uid == followerId) || isAdmin();
-      allow update: if false;
+      allow get: if isOwner(userId) || (isSignedIn() && request.auth.uid == followerId) || isAdmin();
+      allow list: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if false;
     }
 
     match /users/{userId}/notifications/{notificationId} {
@@ -106,12 +183,33 @@ service cloud.firestore {
         && request.resource.data.message.size() <= 1000
         && request.resource.data.isRead == false
         && request.resource.data.timestamp == request.time
-        && (!('type' in request.resource.data) || request.resource.data.type is string)
-        && (!('targetId' in request.resource.data) || request.resource.data.targetId is string)
-        && (!('reason' in request.resource.data) || request.resource.data.reason is string)
-        && (!('source' in request.resource.data) || request.resource.data.source is string)
-        && (!('imageUrl' in request.resource.data) || request.resource.data.imageUrl is string)
-        && (!('createdBy' in request.resource.data) || request.resource.data.createdBy is string);
+        && (!('type' in request.resource.data) || (
+          request.resource.data.type is string
+          && request.resource.data.type in ['general', 'chat', 'listing', 'trade_offer', 'review', 'ticket']
+        ))
+        && (!('targetId' in request.resource.data) || (
+          request.resource.data.targetId is string
+          && request.resource.data.targetId.size() <= 128
+        ))
+        && (!('reason' in request.resource.data) || (
+          request.resource.data.reason is string
+          && request.resource.data.reason.size() <= 1000
+        ))
+        && (!('source' in request.resource.data) || (
+          request.resource.data.source is string
+          && request.resource.data.source in [
+            'system', 'admin_alert', 'chat_event', 'listing_event',
+            'trade_offer_event', 'review_event'
+          ]
+        ))
+        && (!('imageUrl' in request.resource.data) || (
+          request.resource.data.imageUrl is string
+          && request.resource.data.imageUrl.size() <= 2000
+        ))
+        && (!('createdBy' in request.resource.data) || (
+          request.resource.data.createdBy is string
+          && request.resource.data.createdBy.size() <= 128
+        ));
     }
 
     match /users/{userId}/review_permissions/{reviewerId} {
@@ -139,20 +237,115 @@ service cloud.firestore {
     match /listings/{listingId} {
       allow read: if true;
       allow create: if isSignedIn()
-        && request.resource.data.sellerId == request.auth.uid;
+        && request.resource.data.sellerId == request.auth.uid
+        && request.resource.data.status == 'pending';
       allow update: if isSignedIn()
-        && (resource.data.sellerId == request.auth.uid || isAdmin())
-        && (isAdmin() || (
-          request.resource.data.sellerId == resource.data.sellerId
-          && (!request.resource.data.keys().hasAny(['showcaseUntil'])
-            || request.resource.data.showcaseUntil == resource.data.showcaseUntil)
-          && (!request.resource.data.keys().hasAny(['categoryShowcaseUntil'])
-            || request.resource.data.categoryShowcaseUntil == resource.data.categoryShowcaseUntil)
-          && (!request.resource.data.keys().hasAny(['urgentUntil'])
-            || request.resource.data.urgentUntil == resource.data.urgentUntil)
-        ));
+        && (
+          ((resource.data.sellerId == request.auth.uid || isAdmin())
+            && (isAdmin() || (
+              request.resource.data.sellerId == resource.data.sellerId
+              && (!request.resource.data.keys().hasAny(['showcaseUntil'])
+                || request.resource.data.showcaseUntil == resource.data.showcaseUntil)
+              && (!request.resource.data.keys().hasAny(['categoryShowcaseUntil'])
+                || request.resource.data.categoryShowcaseUntil == resource.data.categoryShowcaseUntil)
+              && (!request.resource.data.keys().hasAny(['urgentUntil'])
+                || request.resource.data.urgentUntil == resource.data.urgentUntil)
+              && (
+                request.resource.data.status == resource.data.status
+                || request.resource.data.status == 'pending'
+                || request.resource.data.status == 'passive'
+              )
+            )))
+          || (
+            resource.data.status == 'active'
+            && request.resource.data.status == resource.data.status
+            && isAcceptedListingTransfer(listingId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'sellerId', 'sellerName', 'sellerPhone', 'transferAcceptedAt',
+              'transferRequestId', 'isPro', 'proUntil'
+            ])
+            && request.resource.data.transferAcceptedAt == request.time
+          )
+        );
       allow delete: if isSignedIn()
-        && (resource.data.sellerId == request.auth.uid || isAdmin());
+        && (isAdmin()
+          || (resource.data.sellerId == request.auth.uid
+            && !resource.data.keys().hasAny(['transferRequestId'])));
+    }
+
+    match /listing_transfers/{transferId} {
+      allow create: if isSignedIn()
+        && transferId.size() > 0
+        && transferId.size() <= 128
+        && request.resource.data.keys().hasAll([
+          'listingId', 'listingTitle', 'listingImage', 'senderId',
+          'senderName', 'receiverId', 'receiverName', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'listingId', 'listingTitle', 'listingImage', 'senderId',
+          'senderName', 'receiverId', 'receiverName', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.listingId is string
+        && request.resource.data.listingId.size() > 0
+        && request.resource.data.listingId.size() <= 128
+        && request.resource.data.listingTitle is string
+        && request.resource.data.listingTitle.size() <= 200
+        && request.resource.data.listingImage is string
+        && request.resource.data.listingImage.size() <= 2000
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.senderName is string
+        && request.resource.data.senderName.size() <= 120
+        && request.resource.data.receiverId is string
+        && request.resource.data.receiverId.size() > 0
+        && request.resource.data.receiverId.size() <= 128
+        && request.resource.data.receiverId != request.auth.uid
+        && request.resource.data.receiverName is string
+        && request.resource.data.receiverName.size() <= 120
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && get(/databases/$(database)/documents/listings/$(request.resource.data.listingId)).data.sellerId == request.auth.uid
+        && request.resource.data.listingTitle == get(/databases/$(database)/documents/listings/$(request.resource.data.listingId)).data.title
+        && request.resource.data.listingImage == get(/databases/$(database)/documents/listings/$(request.resource.data.listingId)).data.imageUrl
+        && request.resource.data.senderName == get(/databases/$(database)/documents/listings/$(request.resource.data.listingId)).data.sellerName
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.receiverId))
+        && request.resource.data.receiverName == get(/databases/$(database)/documents/users/$(request.resource.data.receiverId)).data.name
+        && get(/databases/$(database)/documents/listings/$(request.resource.data.listingId)).data.status == 'active'
+        && !get(/databases/$(database)/documents/listings/$(request.resource.data.listingId)).data.keys().hasAny(['transferRequestId'])
+        && getAfter(/databases/$(database)/documents/listings/$(request.resource.data.listingId)).data.transferRequestId == transferId;
+
+      allow read: if isSignedIn()
+        && (resource.data.senderId == request.auth.uid
+          || resource.data.receiverId == request.auth.uid
+          || isAdmin());
+
+      allow update: if isSignedIn()
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'updatedAt', 'acceptedAt'
+        ])
+        && request.resource.data.updatedAt == request.time
+        && (
+          (resource.data.receiverId == request.auth.uid
+            && request.resource.data.status == 'rejected'
+            && !request.resource.data.keys().hasAny(['acceptedAt'])
+            && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.sellerId == resource.data.senderId
+            && !getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.keys().hasAny(['transferRequestId']))
+          || (resource.data.receiverId == request.auth.uid
+            && request.resource.data.status == 'accepted'
+            && request.resource.data.acceptedAt == request.time
+            && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.sellerId == request.auth.uid
+            && !getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.keys().hasAny(['transferRequestId']))
+          || (resource.data.senderId == request.auth.uid
+            && request.resource.data.status == 'cancelled'
+            && !request.resource.data.keys().hasAny(['acceptedAt'])
+            && getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.sellerId == request.auth.uid
+            && !getAfter(/databases/$(database)/documents/listings/$(resource.data.listingId)).data.keys().hasAny(['transferRequestId']))
+        );
+
+      allow delete: if false;
     }
 
     match /listings/{listingId}/questions/{questionId} {
@@ -317,6 +510,17 @@ service cloud.firestore {
           || isAdmin()
         );
       allow update, delete: if isAdmin();
+    }
+
+    // Login-independent "Contact Us" requests are managed only by trusted Cloud Functions.
+    match /contact_requests/{requestId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+
+      match /replies/{replyId} {
+        allow read: if isAdmin();
+        allow create, update, delete: if false;
+      }
     }
 
     // Diğer bilinmeyen tüm koleksiyonları kitle (Sızıntıları engeller)

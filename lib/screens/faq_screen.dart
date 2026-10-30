@@ -212,6 +212,10 @@ const List<_FaqSectionData> _faqSections = [
         questionKey: 'faq_q_listing_limit',
         answerKey: 'faq_a_listing_limit',
       ),
+      _FaqItemData(
+        questionKey: 'faq_q_listing_transfer',
+        answerKey: 'faq_a_listing_transfer',
+      ),
     ],
   ),
   _FaqSectionData(
@@ -287,6 +291,10 @@ const List<_FaqSectionData> _faqSections = [
       _FaqItemData(
         questionKey: 'faq_q_payments_showcase_right',
         answerKey: 'faq_a_payments_showcase_right',
+      ),
+      _FaqItemData(
+        questionKey: 'faq_q_cash_on_delivery',
+        answerKey: 'faq_a_cash_on_delivery',
       ),
     ],
   ),

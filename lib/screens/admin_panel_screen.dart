@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:appim/utils/local_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import '../services/database_service.dart';
 import 'edit_listing_screen.dart';
 import 'listing_detail_screen.dart';
 import '../utils/translations.dart';
 import 'admin/admin_ticket_detail_screen.dart'; // YENİ: Ticket Detay Ekranı İçin
+import 'admin/contact_requests_screen.dart';
 import 'package:intl/intl.dart'; // YENİ: Tarihler için
 import 'seller_profile_screen.dart'; // YENİ: Kullanıcı profiline gitmek için eklendi
 import 'package:cached_network_image/cached_network_image.dart'; // YENİ: CachedNetworkImage Eklendi
@@ -19,6 +22,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../utils/theme_colors.dart';
 import '../services/auth_service.dart';
+import '../widgets/defect_marker_tools.dart';
 
 part 'admin_panel_management_tabs.dart';
 
@@ -112,7 +116,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 9, // Sekme sayısı düzeltildi
+      length: 10,
       child: Scaffold(
         appBar: AppBar(
           title: Text(
@@ -152,6 +156,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 text: tr('admin_tickets'),
               ), // YENİ: Destek Talepleri
               Tab(
+                icon: const Icon(
+                  Icons.mark_email_unread_outlined,
+                  color: Colors.blue,
+                ),
+                text: tr('admin_contact_requests'),
+              ),
+              Tab(
                 icon: const Icon(Icons.explicit, color: Colors.brown),
                 text: tr('profanity_filter'),
               ), // YENİ: Küfür Filtresi
@@ -168,6 +179,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             _AdminUsersTab(),
             _AdminAdsTab(), // YENİ: Reklam Kontrol Paneli
             _AdminTicketsTab(), // YENİ: Destek Talepleri Paneli
+            ContactRequestsAdminTab(),
             _AdminProfanityTab(), // YENİ: Küfür Filtresi Paneli
           ],
         ),
@@ -404,6 +416,9 @@ class _AdminPendingListingsTab extends StatelessWidget {
               final data = doc.data() as Map<String, dynamic>;
               final isEdited = data['lastEditChangeSummary'] != null;
               final createdAt = data['createdAt'] as Timestamp?;
+              final previewMarkers = DefectMarker.fromData(
+                data['defectMarkers'],
+              ).where((marker) => marker.imageIndex == 0).toList();
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
@@ -441,30 +456,33 @@ class _AdminPendingListingsTab extends StatelessWidget {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: CachedNetworkImage(
-                                imageUrl: data['imageUrl'] ?? '',
+                              child: SizedBox(
                                 width: 64,
                                 height: 64,
-                                fit: BoxFit.cover,
-                                placeholder: (c, u) => Container(
-                                  width: 64,
-                                  height: 64,
-                                  color: Colors.grey[100],
-                                  alignment: Alignment.center,
-                                  child: const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                                child: DefectMarkerPhoto(
+                                  image: CachedNetworkImageProvider(
+                                    data['imageUrl'] ?? '',
+                                  ),
+                                  fit: previewMarkers.isEmpty
+                                      ? BoxFit.cover
+                                      : BoxFit.contain,
+                                  markers: previewMarkers,
+                                  loadingWidget: Container(
+                                    color: Colors.grey[100],
+                                    alignment: Alignment.center,
+                                    child: const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                errorWidget: (c, u, e) => Container(
-                                  width: 64,
-                                  height: 64,
-                                  color: Colors.grey[100],
-                                  alignment: Alignment.center,
-                                  child: const Icon(Icons.image_outlined),
+                                  errorWidget: Container(
+                                    color: Colors.grey[100],
+                                    alignment: Alignment.center,
+                                    child: const Icon(Icons.image_outlined),
+                                  ),
                                 ),
                               ),
                             ),
@@ -2892,6 +2910,9 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
   final TextEditingController _searchController = TextEditingController();
   int _totalActiveListings = 0;
   bool _showSearchField = false;
+  bool _showPassiveListings = false;
+  bool _isBulkReactivating = false;
+  final Set<String> _reactivatingListingIds = <String>{};
 
   @override
   void initState() {
@@ -3110,6 +3131,80 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
     );
   }
 
+  Future<void> _reactivateListing(String listingId) async {
+    setState(() => _reactivatingListingIds.add(listingId));
+    try {
+      await DatabaseService().reactivatePassiveListing(listingId);
+      if (mounted) {
+        setState(() => _totalActiveListings++);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(tr('listing_reactivated_successfully'))),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${tr('error')}: $error')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _reactivatingListingIds.remove(listingId));
+      }
+    }
+  }
+
+  Future<void> _confirmAndReactivateAll(int listingCount) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('reactivate_all_listings')),
+        content: Text(
+          tr(
+            'confirm_reactivate_all_listings',
+          ).replaceFirst('%s', listingCount.toString()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(tr('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(tr('reactivate_all_listings')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isBulkReactivating = true);
+    try {
+      final reactivatedCount = await DatabaseService()
+          .reactivateAllPassiveListings();
+      if (mounted) {
+        setState(() => _totalActiveListings += reactivatedCount);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              tr(
+                'listings_reactivated_successfully',
+              ).replaceFirst('%s', reactivatedCount.toString()),
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${tr('error')}: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isBulkReactivating = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -3118,12 +3213,19 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
           child: StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('listings')
-                .where('status', isEqualTo: 'active')
+                .where(
+                  'status',
+                  isEqualTo: _showPassiveListings ? 'passive' : 'active',
+                )
                 .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData)
+              if (snapshot.hasError) {
+                return Center(child: Text('${tr('error')}: ${snapshot.error}'));
+              }
+              if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
+              }
               var allDocs = snapshot.data!.docs;
 
               // Arama sorgusuna göre filtreleme yapıyoruz
@@ -3147,12 +3249,74 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: Text(tr('active_listings_tab')),
+                            selected: !_showPassiveListings,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setState(() => _showPassiveListings = false);
+                              }
+                            },
+                          ),
+                          ChoiceChip(
+                            label: Text(tr('passive_listings_admin_tab')),
+                            selected: _showPassiveListings,
+                            onSelected: (selected) {
+                              if (selected) {
+                                setState(() => _showPassiveListings = true);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_showPassiveListings && allDocs.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _isBulkReactivating
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                )
+                              : TextButton.icon(
+                                  onPressed: _reactivatingListingIds.isNotEmpty
+                                      ? null
+                                      : () => _confirmAndReactivateAll(
+                                          allDocs.length,
+                                        ),
+                                  icon: const Icon(
+                                    Icons.playlist_add_check,
+                                    color: Colors.green,
+                                  ),
+                                  label: Text(tr('reactivate_all_listings')),
+                                ),
+                        ),
+                      ),
+                    ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                       child: Row(
                         children: [
                           const Icon(Icons.list_alt, color: Colors.blue),
                           const SizedBox(width: 6),
                           Text(
-                            '$_totalActiveListings',
+                            _showPassiveListings
+                                ? '${allDocs.length}'
+                                : '$_totalActiveListings',
                             style: LocalFonts.poppins(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -3213,7 +3377,11 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
                       hasScrollBody: false,
                       child: Center(
                         child: Text(
-                          tr('no_active_listings_matching_criteria'),
+                          tr(
+                            _showPassiveListings
+                                ? 'no_passive_listings_matching_criteria'
+                                : 'no_active_listings_matching_criteria',
+                          ),
                           style: LocalFonts.poppins(),
                         ),
                       ),
@@ -3254,6 +3422,15 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
 
                         return ListTile(
                           tileColor: isShowcased ? Colors.amber[50] : null,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ListingDetailScreen(
+                                data: data,
+                                listingId: docs[index].id,
+                              ),
+                            ),
+                          ),
                           leading: CachedNetworkImage(
                             imageUrl: data['imageUrl'] ?? '',
                             width: 50,
@@ -3279,17 +3456,34 @@ class _AdminListingsTabState extends State<_AdminListingsTab> {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.star,
-                                  color: Colors.amber,
+                              if (_showPassiveListings)
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.play_arrow,
+                                    color: Colors.green,
+                                  ),
+                                  tooltip: tr('reactivate_listing'),
+                                  onPressed:
+                                      _isBulkReactivating ||
+                                          _reactivatingListingIds.contains(
+                                            docs[index].id,
+                                          )
+                                      ? null
+                                      : () =>
+                                            _reactivateListing(docs[index].id),
+                                )
+                              else
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.star,
+                                    color: Colors.amber,
+                                  ),
+                                  tooltip: tr('move_to_showcase'),
+                                  onPressed: () => _showShowcaseDialog(
+                                    context,
+                                    docs[index].id,
+                                  ),
                                 ),
-                                tooltip: tr('move_to_showcase'),
-                                onPressed: () => _showShowcaseDialog(
-                                  context,
-                                  docs[index].id,
-                                ),
-                              ),
                               if (isShowcased)
                                 Tooltip(
                                   message: tr('on_home_showcase'),
@@ -3385,6 +3579,97 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
   String _searchQuery = '';
   bool _showProOnly = false;
   bool _showSearchField = false;
+  bool _isBackfillingProfiles = false;
+  int _backfilledProfileCount = 0;
+
+  Future<void> _backfillPublicProfiles() async {
+    final shouldStart = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(tr('public_profiles_backfill_title')),
+        content: Text(tr('public_profiles_backfill_confirm')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(tr('cancel')),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(tr('public_profiles_backfill_start')),
+          ),
+        ],
+      ),
+    );
+    if (shouldStart != true || !mounted) return;
+
+    setState(() {
+      _isBackfillingProfiles = true;
+      _backfilledProfileCount = 0;
+    });
+
+    try {
+      await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      final appCheckToken = await FirebaseAppCheck.instance.getToken(true);
+      if (appCheckToken == null || appCheckToken.isEmpty) {
+        throw StateError('app_check_token_unavailable');
+      }
+      final callable = FirebaseFunctions.instanceFor(
+        region: 'europe-west1',
+      ).httpsCallable('backfillPublicProfiles');
+      String afterUid = '';
+
+      while (mounted) {
+        final result = await callable.call({
+          'afterUid': afterUid,
+          'limit': 200,
+        });
+        final response = result.data;
+        if (response is! Map ||
+            response['processed'] is! num ||
+            response['nextUid'] is! String ||
+            response['done'] is! bool) {
+          throw StateError('invalid_public_profile_backfill_response');
+        }
+
+        final processed = (response['processed'] as num).toInt();
+        final nextUid = response['nextUid'] as String;
+        if (processed == 0 && response['done'] != true) {
+          throw StateError('public_profile_backfill_did_not_advance');
+        }
+        if (processed > 0 && nextUid == afterUid) {
+          throw StateError('public_profile_backfill_did_not_advance');
+        }
+
+        if (mounted) {
+          setState(() => _backfilledProfileCount += processed);
+        }
+        if (response['done'] == true) break;
+        afterUid = nextUid;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              tr(
+                'public_profiles_backfill_complete',
+              ).replaceFirst('%s', _backfilledProfileCount.toString()),
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${tr('public_profiles_backfill_failed')}: $error'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isBackfillingProfiles = false);
+    }
+  }
 
   String _resolveUserName(Map<String, dynamic> data) {
     final raw = (data['name'] ?? '').toString().trim();
@@ -4459,6 +4744,57 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
         }).toList();
         return CustomScrollView(
           slivers: [
+            SliverToBoxAdapter(
+              child: Card(
+                margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tr('public_profiles_backfill_title'),
+                        style: LocalFonts.poppins(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        tr('public_profiles_backfill_description'),
+                        style: LocalFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_isBackfillingProfiles) ...[
+                        const LinearProgressIndicator(),
+                        const SizedBox(height: 6),
+                        Text(
+                          tr('public_profiles_backfill_progress').replaceFirst(
+                            '%s',
+                            _backfilledProfileCount.toString(),
+                          ),
+                          style: LocalFonts.poppins(fontSize: 12),
+                        ),
+                      ],
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          onPressed: _isBackfillingProfiles
+                              ? null
+                              : _backfillPublicProfiles,
+                          icon: const Icon(Icons.sync),
+                          label: Text(
+                            _isBackfillingProfiles
+                                ? tr('public_profiles_backfill_running')
+                                : tr('public_profiles_backfill_action'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),

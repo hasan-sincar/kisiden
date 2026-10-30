@@ -4,7 +4,7 @@ const xmlbuilder = require("xmlbuilder");
 const express = require("express");
 /* googleapis is lazy-required inside verifyGooglePlayPurchase to avoid long import time during deploy analysis */
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onDocumentDeleted, onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentDeleted, onDocumentCreated, onDocumentUpdated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
@@ -19,6 +19,8 @@ const resendApiKey = defineSecret("RESEND_API_KEY");
 const googlePlayServiceAccountJson = defineSecret("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON");
 const appleSharedSecret = defineSecret("APPLE_SHARED_SECRET");
 const LISTING_ID_PATTERN = /^[A-Za-z0-9_-]{6,128}$/;
+const DEFAULT_REWARDED_ANDROID_AD_UNIT_ID = "ca-app-pub-3940256099942544/5224354917";
+const DEFAULT_REWARDED_IOS_AD_UNIT_ID = "ca-app-pub-3940256099942544/1712485313";
 const trustedNotificationSources = new Set([
   "system",
   "admin_alert",
@@ -34,6 +36,552 @@ const CHAT_LEVEL_2_HIGH_24H = 5;
 const CHAT_LEVEL_3_HIGH_24H = 8;
 const CHAT_LEVEL_4_LEVEL3_IN_7D = 3;
 const ADMIN_EMAIL_ALLOWLIST = new Set(["hasanmardinn@gmail.com"]);
+let admobVerifierKeysCache = { expiresAt: 0, keys: new Map() };
+
+function boundedString(value, maxLength) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function publicProfileFromUser(userId, user) {
+  const proUntil = user.proUntil?.toDate?.() || null;
+  const numberOrDefault = (value, fallback = 0) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  };
+
+  return {
+    uid: userId,
+    name: boundedString(user.name, 120) || "İsimsiz",
+    photoUrl: boundedString(user.photoUrl, 2000),
+    coverPhotoUrl: boundedString(user.coverPhotoUrl, 2000),
+    aboutMe: boundedString(user.aboutMe, 2000),
+    contactPreference: ["both", "message_only", "call_only"].includes(user.contactPreference)
+      ? user.contactPreference
+      : "both",
+    instagram: boundedString(user.instagram, 300),
+    facebook: boundedString(user.facebook, 300),
+    website: boundedString(user.website, 500),
+    languageCode: boundedString(user.languageCode, 20) || "tr",
+    soldCount: Math.max(0, numberOrDefault(user.soldCount)),
+    followerCount: Math.max(0, numberOrDefault(user.followerCount)),
+    totalReviewCount: Math.max(0, numberOrDefault(user.totalReviewCount)),
+    totalRatingScore: Math.max(0, numberOrDefault(user.totalRatingScore)),
+    ratingCount1: Math.max(0, numberOrDefault(user.ratingCount1)),
+    ratingCount2: Math.max(0, numberOrDefault(user.ratingCount2)),
+    ratingCount3: Math.max(0, numberOrDefault(user.ratingCount3)),
+    ratingCount4: Math.max(0, numberOrDefault(user.ratingCount4)),
+    ratingCount5: Math.max(0, numberOrDefault(user.ratingCount5)),
+    avgResponseHours: Math.max(0, numberOrDefault(user.avgResponseHours, 24)),
+    approvalRate: Math.max(0, Math.min(100, numberOrDefault(user.approvalRate, 95))),
+    isPro: proUntil !== null && proUntil.getTime() > Date.now(),
+    ...(user.createdAt ? { createdAt: user.createdAt } : {}),
+  };
+}
+
+function isAdminRequest(request) {
+  return request.auth?.token?.admin === true || (
+    request.auth?.token?.email_verified === true &&
+    ADMIN_EMAIL_ALLOWLIST.has(String(request.auth.token.email || "").toLowerCase())
+  );
+}
+
+exports.syncPublicProfile = onDocumentWritten({
+  document: "users/{userId}",
+  region: "europe-west1",
+}, async (event) => {
+  const userId = event.params.userId;
+  const userSnapshot = await db.collection("users").doc(userId).get();
+  const publicProfileRef = db.collection("public_profiles").doc(userId);
+  if (!userSnapshot.exists) {
+    await publicProfileRef.delete();
+    return;
+  }
+  await publicProfileRef.set(publicProfileFromUser(userId, userSnapshot.data() || {}));
+});
+
+exports.getPublicUserProfile = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const userId = String(request.data?.userId || "").trim();
+  if (!userId || userId.length > 128 || userId.includes("/")) {
+    throw new HttpsError("invalid-argument", "Gecersiz kullanici bilgisi.");
+  }
+  const publicProfileRef = db.collection("public_profiles").doc(userId);
+  if (request.data?.refresh !== true) {
+    const publicProfileSnapshot = await publicProfileRef.get();
+    if (publicProfileSnapshot.exists) {
+      return { profile: publicProfileSnapshot.data() };
+    }
+  }
+
+  const userSnapshot = await db.collection("users").doc(userId).get();
+  if (!userSnapshot.exists) return { profile: null };
+  const profile = publicProfileFromUser(userId, userSnapshot.data() || {});
+  await publicProfileRef.set(profile);
+  return {
+    profile: {
+      ...profile,
+      ...(profile.createdAt?.toDate
+        ? { createdAt: profile.createdAt.toDate().toISOString() }
+        : {}),
+    },
+  };
+});
+
+exports.backfillPublicProfiles = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+  if (!isAdminRequest(request)) {
+    throw new HttpsError("permission-denied", "Bu islem icin yonetici yetkisi gerekiyor.");
+  }
+
+  const afterUid = String(request.data?.afterUid || "").trim();
+  if (afterUid.length > 128 || afterUid.includes("/")) {
+    throw new HttpsError("invalid-argument", "Gecersiz devam anahtari.");
+  }
+  const requestedLimit = Number(request.data?.limit) || 100;
+  const limit = Math.max(1, Math.min(200, Math.floor(requestedLimit)));
+  let query = db.collection("users")
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .limit(limit);
+  if (afterUid) query = query.startAfter(afterUid);
+
+  const snapshot = await query.get();
+  const batch = db.batch();
+  snapshot.docs.forEach((userDoc) => {
+    batch.set(
+      db.collection("public_profiles").doc(userDoc.id),
+      publicProfileFromUser(userDoc.id, userDoc.data() || {}),
+    );
+  });
+  if (!snapshot.empty) await batch.commit();
+
+  return {
+    processed: snapshot.size,
+    nextUid: snapshot.docs.length > 0
+      ? snapshot.docs[snapshot.docs.length - 1].id
+      : afterUid,
+    done: snapshot.size < limit,
+  };
+});
+
+exports.searchListingTransferRecipients = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  const userId = request.auth?.uid;
+  if (!userId) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const searchTerm = boundedString(request.data?.query, 254);
+  if (searchTerm.length < 2) {
+    throw new HttpsError("invalid-argument", "Aramak icin en az 2 karakter girin.");
+  }
+
+  const limitRef = db.collection("listing_transfer_search_limits").doc(userId);
+  const dateKey = new Date().toISOString().slice(0, 10);
+  await db.runTransaction(async (transaction) => {
+    const limitSnapshot = await transaction.get(limitRef);
+    const limitData = limitSnapshot.data() || {};
+    const lastSearchAt = limitData.lastSearchAt?.toDate?.() || null;
+    const dailyCount = limitData.dateKey === dateKey
+      ? Number(limitData.dailyCount) || 0
+      : 0;
+
+    if (
+      dailyCount >= 120 ||
+      (lastSearchAt && Date.now() - lastSearchAt.getTime() < 500)
+    ) {
+      throw new HttpsError("resource-exhausted", "Arama limiti asildi.");
+    }
+
+    transaction.set(limitRef, {
+      dateKey,
+      dailyCount: dailyCount + 1,
+      lastSearchAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  const normalizedEmail = searchTerm.toLowerCase();
+  const digitsOnly = searchTerm.replace(/\D/g, "");
+  const recipients = new Map();
+  const addUser = (userId, userData = {}) => {
+    if (!userId || userId === request.auth.uid || recipients.has(userId)) return;
+    recipients.set(userId, {
+      uid: userId,
+      name: boundedString(userData.name, 120) || "Isimsiz",
+      photoUrl: boundedString(userData.photoUrl, 2000),
+    });
+  };
+
+  const titleCasedName = searchTerm
+    .split(/\s+/)
+    .map((part) => part.length === 0
+      ? part
+      : part[0].toLocaleUpperCase("tr-TR") +
+        part.slice(1).toLocaleLowerCase("tr-TR"))
+    .join(" ");
+  const nameQueries = new Set([
+    searchTerm,
+    searchTerm.toLocaleLowerCase("tr-TR"),
+    searchTerm.toLocaleUpperCase("tr-TR"),
+    titleCasedName,
+  ]);
+  const nameSnapshots = await Promise.all(
+    [...nameQueries].map((nameQuery) => db.collection("users")
+      .orderBy("name")
+      .startAt(nameQuery)
+      .endAt(`${nameQuery}\uf8ff`)
+      .limit(10)
+      .get()),
+  );
+  for (const snapshot of nameSnapshots) {
+    for (const userDoc of snapshot.docs) {
+      addUser(userDoc.id, userDoc.data() || {});
+    }
+  }
+
+  const exactUserIds = new Set();
+  if (normalizedEmail.includes("@")) {
+    const emailSnapshots = await Promise.all(
+      [...new Set([
+        searchTerm,
+        normalizedEmail,
+        normalizedEmail.toLocaleUpperCase("en-US"),
+      ])].map((email) => db.collection("users")
+        .where("email", "==", email)
+        .limit(5)
+        .get()),
+    );
+    for (const snapshot of emailSnapshots) {
+      for (const userDoc of snapshot.docs) exactUserIds.add(userDoc.id);
+    }
+    try {
+      const authUser = await admin.auth().getUserByEmail(normalizedEmail);
+      exactUserIds.add(authUser.uid);
+    } catch (error) {
+      if (error.code !== "auth/user-not-found") throw error;
+    }
+  }
+
+  if (digitsOnly.length >= 7) {
+    const phoneCandidates = new Set([searchTerm, digitsOnly, `+${digitsOnly}`]);
+    let e164PhoneNumber = "";
+    if (searchTerm.startsWith("+") && /^\+[1-9]\d{7,14}$/.test(`+${digitsOnly}`)) {
+      e164PhoneNumber = `+${digitsOnly}`;
+    } else if (digitsOnly.startsWith("0") && digitsOnly.length === 11) {
+      e164PhoneNumber = `+90${digitsOnly.slice(1)}`;
+    } else if (digitsOnly.startsWith("90") && digitsOnly.length === 12) {
+      e164PhoneNumber = `+${digitsOnly}`;
+    } else if (digitsOnly.length === 10) {
+      e164PhoneNumber = `+90${digitsOnly}`;
+    }
+    if (e164PhoneNumber) phoneCandidates.add(e164PhoneNumber);
+
+    const phoneSnapshots = await Promise.all(
+      [...phoneCandidates].map((phoneNumber) => db.collection("users")
+        .where("phoneNumber", "==", phoneNumber)
+        .limit(5)
+        .get()),
+    );
+    for (const snapshot of phoneSnapshots) {
+      for (const userDoc of snapshot.docs) exactUserIds.add(userDoc.id);
+    }
+    if (e164PhoneNumber) {
+      try {
+        const authUser = await admin.auth().getUserByPhoneNumber(e164PhoneNumber);
+        exactUserIds.add(authUser.uid);
+      } catch (error) {
+        if (error.code !== "auth/user-not-found") throw error;
+      }
+    }
+  }
+
+  if (exactUserIds.size > 0) {
+    const exactUserDocs = await db.getAll(
+      ...[...exactUserIds].map((id) => db.collection("users").doc(id)),
+    );
+    for (const userDoc of exactUserDocs) {
+      if (userDoc.exists) addUser(userDoc.id, userDoc.data() || {});
+    }
+  }
+
+  return { users: [...recipients.values()].slice(0, 10) };
+});
+
+exports.isPhoneNumberRegistered = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const phoneNumber = String(request.data?.phoneNumber || "").trim();
+  if (phoneNumber.length < 7 || phoneNumber.length > 20 || !/^\+?\d+$/.test(phoneNumber)) {
+    throw new HttpsError("invalid-argument", "Gecersiz telefon numarasi.");
+  }
+  const rateLimitRef = db.collection("phone_lookup_limits").doc(request.auth.uid);
+  const dateKey = new Date().toISOString().slice(0, 10);
+  await db.runTransaction(async (transaction) => {
+    const rateLimitSnapshot = await transaction.get(rateLimitRef);
+    const rateLimit = rateLimitSnapshot.data() || {};
+    const lastLookupAt = rateLimit.lastLookupAt?.toDate?.() || null;
+    const dailyCount = rateLimit.dateKey === dateKey
+      ? Number(rateLimit.dailyCount) || 0
+      : 0;
+    if (
+      dailyCount >= 20 ||
+      (lastLookupAt && Date.now() - lastLookupAt.getTime() < 1500)
+    ) {
+      throw new HttpsError("resource-exhausted", "Lutfen telefon kontrolu icin bekleyin.");
+    }
+    transaction.set(rateLimitRef, {
+      dateKey,
+      dailyCount: dailyCount + 1,
+      lastLookupAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  const candidates = new Set([phoneNumber]);
+  if (phoneNumber.startsWith("+90")) candidates.add(phoneNumber.replace(/^\+90/, "0"));
+  if (phoneNumber.startsWith("0") && phoneNumber.length > 10) {
+    candidates.add(phoneNumber.replace(/^0/, "+90"));
+  }
+
+  for (const candidate of candidates) {
+    const match = await db.collection("users")
+      .where("phoneNumber", "==", candidate)
+      .limit(5)
+      .get();
+    if (match.docs.some((doc) => doc.id !== request.auth.uid)) {
+      return { registered: true };
+    }
+  }
+  return { registered: false };
+});
+
+exports.getAdminUserIds = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const adminIds = new Set();
+  for (const email of ADMIN_EMAIL_ALLOWLIST) {
+    const snapshot = await db.collection("users").where("email", "==", email).get();
+    snapshot.docs.forEach((doc) => adminIds.add(doc.id));
+  }
+  return { userIds: [...adminIds] };
+});
+
+exports.setUserBlocked = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const uid = request.auth.uid;
+  const blockedUid = String(request.data?.blockedUid || "").trim();
+  const blocked = request.data?.blocked;
+  if (!blockedUid || blockedUid.length > 128 || blockedUid.includes("/") ||
+      blockedUid === uid || typeof blocked !== "boolean") {
+    throw new HttpsError("invalid-argument", "Gecersiz engelleme bilgisi.");
+  }
+
+  const userRef = db.collection("users").doc(uid);
+  const blockedUserRef = db.collection("users").doc(blockedUid);
+  const blockedRef = userRef.collection("blocked").doc(blockedUid);
+  await db.runTransaction(async (transaction) => {
+    const [userSnapshot, blockedUserSnapshot] = await Promise.all([
+      transaction.get(userRef),
+      transaction.get(blockedUserRef),
+    ]);
+    if (!userSnapshot.exists || !blockedUserSnapshot.exists) {
+      throw new HttpsError("not-found", "Kullanici bulunamadi.");
+    }
+
+    transaction.set(userRef, {
+      blockedUsers: blocked
+        ? admin.firestore.FieldValue.arrayUnion(blockedUid)
+        : admin.firestore.FieldValue.arrayRemove(blockedUid),
+    }, { merge: true });
+    transaction.set(blockedUserRef, {
+      blockedBy: blocked
+        ? admin.firestore.FieldValue.arrayUnion(uid)
+        : admin.firestore.FieldValue.arrayRemove(uid),
+    }, { merge: true });
+    if (blocked) {
+      transaction.set(blockedRef, {
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      transaction.delete(blockedRef);
+    }
+  });
+
+  return { success: true };
+});
+
+exports.toggleSellerFollow = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const followerId = request.auth.uid;
+  const sellerId = String(request.data?.sellerId || "").trim();
+  const following = request.data?.following;
+  if (!sellerId || sellerId.length > 128 || sellerId.includes("/") ||
+      sellerId === followerId || typeof following !== "boolean") {
+    throw new HttpsError("invalid-argument", "Gecersiz takip bilgisi.");
+  }
+
+  const sellerRef = db.collection("users").doc(sellerId);
+  const followerRef = sellerRef.collection("followers").doc(followerId);
+  await db.runTransaction(async (transaction) => {
+    const [sellerSnapshot, followerSnapshot] = await Promise.all([
+      transaction.get(sellerRef),
+      transaction.get(followerRef),
+    ]);
+    if (!sellerSnapshot.exists) {
+      throw new HttpsError("not-found", "Satici bulunamadi.");
+    }
+
+    const isFollowing = followerSnapshot.exists;
+    if (following === isFollowing) return;
+    const currentCount = Number(sellerSnapshot.data()?.followerCount) || 0;
+    transaction.set(sellerRef, {
+      followerCount: Math.max(0, currentCount + (following ? 1 : -1)),
+    }, { merge: true });
+    if (following) {
+      transaction.set(followerRef, {
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      transaction.delete(followerRef);
+    }
+  });
+
+  return { following };
+});
+
+exports.markListingSold = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const sellerId = request.auth.uid;
+  const listingId = sanitizeListingId(request.data?.listingId);
+  const buyerId = String(request.data?.buyerId || "").trim();
+  if (!listingId || !buyerId || buyerId.length > 128 || buyerId.includes("/") ||
+      buyerId === sellerId) {
+    throw new HttpsError("invalid-argument", "Gecersiz satis bilgisi.");
+  }
+
+  const listingRef = db.collection("listings").doc(listingId);
+  const sellerRef = db.collection("users").doc(sellerId);
+  const buyerRef = db.collection("users").doc(buyerId);
+  const permissionRef = sellerRef.collection("review_permissions").doc(buyerId);
+  const result = await db.runTransaction(async (transaction) => {
+    const [listingSnapshot, sellerSnapshot, buyerSnapshot, permissionSnapshot] =
+      await Promise.all([
+        transaction.get(listingRef),
+        transaction.get(sellerRef),
+        transaction.get(buyerRef),
+        transaction.get(permissionRef),
+      ]);
+    if (!listingSnapshot.exists || listingSnapshot.data()?.sellerId !== sellerId) {
+      throw new HttpsError("permission-denied", "Bu ilana erisiminiz yok.");
+    }
+    if (!sellerSnapshot.exists || !buyerSnapshot.exists) {
+      throw new HttpsError("not-found", "Satici veya alici bulunamadi.");
+    }
+    if (permissionSnapshot.exists) {
+      if (permissionSnapshot.data()?.listingId !== listingId) {
+        throw new HttpsError("already-exists", "Bu alici icin yorum hakki zaten verildi.");
+      }
+      return {
+        sellerName: boundedString(sellerSnapshot.data()?.name, 120) || "Satici",
+        listingTitle: boundedString(listingSnapshot.data()?.title, 150),
+      };
+    }
+
+    const listing = listingSnapshot.data() || {};
+    transaction.set(permissionRef, {
+      listingId,
+      listingTitle: boundedString(listing.title, 150),
+      grantedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    transaction.set(sellerRef, {
+      soldCount: admin.firestore.FieldValue.increment(1),
+    }, { merge: true });
+    return {
+      sellerName: boundedString(sellerSnapshot.data()?.name, 120) || "Satici",
+      listingTitle: boundedString(listing.title, 150),
+    };
+  });
+
+  return result;
+});
+
+exports.aggregateSellerReview = onDocumentCreated({
+  document: "users/{sellerId}/reviews/{reviewId}",
+  region: "europe-west1",
+}, async (event) => {
+  const review = event.data?.data();
+  const rating = Number(review?.rating);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) return;
+
+  const sellerId = event.params.sellerId;
+  const reviewId = event.params.reviewId;
+  const sellerRef = db.collection("users").doc(sellerId);
+  const aggregationRef = db.collection("seller_review_aggregations")
+    .doc(sha256(`${sellerId}:${reviewId}`));
+  await db.runTransaction(async (transaction) => {
+    const [sellerSnapshot, aggregationSnapshot] = await Promise.all([
+      transaction.get(sellerRef),
+      transaction.get(aggregationRef),
+    ]);
+    if (!sellerSnapshot.exists || aggregationSnapshot.exists) return;
+
+    const ratingCountField = `ratingCount${Math.round(rating)}`;
+    const seller = sellerSnapshot.data() || {};
+    const currentCount = Number(seller[ratingCountField]) || 0;
+    const totalReviewCount = Number(seller.totalReviewCount) || 0;
+    const totalRatingScore = Number(seller.totalRatingScore) || 0;
+    transaction.set(sellerRef, {
+      [ratingCountField]: currentCount + 1,
+      totalReviewCount: totalReviewCount + 1,
+      totalRatingScore: totalRatingScore + rating,
+    }, { merge: true });
+    transaction.create(aggregationRef, {
+      sellerId,
+      reviewId,
+      rating,
+      aggregatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+});
 
 const chatRiskPatterns = {
   paymentKeyword: /\b(iban|havale|eft)\b/i,
@@ -64,6 +612,67 @@ function sanitizeListingId(raw) {
 
 function sha256(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+async function getAdMobVerifierKey(keyId, forceRefresh = false) {
+  if (forceRefresh || Date.now() >= admobVerifierKeysCache.expiresAt) {
+    const response = await fetch("https://www.gstatic.com/admob/reward/verifier-keys.json", {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      throw new Error(`AdMob verifier key request failed (${response.status}).`);
+    }
+    const payload = await response.json();
+    const keys = new Map(
+      (Array.isArray(payload.keys) ? payload.keys : [])
+        .filter((entry) => Number.isSafeInteger(Number(entry.keyId)) && typeof entry.pem === "string")
+        .map((entry) => [String(entry.keyId), entry.pem]),
+    );
+    if (keys.size === 0) {
+      throw new Error("AdMob verifier key response contained no usable keys.");
+    }
+    admobVerifierKeysCache = {
+      expiresAt: Date.now() + 6 * 60 * 60 * 1000,
+      keys,
+    };
+  }
+  return admobVerifierKeysCache.keys.get(String(keyId)) || null;
+}
+
+function verifyAdMobRewardedCallback(rawQuery, params, publicKey) {
+  const signatureIndex = rawQuery.lastIndexOf("&signature=");
+  const keyIdIndex = rawQuery.lastIndexOf("&key_id=");
+  if (signatureIndex < 0 || keyIdIndex <= signatureIndex) {
+    return false;
+  }
+
+  const signature = params.get("signature");
+  const keyId = params.get("key_id");
+  if (
+    !signature ||
+    !keyId ||
+    params.getAll("signature").length !== 1 ||
+    params.getAll("key_id").length !== 1 ||
+    !rawQuery.slice(signatureIndex, keyIdIndex).startsWith("&signature=") ||
+    rawQuery.slice(keyIdIndex + "&key_id=".length).includes("&")
+  ) {
+    return false;
+  }
+
+  const signatureBytes = Buffer.from(signature, "base64url");
+  if (signatureBytes.length === 0) {
+    return false;
+  }
+  try {
+    return crypto.verify(
+      "sha256",
+      Buffer.from(rawQuery.slice(0, signatureIndex), "utf8"),
+      publicKey,
+      signatureBytes,
+    );
+  } catch {
+    return false;
+  }
 }
 
 function analyzeChatRisk(text) {
@@ -347,6 +956,265 @@ function getTransporter() {
   });
 }
 
+function normalizeSupportRequest(data) {
+  const input = data && typeof data === "object" ? data : {};
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const email = typeof input.email === "string" ? input.email.trim() : "";
+  const topic = typeof input.topic === "string" ? input.topic.trim() : "";
+  const message = typeof input.message === "string" ? input.message.trim() : "";
+
+  if (
+    name.length < 2 || name.length > 120 ||
+    email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+    topic.length < 2 || topic.length > 120 ||
+    message.length < 5 || message.length > 5000
+  ) {
+    return null;
+  }
+  return {name, email, topic, message};
+}
+
+async function enforceSupportRequestRateLimit(ipAddress) {
+  const normalizedIp = String(ipAddress || "").trim();
+  if (!normalizedIp) {
+    throw new HttpsError("failed-precondition", "Request source could not be verified.");
+  }
+
+  const windowKey = new Date().toISOString().slice(0, 13);
+  const rateLimitRef = db.collection("support_request_limits").doc(sha256(normalizedIp));
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(rateLimitRef);
+    const data = snapshot.data() || {};
+    const requestCount = data.windowKey === windowKey
+      ? Number(data.requestCount) || 0
+      : 0;
+    if (requestCount >= 5) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "Too many support requests. Please try again later.",
+      );
+    }
+    transaction.set(rateLimitRef, {
+      windowKey,
+      requestCount: requestCount + 1,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+async function deliverSupportRequestEmail(supportRequest, requestId) {
+  const transporter = getTransporter();
+  if (!transporter) return false;
+
+  const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[character]));
+  await transporter.sendMail({
+    from: '"Kisiden Destek" <info@kisiden.com>',
+    to: "info@kisiden.com",
+    replyTo: supportRequest.email,
+    subject: `[Bize Ulaşın] ${supportRequest.topic}`,
+    text: `Talep No: ${requestId}\nAd: ${supportRequest.name}\nE-posta: ${supportRequest.email}\nKonu: ${supportRequest.topic}\n\n${supportRequest.message}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#17233d">
+        <h2>Yeni Kişiden Bize Ulaşın talebi</h2>
+        <p><b>Talep No:</b> ${escapeHtml(requestId)}</p>
+        <p><b>Ad:</b> ${escapeHtml(supportRequest.name)}</p>
+        <p><b>E-posta:</b> ${escapeHtml(supportRequest.email)}</p>
+        <p><b>Konu:</b> ${escapeHtml(supportRequest.topic)}</p>
+        <hr>
+        <p style="white-space:pre-wrap">${escapeHtml(supportRequest.message)}</p>
+      </div>
+    `,
+  });
+  return true;
+}
+
+async function createContactRequest(supportRequest, ipAddress) {
+  await enforceSupportRequestRateLimit(ipAddress);
+
+  const requestRef = db.collection("contact_requests").doc();
+  await requestRef.set({
+    name: supportRequest.name,
+    email: supportRequest.email,
+    topic: supportRequest.topic,
+    message: supportRequest.message,
+    source: "contact_us",
+    status: "open",
+    notificationEmailStatus: "pending",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  let notificationEmailStatus = "sent";
+  try {
+    const sent = await deliverSupportRequestEmail(
+      supportRequest,
+      requestRef.id,
+    );
+    if (!sent) notificationEmailStatus = "unconfigured";
+  } catch (error) {
+    notificationEmailStatus = "failed";
+    logger.error("Contact request notification email failed", {
+      requestId: requestRef.id,
+      error,
+    });
+  }
+
+  if (notificationEmailStatus !== "sent") {
+    try {
+      await requestRef.update({
+        notificationEmailStatus,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      logger.error("Contact request notification status update failed", {
+        requestId: requestRef.id,
+        error,
+      });
+    }
+  }
+  return requestRef.id;
+}
+
+exports.submitSupportRequest = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+  secrets: [resendApiKey],
+}, async (request) => {
+  const supportRequest = normalizeSupportRequest(request.data);
+  if (!supportRequest) {
+    throw new HttpsError("invalid-argument", "Invalid support request.");
+  }
+
+  try {
+    const requestId = await createContactRequest(
+      supportRequest,
+      request.rawRequest.ip,
+    );
+    return {success: true, requestId};
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Contact request could not be stored", error);
+    throw new HttpsError("internal", "Unable to send support request.");
+  }
+});
+
+exports.replyToContactRequest = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+  secrets: [resendApiKey],
+}, async (request) => {
+  if (!request.auth?.uid || !isAdminRequest(request)) {
+    throw new HttpsError("permission-denied", "Admin access required.");
+  }
+
+  const requestId = String(request.data?.requestId || "").trim();
+  const message = typeof request.data?.message === "string"
+    ? request.data.message.trim()
+    : "";
+  if (
+    !/^[A-Za-z0-9_-]{20,128}$/.test(requestId) ||
+    message.length < 1 ||
+    message.length > 5000
+  ) {
+    throw new HttpsError("invalid-argument", "Invalid contact request reply.");
+  }
+
+  const requestRef = db.collection("contact_requests").doc(requestId);
+  const requestSnapshot = await requestRef.get();
+  if (!requestSnapshot.exists) {
+    throw new HttpsError("not-found", "Contact request not found.");
+  }
+
+  const supportRequest = requestSnapshot.data() || {};
+  const email = String(supportRequest.email || "").trim();
+  const topic = String(supportRequest.topic || "Bize Ulaşın").trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpsError("failed-precondition", "Contact email is invalid.");
+  }
+
+  const replyRef = requestRef.collection("replies").doc();
+  await replyRef.set({
+    message,
+    senderId: request.auth.uid,
+    status: "sending",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  try {
+    const transporter = getTransporter();
+    if (!transporter) {
+      throw new HttpsError("unavailable", "Email service is not configured.");
+    }
+    const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[character]));
+    await transporter.sendMail({
+      from: '"Kisiden Destek" <info@kisiden.com>',
+      to: email,
+      replyTo: "info@kisiden.com",
+      subject: `[Kişiden Destek] ${topic}`,
+      text: `Merhaba ${supportRequest.name || ""},\n\n${message}\n\nÖnceki talebiniz: ${supportRequest.message || ""}\n\nKişiden Destek`,
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#17233d">
+          <h2>Kişiden Destek yanıtı</h2>
+          <p>Merhaba ${escapeHtml(String(supportRequest.name || ""))},</p>
+          <p style="white-space:pre-wrap">${escapeHtml(message)}</p>
+          <hr>
+          <p><b>Önceki talebiniz:</b></p>
+          <p style="white-space:pre-wrap">${escapeHtml(String(supportRequest.message || ""))}</p>
+          <p>Kişiden Destek</p>
+        </div>
+      `,
+    });
+
+  } catch (error) {
+    try {
+      await replyRef.update({
+        status: "failed",
+        failureCode: error instanceof HttpsError ? error.code : "email-failed",
+      });
+    } catch (statusError) {
+      logger.error("Contact request reply status update failed", {
+        requestId,
+        error: statusError,
+      });
+    }
+    if (error instanceof HttpsError) throw error;
+    logger.error("Contact request reply email failed", {requestId, error});
+    throw new HttpsError("internal", "Unable to send contact request reply.");
+  }
+
+  try {
+    const batch = db.batch();
+    batch.update(replyRef, {
+      status: "sent",
+      sentAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    batch.update(requestRef, {
+      status: "answered",
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastReplyAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+  } catch (error) {
+    logger.error("Contact request reply sent but status update failed", {
+      requestId,
+      error,
+    });
+  }
+  return {success: true};
+});
+
 exports.supportRequestEmail = onRequest({
   region: "europe-west1",
   secrets: [resendApiKey],
@@ -375,10 +1243,6 @@ exports.supportRequestEmail = onRequest({
   }
 
   const body = request.body || {};
-  const name = String(body.name || "").trim();
-  const email = String(body.email || "").trim();
-  const topic = String(body.topic || "Genel destek").trim();
-  const message = String(body.message || "").trim();
   const website = String(body.website || "").trim();
 
   // Honeypot alanı botların formu kötüye kullanmasını engeller.
@@ -386,49 +1250,21 @@ exports.supportRequestEmail = onRequest({
     response.status(204).send("");
     return;
   }
-  if (
-    name.length < 2 || name.length > 120 ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-    topic.length < 2 || topic.length > 120 ||
-    message.length < 5 || message.length > 5000
-  ) {
+  const supportRequest = normalizeSupportRequest(body);
+  if (!supportRequest) {
     response.status(400).json({error: "Invalid support request"});
     return;
   }
 
-  const transporter = getTransporter();
-  if (!transporter) {
-    response.status(503).json({error: "Email service is not configured"});
-    return;
-  }
-
   try {
-    const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    }[character]));
-    await transporter.sendMail({
-      from: '"Kisiden Destek" <info@kisiden.com>',
-      to: "info@kisiden.com",
-      replyTo: email,
-      subject: `[Destek] ${topic}`,
-      text: `Ad: ${name}\nE-posta: ${email}\nKonu: ${topic}\n\n${message}`,
-      html: `
-        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#17233d">
-          <h2>Yeni Kisiden destek talebi</h2>
-          <p><b>Ad:</b> ${escapeHtml(name)}</p>
-          <p><b>E-posta:</b> ${escapeHtml(email)}</p>
-          <p><b>Konu:</b> ${escapeHtml(topic)}</p>
-          <hr>
-          <p style="white-space:pre-wrap">${escapeHtml(message)}</p>
-        </div>
-      `,
-    });
-    response.status(200).json({success: true});
+    const requestId = await createContactRequest(supportRequest, request.ip);
+    response.status(200).json({success: true, requestId});
   } catch (error) {
+    if (error instanceof HttpsError) {
+      const status = error.code === "resource-exhausted" ? 429 : 503;
+      response.status(status).json({error: error.code});
+      return;
+    }
     logger.error("Support request email failed", error);
     response.status(500).json({error: "Unable to send support request"});
   }
@@ -1000,7 +1836,7 @@ exports.checkListingExpirations = onSchedule({
       const autoRenew = listing.autoRenew === true;
 
       if (hasListingRightExpiry) {
-        batch.update(doc.reference, {
+        batch.update(doc.ref, {
           status: 'passive',
           listingRightExpiresAt: admin.firestore.FieldValue.delete(),
           listingRightSource: admin.firestore.FieldValue.delete(),
@@ -1011,13 +1847,13 @@ exports.checkListingExpirations = onSchedule({
       }
 
       if (autoRenew) {
-        batch.update(doc.reference, {
+        batch.update(doc.ref, {
           createdAt: admin.firestore.FieldValue.serverTimestamp()
         });
         renewedCount++;
         notificationPromises.push(sendNotification(sellerId, 'İlanınız Yenilendi', `"${title}" başlıklı ilanınızın 30 günlük süresi dolduğu için otomatik olarak yeniden yayına alındı.`, 'listing', doc.id));
       } else {
-        batch.update(doc.reference, {
+        batch.update(doc.ref, {
           status: 'passive'
         });
         expiredCount++;
@@ -1050,6 +1886,69 @@ async function sendNotification(userId, title, message, type = 'general', target
     'source': 'system',
   });
 }
+
+exports.notifyInterestedBuyersAfterListingTransfer = onDocumentUpdated(
+  "listing_transfers/{transferId}",
+  async (event) => {
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    if (!before || !after || before.status !== "pending" || after.status !== "accepted") {
+      return null;
+    }
+
+    const listingId = String(after.listingId || "");
+    const listingSnapshot = await db.collection("listings").doc(listingId).get();
+    if (!listingSnapshot.exists || listingSnapshot.data()?.sellerId !== after.receiverId) {
+      return null;
+    }
+
+    const listing = listingSnapshot.data() || {};
+    const interestedUserIds = new Set(
+      Array.isArray(listing.favoritedBy) ? listing.favoritedBy.filter((id) => typeof id === "string") : [],
+    );
+    const questions = await db.collection("listings").doc(listingId)
+      .collection("questions").limit(100).get();
+    for (const question of questions.docs) {
+      const userId = question.data().userId;
+      if (typeof userId === "string") interestedUserIds.add(userId);
+    }
+    interestedUserIds.delete(after.senderId);
+    interestedUserIds.delete(after.receiverId);
+
+    const recipientIds = [...interestedUserIds].slice(0, 200);
+    if (recipientIds.length === 0) return null;
+    const userSnapshots = await db.getAll(
+      ...recipientIds.map((userId) => db.collection("users").doc(userId)),
+    );
+    const titleByLanguage = {
+      tr: "İlanın yeni satıcısı var",
+      en: "This listing has a new seller",
+      ar: "أصبح للإعلان بائع جديد",
+    };
+    const messageByLanguage = {
+      tr: `"${String(listing.title || after.listingTitle || "").slice(0, 150)}" ilanı artık başka bir kullanıcı tarafından yönetiliyor. İlgileniyorsanız ilanı açıp yeni satıcıya mesaj gönderebilirsiniz.`,
+      en: `"${String(listing.title || after.listingTitle || "").slice(0, 150)}" is now managed by another user. Open the listing if you would like to contact the new seller.`,
+      ar: `أصبح الإعلان "${String(listing.title || after.listingTitle || "").slice(0, 150)}" لدى بائع جديد. افتحه إذا كنت ترغب في التواصل معه.`,
+    };
+    const batch = db.batch();
+    userSnapshots.forEach((userSnapshot) => {
+      if (!userSnapshot.exists) return;
+      const language = String(userSnapshot.data()?.languageCode || "tr");
+      const notificationRef = userSnapshot.ref.collection("notifications").doc();
+      batch.set(notificationRef, {
+        title: titleByLanguage[language] || titleByLanguage.tr,
+        message: messageByLanguage[language] || messageByLanguage.tr,
+        isRead: false,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        type: "listing",
+        targetId: listingId,
+        source: "listing_event",
+      });
+    });
+    await batch.commit();
+    return null;
+  },
+);
 
 // --- YENİ: İLAN SİLİNDİĞİNDE STORAGE'DAKİ RESİMLERİ OTOMATİK TEMİZLEYEN GÖREV ---
 // Veritabanından (Firestore) bir ilan silindiği an tetiklenir ve o ilana ait tüm fotoğrafları Storage'dan siler.
@@ -1148,6 +2047,7 @@ exports.sendPushNotification = onDocumentCreated({
           data: {
             type: notificationData.type || "general",
             targetId: notificationData.targetId || "",
+            messageId: notificationData.messageId || "",
             imageUrl: notificationData.imageUrl || "",
             click_action: "FLUTTER_NOTIFICATION_CLICK"
           },
@@ -1159,14 +2059,17 @@ exports.sendPushNotification = onDocumentCreated({
 
       // --- KULLANICIYA E-POSTA İLE BİLDİRİM GÖNDERME ---
       // Eğer kullanıcı e-posta bildirimlerini kapatmamışsa (false değilse) gönder
-      if (user.email && user.email.includes("@") && user.emailNotificationsEnabled !== false) {
+      if (notificationData.type !== "chat" &&
+          user.email && user.email.includes("@") &&
+          user.emailNotificationsEnabled !== false) {
         const transporter = getTransporter();
         let actionButton = "";
-        if (notificationData.type === "listing" && notificationData.targetId) {
-          const listingUrl = `${DOMAIN}/ilan?id=${notificationData.targetId}`;
+        const safeTargetId = sanitizeListingId(notificationData.targetId);
+        if (notificationData.type === "listing" && safeTargetId) {
+          const listingUrl = `${DOMAIN}/ilan?id=${encodeURIComponent(safeTargetId)}`;
           actionButton = `
             <div style="margin-top: 30px; text-align: center;">
-              <a href="${listingUrl}" style="background-color: #1a73e8; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">İlanı Görüntüle</a>
+              <a href="${escapeHtml(listingUrl)}" style="background-color: #1a73e8; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">İlanı Görüntüle</a>
             </div>
           `;
         }
@@ -1175,24 +2078,36 @@ exports.sendPushNotification = onDocumentCreated({
         if (notificationData.reason) {
           reasonBlock = `
             <div style="margin: 20px 0; padding: 15px; background-color: #ffebee; border-left: 4px solid #f44336; border-radius: 4px;">
-              <p style="margin: 0; color: #d32f2f; font-size: 14px;"><strong>İşlem Detayı/Nedeni:</strong><br>${notificationData.reason}</p>
+              <p style="margin: 0; color: #d32f2f; font-size: 14px;"><strong>İşlem Detayı/Nedeni:</strong><br>${escapeHtml(notificationData.reason)}</p>
             </div>
           `;
         }
 
         let imageBlock = "";
         if (notificationData.imageUrl) {
-          imageBlock = `
-            <div style="margin: 18px 0 12px;">
-              <img src="${notificationData.imageUrl}" alt="Bildirim görseli" style="width:100%; max-height:260px; object-fit:cover; border-radius:10px; border:1px solid #eeeeee;" />
-            </div>
-          `;
+          try {
+            const imageUrl = new URL(String(notificationData.imageUrl));
+            if (imageUrl.protocol === "https:") {
+              imageBlock = `
+                <div style="margin: 18px 0 12px;">
+                  <img src="${escapeHtml(imageUrl.toString())}" alt="Bildirim görseli" style="width:100%; max-height:260px; object-fit:cover; border-radius:10px; border:1px solid #eeeeee;" />
+                </div>
+              `;
+            }
+          } catch (error) {
+            logger.warn("Ignoring invalid notification image URL", error?.message || error);
+          }
         }
 
+        const emailName = escapeHtml(user.name || "Kullanıcı");
+        const emailTitle = escapeHtml(notificationData.title || "Yeni Bildirim");
+        const emailMessage = escapeHtml(notificationData.message || "Uygulamada yeni bir bildiriminiz var.");
         const mailOptions = {
           from: '"Kişiden" <info@kisiden.com>',
           to: user.email,
-          subject: notificationData.title || "Kişiden'den Yeni Bildirim",
+          subject: String(notificationData.title || "Kişiden'den Yeni Bildirim")
+            .replace(/[\r\n]+/g, " ")
+            .slice(0, 120),
           html: `
             <div style="background-color: #f4f6f8; padding: 30px 10px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333;">
               <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
@@ -1201,9 +2116,9 @@ exports.sendPushNotification = onDocumentCreated({
                   <h1 style="color: #ffffff; margin: 0; font-size: 26px; letter-spacing: 1px; display: inline-block; vertical-align: middle;">Kişiden</h1>
                 </div>
                 <div style="padding: 35px 30px;">
-                  <p style="font-size: 16px; margin-top: 0;">Merhaba <b>${user.name || 'Kullanıcı'}</b>,</p>
-                  <h3 style="color: #1a73e8; margin-top: 25px; margin-bottom: 10px; font-size: 18px;">${notificationData.title || "Yeni Bildirim"}</h3>
-                  <p style="font-size: 15px; color: #555; margin-bottom: 30px;">${notificationData.message || "Uygulamada yeni bir bildiriminiz var."}</p>
+                  <p style="font-size: 16px; margin-top: 0;">Merhaba <b>${emailName}</b>,</p>
+                  <h3 style="color: #1a73e8; margin-top: 25px; margin-bottom: 10px; font-size: 18px;">${emailTitle}</h3>
+                  <p style="font-size: 15px; color: #555; margin-bottom: 30px;">${emailMessage}</p>
                   ${imageBlock}
                   ${reasonBlock}
                   ${actionButton}
@@ -1254,17 +2169,22 @@ exports.sendChatPushNotification = onDocumentCreated({
       const userDoc = await db.collection("users").doc(receiverId).get();
       if (userDoc.exists) {
         const receiverUser = userDoc.data();
-        
-        if (receiverUser.fcmToken) {
-          const payload = {
-            notification: { title: messageData.senderName || "Yeni Mesaj", body: messageData.message || "Size bir mesaj gönderdi." },
-            android: { priority: "high", notification: { sound: "default" } },
-            apns: { payload: { aps: { sound: "default" } } },
-            data: { type: "chat", targetId: chatId, click_action: "FLUTTER_NOTIFICATION_CLICK" },
-            token: receiverUser.fcmToken
-          };
-          await admin.messaging().send(payload);
-        }
+        const messageId = event.params.messageId;
+        await db.collection("users")
+          .doc(receiverId)
+          .collection("notifications")
+          .doc(`chat_${chatId}_${messageId}`)
+          .set({
+            type: "chat",
+            source: "chat_event",
+            targetId: chatId,
+            messageId,
+            title: messageData.senderName || "Yeni Mesaj",
+            message: messageData.message || "Size bir mesaj gönderdi.",
+            senderId: messageData.senderId || "",
+            isRead: false,
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          });
 
         // --- KARŞI TARAFA YENİ MESAJI E-POSTA İLE DE BİLDİRME ---
         // Karşı taraf e-posta bildirimlerini kapatmamışsa (false değilse) gönder
@@ -1543,7 +2463,326 @@ exports.checkChatRestrictions = onCall({
   };
 });
 
-// --- YENI: UCRETLI/REKLAM KAYNAKLI ILAN HAKKI TANIMLAMA (GUVENLI CALLABLE) ---
+exports.startListingRewardChallenge = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const uid = request.auth.uid;
+  const adUnitId = String(request.data?.adUnitId || "").trim();
+  const settingsSnap = await db.collection("settings").doc("listing_rights").get();
+  const settings = settingsSnap.exists ? (settingsSnap.data() || {}) : {};
+  if (settings.rewardedAdsEnabled === false) {
+    throw new HttpsError("failed-precondition", "Odullu reklamlar su anda kapali.");
+  }
+  const allowedAdUnits = new Set([
+    String(settings.rewardedAndroidAdUnitId || DEFAULT_REWARDED_ANDROID_AD_UNIT_ID).trim(),
+    String(settings.rewardedIosAdUnitId || DEFAULT_REWARDED_IOS_AD_UNIT_ID).trim(),
+  ].filter(Boolean));
+  if (!adUnitId || !allowedAdUnits.has(adUnitId)) {
+    throw new HttpsError("permission-denied", "Gecersiz odullu reklam birimi.");
+  }
+
+  const userRef = db.collection("users").doc(uid);
+  const challengeId = crypto.randomBytes(24).toString("hex");
+  const challengeRef = db.collection("listing_reward_challenges").doc(challengeId);
+  const now = new Date();
+  const dailyMax = Math.max(1, Math.min(50, Number(settings.rewardDailyMax) || 3));
+  const cooldownMinutes = Math.max(1, Math.min(1440, Number(settings.rewardCooldownMinutes) || 1));
+  const dateKey = now.toISOString().slice(0, 10);
+
+  await db.runTransaction(async (tx) => {
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists) {
+      throw new HttpsError("not-found", "Kullanici bulunamadi.");
+    }
+    const user = userSnap.data() || {};
+    const lastChallengeAt = user.lastRewardChallengeAt?.toDate?.() || null;
+    if (lastChallengeAt && now.getTime() - lastChallengeAt.getTime() < 5000) {
+      throw new HttpsError("resource-exhausted", "Cok hizli istek atildi. Lutfen tekrar deneyin.");
+    }
+    const lastListingGrantAt = user.lastListingRightsGrantAt?.toDate?.() || null;
+    if (lastListingGrantAt && now.getTime() - lastListingGrantAt.getTime() < 5000) {
+      throw new HttpsError("resource-exhausted", "Cok hizli istek atildi. Lutfen tekrar deneyin.");
+    }
+
+    const dailyCount = user.rewardAdDailyDate === dateKey
+      ? Number(user.rewardAdDailyCount) || 0
+      : 0;
+    if (dailyCount >= dailyMax) {
+      throw new HttpsError("resource-exhausted", `Gunluk reklam hakkinizi doldurdunuz (${dailyMax}).`);
+    }
+    const lastGrantAt = user.rewardAdLastGrantAt?.toDate?.() || null;
+    if (lastGrantAt && now.getTime() - lastGrantAt.getTime() < cooldownMinutes * 60 * 1000) {
+      throw new HttpsError("resource-exhausted", `Yeni reklam hakki icin ${cooldownMinutes} dakika bekleyin.`);
+    }
+
+    tx.set(challengeRef, {
+      userId: uid,
+      challengeId,
+      adUnitId,
+      status: "pending",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt: admin.firestore.Timestamp.fromDate(new Date(now.getTime() + 24 * 60 * 60 * 1000)),
+    });
+    tx.set(userRef, {
+      lastRewardChallengeAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+
+  return { challengeId, customData: challengeId };
+});
+
+exports.cancelListingRewardChallenge = onCall({
+  region: "europe-west1",
+  enforceAppCheck: true,
+}, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
+  }
+
+  const challengeId = String(request.data?.challengeId || "").trim();
+  if (!/^[a-f0-9]{48}$/.test(challengeId)) {
+    throw new HttpsError("invalid-argument", "Gecersiz reklam oturumu.");
+  }
+
+  const challenges = db.collection("listing_reward_challenges");
+  const challengeRef = challenges.doc(challengeId);
+  const legacyChallengeRef = challenges.doc(request.auth.uid);
+  await db.runTransaction(async (tx) => {
+    const [challengeSnap, legacyChallengeSnap] = await Promise.all([
+      tx.get(challengeRef),
+      tx.get(legacyChallengeRef),
+    ]);
+    const activeChallengeRef = challengeSnap.exists
+      ? challengeRef
+      : legacyChallengeRef;
+    const activeChallengeSnap = challengeSnap.exists
+      ? challengeSnap
+      : legacyChallengeSnap;
+    if (!activeChallengeSnap.exists) return;
+
+    const challenge = activeChallengeSnap.data() || {};
+    if (
+      challenge.userId === request.auth.uid &&
+      challenge.challengeId === challengeId &&
+      challenge.status === "pending"
+    ) {
+      tx.delete(activeChallengeRef);
+    }
+  });
+
+  return { success: true };
+});
+
+exports.cleanupExpiredListingRewardChallenges = onSchedule({
+  schedule: "every 24 hours",
+  region: "europe-west1",
+  timeZone: "Etc/UTC",
+}, async () => {
+  const now = admin.firestore.Timestamp.now();
+  let deletedCount = 0;
+  while (deletedCount < 5000) {
+    const expiredChallenges = await db.collection("listing_reward_challenges")
+      .where("expiresAt", "<=", now)
+      .orderBy("expiresAt")
+      .limit(500)
+      .get();
+    if (expiredChallenges.empty) break;
+
+    const batch = db.batch();
+    expiredChallenges.docs.forEach((challenge) => batch.delete(challenge.ref));
+    await batch.commit();
+    deletedCount += expiredChallenges.size;
+    if (expiredChallenges.size < 500) break;
+  }
+  logger.info("Expired listing reward challenges cleaned up", { deletedCount });
+});
+
+exports.admobRewardedSsv = onRequest({
+  region: "europe-west1",
+  cors: false,
+}, async (request, response) => {
+  if (request.method !== "GET") {
+    response.status(405).send("Method not allowed");
+    return;
+  }
+
+  const rawQuery = String(request.originalUrl || "").split("?").slice(1).join("?");
+  const params = new URLSearchParams(rawQuery);
+  const keyId = params.get("key_id");
+  const signature = params.get("signature");
+  if (!keyId || !signature) {
+    response.status(400).send("Missing signature parameters");
+    return;
+  }
+
+  let publicKey;
+  try {
+    publicKey = await getAdMobVerifierKey(keyId);
+    if (!publicKey) {
+      publicKey = await getAdMobVerifierKey(keyId, true);
+    }
+  } catch (error) {
+    logger.error("Unable to retrieve AdMob verifier keys", error);
+    response.status(503).send("Verifier keys unavailable");
+    return;
+  }
+  if (!publicKey || !verifyAdMobRewardedCallback(rawQuery, params, publicKey)) {
+    response.status(403).send("Invalid AdMob signature");
+    return;
+  }
+
+  const uid = String(params.get("user_id") || "").trim();
+  const challengeId = String(params.get("custom_data") || "").trim();
+  const adUnitId = String(params.get("ad_unit") || "").trim();
+  const transactionId = String(params.get("transaction_id") || "").trim();
+  if (
+    !uid ||
+    uid.length > 128 ||
+    uid.includes("/") ||
+    !/^[a-f0-9]{48}$/.test(challengeId) ||
+    !adUnitId ||
+    !transactionId ||
+    transactionId.length > 256
+  ) {
+    logger.warn("Verified AdMob callback is missing required reward fields.");
+    response.status(200).send("Ignored");
+    return;
+  }
+
+  const settingsSnap = await db.collection("settings").doc("listing_rights").get();
+  const settings = settingsSnap.exists ? (settingsSnap.data() || {}) : {};
+  const dailyMax = Math.max(1, Math.min(50, Number(settings.rewardDailyMax) || 3));
+  const cooldownMinutes = Math.max(1, Math.min(1440, Number(settings.rewardCooldownMinutes) || 1));
+  const challengeRef = db.collection("listing_reward_challenges").doc(challengeId);
+  const legacyChallengeRef = db.collection("listing_reward_challenges").doc(uid);
+  const userRef = db.collection("users").doc(uid);
+  const transactionRef = db.collection("admob_reward_transactions").doc(sha256(transactionId));
+  const purchaseRef = db.collection("purchases").doc(`admob_${sha256(transactionId)}`);
+  const now = new Date();
+  const dateKey = now.toISOString().slice(0, 10);
+
+  try {
+    const result = await db.runTransaction(async (tx) => {
+      const [
+        challengeSnap,
+        legacyChallengeSnap,
+        userSnap,
+        transactionSnap,
+      ] = await Promise.all([
+        tx.get(challengeRef),
+        tx.get(legacyChallengeRef),
+        tx.get(userRef),
+        tx.get(transactionRef),
+      ]);
+      if (transactionSnap.exists) {
+        return "duplicate";
+      }
+      const activeChallengeRef = challengeSnap.exists
+        ? challengeRef
+        : legacyChallengeRef;
+      const activeChallengeSnap = challengeSnap.exists
+        ? challengeSnap
+        : legacyChallengeSnap;
+      if (!activeChallengeSnap.exists || !userSnap.exists) {
+        return "invalid";
+      }
+
+      const challenge = activeChallengeSnap.data() || {};
+      const user = userSnap.data() || {};
+      const expiresAt = challenge.expiresAt?.toDate?.();
+      if (
+        challenge.status !== "pending" ||
+        challenge.userId !== uid ||
+        challenge.challengeId !== challengeId ||
+        ![
+          challenge.adUnitId,
+          String(challenge.adUnitId || "").split("/").pop(),
+        ].includes(adUnitId) ||
+        !expiresAt ||
+        expiresAt.getTime() < now.getTime()
+      ) {
+        return "invalid";
+      }
+
+      const dailyCount = user.rewardAdDailyDate === dateKey
+        ? Number(user.rewardAdDailyCount) || 0
+        : 0;
+      if (dailyCount >= dailyMax) {
+        tx.update(activeChallengeRef, { status: "rejected", rejectionReason: "daily_limit" });
+        return "limit";
+      }
+      const lastGrantAt = user.rewardAdLastGrantAt?.toDate?.() || null;
+      if (lastGrantAt && now.getTime() - lastGrantAt.getTime() < cooldownMinutes * 60 * 1000) {
+        tx.update(activeChallengeRef, { status: "rejected", rejectionReason: "cooldown" });
+        return "limit";
+      }
+
+      const lastGenericGrantAt = user.lastListingRightsGrantAt?.toDate?.() || null;
+      if (lastGenericGrantAt && now.getTime() - lastGenericGrantAt.getTime() < 5000) {
+        tx.update(activeChallengeRef, { status: "rejected", rejectionReason: "rate_limit" });
+        return "limit";
+      }
+
+      const proUntil = user.proUntil?.toDate?.() || null;
+      const hasActivePro = !!proUntil && proUntil.getTime() > now.getTime();
+      const proLimit = Number(user.proListingLimit) || 10;
+      const baseLimit = hasActivePro ? Math.max(10, proLimit) : 10;
+      const adminListingLimitRaw = Number(user.adminListingLimit) || 0;
+      const adminExtraListingLimit = Number(user.adminExtraListingLimit) || 0;
+      const derivedExtraFromLimit = adminListingLimitRaw > 0
+        ? Math.max(0, adminListingLimitRaw - baseLimit)
+        : 0;
+      const nextExtraBalance = Math.max(adminExtraListingLimit, derivedExtraFromLimit) + 1;
+      const newTotalLimit = baseLimit + nextExtraBalance;
+
+      tx.set(userRef, {
+        adminListingLimit: newTotalLimit,
+        adminExtraListingLimit: nextExtraBalance,
+        rewardAdDailyDate: dateKey,
+        rewardAdDailyCount: dailyCount + 1,
+        rewardAdLastGrantAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastListingRightsGrantAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      tx.create(transactionRef, {
+        userId: uid,
+        challengeId,
+        adUnitId,
+        transactionId,
+        rewardedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      tx.create(purchaseRef, {
+        userId: uid,
+        userName: user.name || "Isimsiz",
+        userEmail: user.email || "",
+        packageId: "rewarded_ad_1",
+        price: "Rewarded Ad",
+        days: 0,
+        addedListingLimit: 1,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        type: "Reklam Izleme Ilan Hakki",
+        mode: "rewarded_ssv",
+        purchaseId: transactionId,
+        purchasePlatform: "admob",
+        verifiedByServer: true,
+      });
+      tx.delete(activeChallengeRef);
+      return "granted";
+    });
+
+    response.status(200).send(result === "granted" ? "Reward granted" : "Ignored");
+  } catch (error) {
+    logger.error("AdMob rewarded SSV processing failed", error);
+    response.status(500).send("Reward processing failed");
+  }
+});
+
+// --- YENI: UCRETLI ILAN HAKKI TANIMLAMA (GUVENLI CALLABLE) ---
 exports.grantListingRights = onCall({
   region: "europe-west1",
   enforceAppCheck: true,
@@ -1643,11 +2882,6 @@ exports.grantListingRights = onCall({
         throw new HttpsError("invalid-argument", "Desteklenmeyen satin alma platformu.");
       }
     }
-  } else if (mode === "rewarded_1") {
-    grantCount = 1;
-    packageId = "rewarded_ad_1";
-    actionType = "Reklam Izleme Ilan Hakki";
-    priceText = "Rewarded Ad";
   } else {
     throw new HttpsError("invalid-argument", "Gecersiz hak tanimlama modu.");
   }
@@ -1684,27 +2918,6 @@ exports.grantListingRights = onCall({
       }
     }
 
-    if (mode === "rewarded_1") {
-      const dailyMax = Number(listingRightsSettings.rewardDailyMax || 3);
-      const cooldownMinutes = Number(listingRightsSettings.rewardCooldownMinutes || 10);
-      const now = new Date();
-      const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      const dailyDate = user.rewardAdDailyDate || "";
-      const dailyCount = Number(user.rewardAdDailyCount || 0);
-      const lastGrantAt = user.rewardAdLastGrantAt ? user.rewardAdLastGrantAt.toDate() : null;
-
-      if (dailyDate === dateKey && dailyCount >= dailyMax) {
-        throw new HttpsError("resource-exhausted", `Gunluk reklam hakkinizi doldurdunuz (${dailyMax}).` );
-      }
-
-      if (lastGrantAt) {
-        const diffMinutes = (Date.now() - lastGrantAt.getTime()) / 60000;
-        if (diffMinutes < cooldownMinutes) {
-          throw new HttpsError("resource-exhausted", `Yeni reklam hakki icin ${cooldownMinutes} dakika bekleyin.`);
-        }
-      }
-    }
-
     const adminListingLimitRaw = Number(user.adminListingLimit || 0);
     const adminExtraListingLimit = Number(user.adminExtraListingLimit || 0);
     const proLimit = Number(user.proListingLimit || 10);
@@ -1725,18 +2938,6 @@ exports.grantListingRights = onCall({
       lastListingRightsGrantAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    if (mode === "rewarded_1") {
-      const now = new Date();
-      const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      const nextCount = user.rewardAdDailyDate === dateKey
-        ? Number(user.rewardAdDailyCount || 0) + 1
-        : 1;
-
-      updatePayload.rewardAdDailyDate = dateKey;
-      updatePayload.rewardAdDailyCount = nextCount;
-      updatePayload.rewardAdLastGrantAt = admin.firestore.FieldValue.serverTimestamp();
-    }
-
     tx.set(userRef, updatePayload, { merge: true });
     tx.set(purchasesRef, {
       userId: uid,
@@ -1751,7 +2952,7 @@ exports.grantListingRights = onCall({
       mode,
       purchaseId: externalPurchaseId,
       purchasePlatform: purchasePlatform || "",
-      verifiedByServer: mode === "paid_package" ? !!verificationRef : false,
+      verifiedByServer: !!verificationRef,
     });
 
     if (verificationRef) {
@@ -2063,10 +3264,82 @@ exports.activateProPurchase = onCall({
   return { success: true, proUntil: result.proUntil.toISOString() };
 });
 
+async function isAdminUid(userId) {
+  let authUser;
+  try {
+    authUser = await admin.auth().getUser(userId);
+  } catch (error) {
+    if (error?.code === "auth/user-not-found") return false;
+    throw error;
+  }
+  return authUser.customClaims?.admin === true || (
+    authUser.emailVerified === true &&
+    ADMIN_EMAIL_ALLOWLIST.has(String(authUser.email || "").toLowerCase())
+  );
+}
+
+async function canSendListingEvent({ senderId, receiverId, targetId, eventId, isAdmin }) {
+  const listingSnap = await db.collection("listings").doc(targetId).get();
+  if (!listingSnap.exists) return false;
+  if (isAdmin) return true;
+
+  const listing = listingSnap.data() || {};
+  if (
+    listing.sellerId === senderId &&
+    Array.isArray(listing.favoritedBy) &&
+    listing.favoritedBy.includes(receiverId)
+  ) {
+    return true;
+  }
+
+  if (
+    listing.sellerId === senderId &&
+    (await db.collection("users").doc(senderId).collection("followers").doc(receiverId).get()).exists
+  ) {
+    return true;
+  }
+
+  if (eventId) {
+    const transferSnap = await db.collection("listing_transfers").doc(eventId).get();
+    const transfer = transferSnap.exists ? (transferSnap.data() || {}) : {};
+    if (
+      transferSnap.exists &&
+      transfer.listingId === targetId &&
+      transfer.senderId === senderId &&
+      transfer.receiverId === receiverId &&
+      transfer.status === "pending"
+    ) {
+      return true;
+    }
+
+    const questionSnap = await db.collection("listings").doc(targetId)
+      .collection("questions").doc(eventId).get();
+    if (questionSnap.exists) {
+      const question = questionSnap.data() || {};
+      const questionOwnerId = String(question.userId || "");
+      const replies = Array.isArray(question.replies) ? question.replies : [];
+      const hasReplyFromSender = replies.some((reply) =>
+        reply && typeof reply === "object" && reply.userId === senderId
+      );
+      if (
+        (senderId === questionOwnerId && receiverId === listing.sellerId) ||
+        (
+          hasReplyFromSender &&
+          ((senderId === listing.sellerId && receiverId === questionOwnerId) ||
+            (senderId === questionOwnerId && receiverId === listing.sellerId))
+        )
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 exports.sendUserNotification = onCall({
   region: "europe-west1",
 }, async (request) => {
-  if (!request.auth || !request.auth.uid) {
+  if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "Giris yapilmamis.");
   }
 
@@ -2076,13 +3349,24 @@ exports.sendUserNotification = onCall({
   const message = String(request.data?.message || "").trim();
   const type = String(request.data?.type || "general").trim();
   const targetId = String(request.data?.targetId || "").trim();
+  const eventId = String(request.data?.eventId || "").trim();
   const reason = String(request.data?.reason || "").trim();
   const source = String(request.data?.source || "system").trim();
+  const callerIsAdmin = request.auth.token?.admin === true || (
+    request.auth.token?.email_verified === true &&
+    ADMIN_EMAIL_ALLOWLIST.has(String(request.auth.token?.email || "").toLowerCase())
+  );
 
-  if (!receiverId || receiverId.length > 128) {
+  if (
+    !receiverId ||
+    receiverId.length > 128 ||
+    receiverId === senderId ||
+    targetId.length > 128 ||
+    eventId.length > 128
+  ) {
     throw new HttpsError("invalid-argument", "Gecersiz alici bilgisi.");
   }
-  if (!title || title.length > 120 || !message || message.length > 1000) {
+  if (!title || title.length > 120 || !message || message.length > 1000 || reason.length > 1000) {
     throw new HttpsError("invalid-argument", "Bildirim icerigi gecersiz.");
   }
   if (!["general", "chat", "listing", "trade_offer", "review", "ticket"].includes(type)) {
@@ -2092,30 +3376,100 @@ exports.sendUserNotification = onCall({
     throw new HttpsError("permission-denied", "Gecersiz bildirim kaynagi.");
   }
 
-  const senderRef = db.collection("users").doc(senderId);
-  const senderSnap = await senderRef.get();
-  const senderData = senderSnap.exists ? (senderSnap.data() || {}) : {};
-  const lastAt = senderData.lastNotificationSentAt
-    ? senderData.lastNotificationSentAt.toDate()
-    : null;
-  if (lastAt && Date.now() - lastAt.getTime() < 1500) {
-    throw new HttpsError("resource-exhausted", "Cok hizli bildirim gonderimi engellendi.");
+  let authorized = false;
+  if (source === "system") {
+    authorized = callerIsAdmin;
+  } else if (source === "admin_alert") {
+    const receiverIsAdmin = await isAdminUid(receiverId);
+    if (receiverIsAdmin && callerIsAdmin) {
+      authorized = true;
+    } else if (receiverIsAdmin && eventId) {
+      if (type === "ticket") {
+        const ticketSnap = await db.collection("tickets").doc(eventId).get();
+        authorized = ticketSnap.exists &&
+          (ticketSnap.data() || {}).userId === senderId &&
+          eventId === targetId;
+      } else if (type === "listing") {
+        const reportSnap = await db.collection("reports").doc(eventId).get();
+        if (reportSnap.exists) {
+          const report = reportSnap.data() || {};
+          authorized = report.reporterId === senderId && report.listingId === targetId;
+        } else {
+          const listingSnap = await db.collection("listings").doc(targetId).get();
+          authorized = listingSnap.exists &&
+            (listingSnap.data() || {}).sellerId === senderId &&
+            eventId === targetId;
+        }
+      }
+    }
+  } else if (source === "chat_event" && type === "chat" && targetId) {
+    const chatSnap = await db.collection("chats").doc(targetId).get();
+    const participants = chatSnap.exists ? (chatSnap.data() || {}).participants : null;
+    authorized = Array.isArray(participants) &&
+      participants.includes(senderId) &&
+      participants.includes(receiverId);
+  } else if (source === "listing_event" && type === "listing" && targetId) {
+    authorized = await canSendListingEvent({
+      senderId,
+      receiverId,
+      targetId,
+      eventId,
+      isAdmin: callerIsAdmin,
+    });
+  } else if (source === "trade_offer_event" && type === "trade_offer" && eventId) {
+    const offerSnap = await db.collection("trade_offers").doc(eventId).get();
+    const offer = offerSnap.exists ? (offerSnap.data() || {}) : {};
+    const partiesMatch = (
+      offer.senderId === senderId && offer.receiverId === receiverId
+    ) || (
+      offer.senderId === receiverId && offer.receiverId === senderId &&
+      ["accepted", "rejected", "cancelled", "expired"].includes(offer.status)
+    );
+    authorized = offerSnap.exists && partiesMatch &&
+      (targetId === eventId || targetId === offer.receiverListingId);
+  } else if (source === "review_event" && type === "review" && targetId === senderId) {
+    authorized = (
+      await db.collection("users").doc(senderId)
+        .collection("review_permissions").doc(receiverId).get()
+    ).exists;
   }
 
-  await db.collection("users").doc(receiverId).collection("notifications").add({
-    title,
-    message,
-    isRead: false,
-    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    type,
-    targetId,
-    ...(reason ? { reason } : {}),
-    source,
-  });
+  if (!authorized) {
+    throw new HttpsError("permission-denied", "Bu bildirim icin gonderen-alici iliskisi dogrulanamadi.");
+  }
 
-  await senderRef.set({
-    lastNotificationSentAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true });
+  const receiverSnap = await db.collection("users").doc(receiverId).get();
+  if (!receiverSnap.exists) {
+    throw new HttpsError("not-found", "Bildirim alicisi bulunamadi.");
+  }
+
+  const senderRef = db.collection("users").doc(senderId);
+  const notificationRef = db.collection("users").doc(receiverId)
+    .collection("notifications").doc();
+  await db.runTransaction(async (tx) => {
+    const senderSnap = await tx.get(senderRef);
+    if (!senderSnap.exists) {
+      throw new HttpsError("not-found", "Bildirim gondericisi bulunamadi.");
+    }
+    const lastAt = senderSnap.data()?.lastNotificationSentAt?.toDate?.() || null;
+    if (lastAt && Date.now() - lastAt.getTime() < 1500) {
+      throw new HttpsError("resource-exhausted", "Cok hizli bildirim gonderimi engellendi.");
+    }
+
+    tx.create(notificationRef, {
+      title,
+      message,
+      isRead: false,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      type,
+      targetId,
+      ...(reason ? { reason } : {}),
+      source,
+    });
+    tx.set(senderRef, {
+      lastNotificationSentAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
 
   return { success: true };
 });

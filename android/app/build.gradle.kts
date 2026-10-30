@@ -18,7 +18,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.kisidencom.app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = "28.2.13676358"
 
     compileOptions {
@@ -41,7 +41,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -79,6 +79,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.datastore:datastore-core-android:1.1.7")
     implementation("androidx.sqlite:sqlite-framework:2.4.0")
+    implementation("com.google.android.gms:play-services-auth:21.6.0")
     implementation("me.leolin:ShortcutBadger:1.1.22@aar")
 }
 

@@ -139,14 +139,11 @@ class _InboxScreenState extends State<InboxScreen> {
               bool isUnread = unreadBy.contains(currentUserId);
               bool isSelected = selectedChats.contains(chatId);
 
-              return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(otherUserId)
-                    .get(),
+              return FutureBuilder<Map<String, dynamic>?>(
+                future: DatabaseService().getPublicUserProfile(otherUserId),
                 builder: (context, userSnap) {
                   if (!userSnap.hasData) return const SizedBox();
-                  var userData = userSnap.data!.data() as Map<String, dynamic>?;
+                  final userData = userSnap.data;
                   if (userData == null) return const SizedBox();
 
                   bool hasValidImage =

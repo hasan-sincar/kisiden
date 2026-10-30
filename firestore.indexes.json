@@ -1,6 +1,20 @@
 {
   "indexes": [
     {
+      "collectionGroup": "listing_transfers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "receiverId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "listings",
       "queryScope": "COLLECTION",
       "fields": [

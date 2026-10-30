@@ -13,6 +13,7 @@ import 'seller_profile_screen.dart';
 import 'package:flutter/foundation.dart'; // YENİ: Web platform kontrolü için
 import 'package:meta_seo/meta_seo.dart'; // YENİ: SEO Meta etiketleri için
 import '../utils/translations.dart';
+import '../widgets/defect_marker_tools.dart';
 import 'story_share_screen.dart'; // YENİ: Hikaye paylaşım ekranı
 import '../services/viewed_listings_service.dart';
 
@@ -307,12 +308,19 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     };
   }
 
-  void _openFullGallery(List<String> images, int initialIndex) {
+  void _openFullGallery(
+    List<String> images,
+    int initialIndex,
+    List<DefectMarker> defectMarkers,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            FullScreenGallery(images: images, initialIndex: initialIndex),
+        builder: (context) => FullScreenGallery(
+          images: images,
+          initialIndex: initialIndex,
+          defectMarkers: defectMarkers,
+        ),
       ),
     );
   }
@@ -860,6 +868,9 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
               }
             }
             if (allImages.isEmpty) allImages.add('');
+            final defectMarkers = DefectMarker.fromData(
+              listingData['defectMarkers'],
+            ).where((marker) => marker.imageIndex < allImages.length).toList();
 
             Map<String, dynamic> featuresMap = {};
             if (listingData['features'] is Map) {
@@ -939,22 +950,27 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                                 itemCount: allImages.length,
                                 itemBuilder: (context, index) {
                                   String currentImg = allImages[index];
+                                  final imageMarkers = defectMarkers
+                                      .where(
+                                        (marker) => marker.imageIndex == index,
+                                      )
+                                      .toList();
                                   return GestureDetector(
-                                    onTap: () =>
-                                        _openFullGallery(allImages, index),
+                                    onTap: () => _openFullGallery(
+                                      allImages,
+                                      index,
+                                      defectMarkers,
+                                    ),
                                     child: Container(
                                       width: double.infinity,
                                       color: Colors.grey[100],
                                       child: currentImg.isNotEmpty
-                                          ? Image.network(
-                                              currentImg,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (c, e, s) =>
-                                                  const Icon(
-                                                    Icons.image_not_supported,
-                                                    size: 50,
-                                                    color: Colors.grey,
-                                                  ),
+                                          ? DefectMarkerPhoto(
+                                              image: NetworkImage(currentImg),
+                                              fit: imageMarkers.isEmpty
+                                                  ? BoxFit.cover
+                                                  : BoxFit.contain,
+                                              markers: imageMarkers,
                                             )
                                           : const Icon(
                                               Icons.image_not_supported,
@@ -1038,6 +1054,59 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                               _buildDetailRow(tr('listing_date'), dateStr),
                               if (locationText.isNotEmpty)
                                 _buildDetailRow(tr('location'), locationText),
+                              if (listingData['cashOnDeliveryAvailable'] ==
+                                  true) ...[
+                                const SizedBox(height: 14),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.06,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.18,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(
+                                        Icons.local_shipping_outlined,
+                                        color: AppColors.primary,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              tr('cash_on_delivery_badge'),
+                                              style: LocalFonts.poppins(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              tr('cash_on_delivery_notice'),
+                                              style: LocalFonts.poppins(
+                                                fontSize: 11,
+                                                height: 1.4,
+                                                color: Colors.black54,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               if (marka.isNotEmpty)
                                 _buildDetailRow(
                                   tr('brand'),
@@ -2588,11 +2657,13 @@ class _OfferAmountDialogState extends State<_OfferAmountDialog> {
 class FullScreenGallery extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
+  final List<DefectMarker> defectMarkers;
 
   const FullScreenGallery({
     super.key,
     required this.images,
     required this.initialIndex,
+    this.defectMarkers = const <DefectMarker>[],
   });
 
   @override
@@ -2666,14 +2737,18 @@ class _FullScreenGalleryState extends State<FullScreenGallery> {
               boundaryMargin: const EdgeInsets.all(80),
               clipBehavior: Clip.none,
               child: Center(
-                child: Image.network(
-                  widget.images[index],
-                  fit: BoxFit.contain,
-                  width: double.infinity,
-                  errorBuilder: (c, e, s) => const Icon(
-                    Icons.image_not_supported,
-                    color: Colors.white,
-                    size: 50,
+                child: SizedBox.expand(
+                  child: DefectMarkerPhoto(
+                    image: NetworkImage(widget.images[index]),
+                    fit: BoxFit.contain,
+                    errorWidget: const Icon(
+                      Icons.image_not_supported,
+                      color: Colors.white,
+                      size: 50,
+                    ),
+                    markers: widget.defectMarkers
+                        .where((marker) => marker.imageIndex == index)
+                        .toList(),
                   ),
                 ),
               ),

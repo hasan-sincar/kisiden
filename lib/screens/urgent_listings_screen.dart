@@ -8,6 +8,7 @@ import '../utils/translations.dart';
 import '../utils/theme_colors.dart';
 import 'all_listings_screen.dart';
 import 'listing_detail_screen.dart';
+import '../widgets/defect_marker_tools.dart';
 
 class UrgentListingsScreen extends StatelessWidget {
   const UrgentListingsScreen({super.key});
@@ -37,6 +38,7 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
   String? _districtFilter;
   String _neighborhoodFilter = '';
   String _searchFilter = '';
+  bool _isGridView = false;
   Timer? _expiryRefreshTimer;
 
   @override
@@ -61,6 +63,129 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
   void dispose() {
     _expiryRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  int get _activeFilterCount {
+    var count = 0;
+    if (_searchFilter.trim().isNotEmpty) count++;
+    if (_categoryFilter.isNotEmpty) count++;
+    if (_cityFilter != null) count++;
+    if (_districtFilter != null) count++;
+    if (_neighborhoodFilter.trim().isNotEmpty) count++;
+    if (_minPrice != null) count++;
+    if (_maxPrice != null) count++;
+    return count;
+  }
+
+  void _clearUrgentFilters() {
+    setState(() {
+      _searchFilter = '';
+      _categoryFilter = '';
+      _categoryDisplay = '';
+      _minPrice = null;
+      _maxPrice = null;
+      _cityFilter = null;
+      _districtFilter = null;
+      _neighborhoodFilter = '';
+    });
+  }
+
+  Widget _buildOverviewCard(int listingCount) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEF4444), Color(0xFFB91C1C)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withValues(alpha: 0.18),
+            blurRadius: 16,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: const Icon(
+              Icons.campaign_rounded,
+              color: Colors.white,
+              size: 27,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr('urgent_listings_title'),
+                  style: LocalFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  tr(
+                    'urgent_grouped_summary',
+                  ).replaceFirst('%s', listingCount.toString()),
+                  style: LocalFonts.poppins(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            constraints: const BoxConstraints(minWidth: 42),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              listingCount.toString(),
+              textAlign: TextAlign.center,
+              style: LocalFonts.poppins(
+                color: const Color(0xFFB91C1C),
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _activeFilterChip(String label) {
+    return Chip(
+      avatar: const Icon(Icons.check_circle, color: Colors.red, size: 16),
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: LocalFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600),
+      ),
+      backgroundColor: Colors.white,
+      side: BorderSide(color: Colors.red.withValues(alpha: 0.15)),
+      visualDensity: VisualDensity.compact,
+    );
   }
 
   String _normalizeText(String value) {
@@ -186,16 +311,6 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
         : tr('other_category');
   }
 
-  String _leafCategory(String? categoryPath, String? category) {
-    final path = categoryPath?.trim() ?? '';
-    if (path.isNotEmpty) {
-      return path.split(' > ').last.trim();
-    }
-    return (category?.trim().isNotEmpty == true)
-        ? category!.trim()
-        : tr('other_category');
-  }
-
   String _formatPrice(dynamic price) {
     final raw = price?.toString() ?? '0';
     final formatted = raw
@@ -315,9 +430,6 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
     );
   }
 
-  // Kept for compatibility with existing filter state while the filter action
-  // is intentionally hidden from the urgent listings toolbar.
-  // ignore: unused_element
   void _showUrgentControls() {
     final searchController = TextEditingController(text: _searchFilter);
     final neighborhoodController = TextEditingController(
@@ -333,183 +445,295 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.88,
+      ),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
       builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              24,
-              24,
-              24,
-              MediaQuery.viewInsetsOf(context).bottom + 110,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEEEE),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: const Icon(
+                        Icons.tune_rounded,
+                        color: Color(0xFFB91C1C),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
                         tr('filter'),
                         style: LocalFonts.poppins(
-                          fontSize: 20,
+                          fontSize: 19,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(sheetContext),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: searchController,
-                    decoration: InputDecoration(
-                      labelText: tr('search_hint'),
-                      prefixIcon: const Icon(Icons.search),
                     ),
-                    onChanged: (value) =>
-                        setSheetState(() => _searchFilter = value),
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.category_outlined),
-                    title: Text(
-                      _categoryDisplay.isEmpty
-                          ? tr('select_category')
-                          : _categoryDisplay,
+                    IconButton(
+                      tooltip: tr('close'),
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.pop(sheetContext),
                     ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _showCategoryPicker,
-                  ),
-                  Row(
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          initialValue: _cityFilter,
-                          decoration: InputDecoration(labelText: tr('city')),
-                          items: [
-                            DropdownMenuItem(
-                              value: null,
-                              child: Text(tr('all')),
-                            ),
-                            ...turkeyLocations.keys.map(
-                              (city) => DropdownMenuItem(
-                                value: city,
-                                child: Text(
-                                  city,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            setSheetState(() {
-                              _cityFilter = value;
-                              _districtFilter = null;
-                            });
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          initialValue: _districtFilter,
-                          decoration: InputDecoration(
-                            labelText: tr('district'),
+                      TextField(
+                        controller: searchController,
+                        decoration: InputDecoration(
+                          labelText: tr('search_hint'),
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          items: [
-                            DropdownMenuItem(
-                              value: null,
-                              child: Text(tr('all')),
+                        ),
+                        onChanged: (value) =>
+                            setSheetState(() => _searchFilter = value),
+                      ),
+                      const SizedBox(height: 12),
+                      Material(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: _showCategoryPicker,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 14,
                             ),
-                            if (_cityFilter != null)
-                              ...turkeyLocations[_cityFilter]!.map(
-                                (district) => DropdownMenuItem(
-                                  value: district,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: const Color(0xFFCBD5E1),
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.category_outlined,
+                                  color: Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
                                   child: Text(
-                                    district,
+                                    _categoryDisplay.isEmpty
+                                        ? tr('select_category')
+                                        : _categoryDisplay,
+                                    maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
+                                    style: LocalFonts.poppins(fontSize: 14),
                                   ),
                                 ),
-                              ),
-                          ],
-                          onChanged: _cityFilter == null
-                              ? null
-                              : (value) => setSheetState(
-                                  () => _districtFilter = value,
-                                ),
+                                const Icon(Icons.chevron_right_rounded),
+                              ],
+                            ),
+                          ),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              initialValue: _cityFilter,
+                              decoration: InputDecoration(
+                                labelText: tr('city'),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              items: [
+                                DropdownMenuItem(
+                                  value: null,
+                                  child: Text(tr('all')),
+                                ),
+                                ...turkeyLocations.keys.map(
+                                  (city) => DropdownMenuItem(
+                                    value: city,
+                                    child: Text(
+                                      city,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (value) {
+                                setSheetState(() {
+                                  _cityFilter = value;
+                                  _districtFilter = null;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              initialValue: _districtFilter,
+                              decoration: InputDecoration(
+                                labelText: tr('district'),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              items: [
+                                DropdownMenuItem(
+                                  value: null,
+                                  child: Text(tr('all')),
+                                ),
+                                if (_cityFilter != null)
+                                  ...turkeyLocations[_cityFilter]!.map(
+                                    (district) => DropdownMenuItem(
+                                      value: district,
+                                      child: Text(
+                                        district,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                              onChanged: _cityFilter == null
+                                  ? null
+                                  : (value) => setSheetState(
+                                      () => _districtFilter = value,
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        decoration: InputDecoration(
+                          labelText: tr('neighborhood_optional'),
+                          prefixIcon: const Icon(Icons.location_on_outlined),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        controller: neighborhoodController,
+                        onChanged: (value) =>
+                            setSheetState(() => _neighborhoodFilter = value),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: minController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: tr('min_price'),
+                                prefixText: '₺ ',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: maxController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: tr('max_price'),
+                                prefixText: '₺ ',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  TextField(
-                    decoration: InputDecoration(
-                      labelText: tr('neighborhood_optional'),
-                      prefixIcon: const Icon(Icons.location_on_outlined),
-                    ),
-                    controller: neighborhoodController,
-                    onChanged: (value) =>
-                        setSheetState(() => _neighborhoodFilter = value),
-                  ),
-                  Row(
+                ),
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                  child: Row(
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: minController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: tr('min_price'),
-                          ),
-                        ),
+                      TextButton(
+                        onPressed: () {
+                          setSheetState(() {
+                            _searchFilter = '';
+                            _categoryFilter = '';
+                            _categoryDisplay = '';
+                            _minPrice = null;
+                            _maxPrice = null;
+                            _cityFilter = null;
+                            _districtFilter = null;
+                            _neighborhoodFilter = '';
+                            searchController.clear();
+                            neighborhoodController.clear();
+                            minController.clear();
+                            maxController.clear();
+                          });
+                        },
+                        child: Text(tr('clear_filters')),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: TextField(
-                          controller: maxController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: tr('max_price'),
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(50),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                           ),
+                          onPressed: () {
+                            setState(() {
+                              _searchFilter = searchController.text.trim();
+                              _minPrice = double.tryParse(minController.text);
+                              _maxPrice = double.tryParse(maxController.text);
+                              _neighborhoodFilter = neighborhoodController.text
+                                  .trim();
+                            });
+                            Navigator.pop(sheetContext);
+                          },
+                          child: Text(tr('apply_filter')),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  FilledButton(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(50),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _searchFilter = searchController.text.trim();
-                        _minPrice = double.tryParse(minController.text);
-                        _maxPrice = double.tryParse(maxController.text);
-                        _neighborhoodFilter = neighborhoodController.text
-                            .trim();
-                      });
-                      Navigator.pop(sheetContext);
-                    },
-                    child: Text(tr('apply_filter')),
-                  ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
-    );
+    ).whenComplete(() {
+      searchController.dispose();
+      neighborhoodController.dispose();
+      minController.dispose();
+      maxController.dispose();
+    });
   }
 
   void _showUrgentSortModal() {
@@ -608,6 +832,41 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
         ),
         actions: [
           IconButton(
+            tooltip: tr('filter'),
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.tune_rounded, color: Colors.black87),
+                if (_activeFilterCount > 0)
+                  Positioned(
+                    right: -5,
+                    top: -5,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        _activeFilterCount.toString(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            onPressed: _showUrgentControls,
+          ),
+          IconButton(
             tooltip: tr('sort_criteria'),
             icon: const Icon(Icons.sort_rounded, color: Colors.black87),
             onPressed: _showUrgentSortModal,
@@ -621,6 +880,18 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
               .where('status', isEqualTo: 'active')
               .snapshots(),
           builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    '${tr('error')} ${snapshot.error}',
+                    textAlign: TextAlign.center,
+                    style: LocalFonts.poppins(color: Colors.red.shade700),
+                  ),
+                ),
+              );
+            }
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
@@ -659,7 +930,12 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              tr('urgent_no_listings_title'),
+                              tr(
+                                _activeFilterCount > 0
+                                    ? 'no_listings_found_criteria'
+                                    : 'urgent_no_listings_title',
+                              ),
+                              textAlign: TextAlign.center,
                               style: LocalFonts.poppins(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
@@ -676,6 +952,14 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
                                 height: 1.4,
                               ),
                             ),
+                            if (_activeFilterCount > 0) ...[
+                              const SizedBox(height: 16),
+                              OutlinedButton.icon(
+                                onPressed: _clearUrgentFilters,
+                                icon: const Icon(Icons.filter_alt_off_rounded),
+                                label: Text(tr('clear_filters')),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -727,6 +1011,106 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
             return CustomScrollView(
               slivers: [
                 SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      children: [
+                        _buildOverviewCard(urgentDocs.length),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _showUrgentControls,
+                                icon: Icon(
+                                  _activeFilterCount > 0
+                                      ? Icons.filter_alt_rounded
+                                      : Icons.search_rounded,
+                                ),
+                                label: Text(
+                                  _activeFilterCount > 0
+                                      ? '${tr('filter')} ($_activeFilterCount)'
+                                      : tr('search_hint'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  alignment: Alignment.centerLeft,
+                                  foregroundColor: Colors.black87,
+                                  backgroundColor: Colors.white,
+                                  side: BorderSide(
+                                    color: Colors.grey.withValues(alpha: 0.2),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(13),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            SegmentedButton<bool>(
+                              showSelectedIcon: false,
+                              segments: [
+                                ButtonSegment<bool>(
+                                  value: false,
+                                  icon: const Icon(
+                                    Icons.view_carousel_outlined,
+                                  ),
+                                  tooltip: tr('list_view'),
+                                ),
+                                ButtonSegment<bool>(
+                                  value: true,
+                                  icon: const Icon(Icons.grid_view_rounded),
+                                  tooltip: tr('grid_view'),
+                                ),
+                              ],
+                              selected: {_isGridView},
+                              onSelectionChanged: (selection) =>
+                                  setState(() => _isGridView = selection.first),
+                            ),
+                          ],
+                        ),
+                        if (_activeFilterCount > 0) ...[
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 7,
+                            runSpacing: 4,
+                            children: [
+                              if (_searchFilter.trim().isNotEmpty)
+                                _activeFilterChip(_searchFilter.trim()),
+                              if (_categoryDisplay.isNotEmpty)
+                                _activeFilterChip(_categoryDisplay),
+                              if (_cityFilter != null)
+                                _activeFilterChip(
+                                  _districtFilter == null
+                                      ? _cityFilter!
+                                      : '$_cityFilter, $_districtFilter',
+                                ),
+                              if (_neighborhoodFilter.trim().isNotEmpty)
+                                _activeFilterChip(_neighborhoodFilter.trim()),
+                              if (_minPrice != null || _maxPrice != null)
+                                _activeFilterChip(
+                                  '₺${_minPrice?.toStringAsFixed(0) ?? '0'} - '
+                                  '₺${_maxPrice?.toStringAsFixed(0) ?? '∞'}',
+                                ),
+                              ActionChip(
+                                avatar: const Icon(
+                                  Icons.close_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(tr('clear_filters')),
+                                onPressed: _clearUrgentFilters,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 18),
+                      ],
+                    ),
+                  ),
+                ),
+                SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 110),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate((context, index) {
@@ -737,12 +1121,21 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
                         categoryName: categoryName,
                         listings: entry.value,
                         topCategory: entry.key,
-                        topCategoryResolver: _topCategory,
-                        leafCategoryResolver: _leafCategory,
-                        translateCategoryPath: _translateCategoryPath,
-                        translateCategoryToken: _translateCategoryToken,
+                        categoryLabelForListing: (data) {
+                          final translatedPath = _translateCategoryPath(
+                            data['categoryPath']?.toString(),
+                            data['category']?.toString(),
+                          );
+                          final leafCategory = translatedPath
+                              .split('>')
+                              .last
+                              .trim();
+                          return leafCategory.isNotEmpty
+                              ? leafCategory
+                              : tr('other_category');
+                        },
                         formatPrice: _formatPrice,
-                        isGridView: false,
+                        isGridView: _isGridView,
                       );
                     }, childCount: groupedEntries.length),
                   ),
@@ -761,10 +1154,7 @@ class _CategorySection extends StatelessWidget {
     required this.categoryName,
     required this.listings,
     required this.topCategory,
-    required this.topCategoryResolver,
-    required this.leafCategoryResolver,
-    required this.translateCategoryPath,
-    required this.translateCategoryToken,
+    required this.categoryLabelForListing,
     required this.formatPrice,
     required this.isGridView,
   });
@@ -772,13 +1162,7 @@ class _CategorySection extends StatelessWidget {
   final String categoryName;
   final List<QueryDocumentSnapshot> listings;
   final String topCategory;
-  final String Function(String? categoryPath, String? category)
-  topCategoryResolver;
-  final String Function(String? categoryPath, String? category)
-  leafCategoryResolver;
-  final String Function(String? categoryPath, String? category)
-  translateCategoryPath;
-  final String Function(String token) translateCategoryToken;
+  final String Function(Map<String, dynamic> data) categoryLabelForListing;
   final String Function(dynamic price) formatPrice;
   final bool isGridView;
 
@@ -790,23 +1174,17 @@ class _CategorySection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: const BoxDecoration(
-                  color: Colors.red,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   categoryName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: LocalFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
                     color: Colors.black87,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -835,7 +1213,6 @@ class _CategorySection extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
             ],
           ),
           const SizedBox(height: 10),
@@ -855,15 +1232,17 @@ class _CategorySection extends StatelessWidget {
             )
           else
             SizedBox(
-              height: 215,
+              height: 230,
               child: ListView.separated(
                 reverse: false,
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 itemCount: listings.length,
                 separatorBuilder: (context, index) => const SizedBox(width: 12),
-                itemBuilder: (context, index) =>
-                    _buildCard(context, listings[index]),
+                itemBuilder: (context, index) => SizedBox(
+                  width: 170,
+                  child: _buildCard(context, listings[index]),
+                ),
               ),
             ),
         ],
@@ -882,21 +1261,12 @@ class _CategorySection extends StatelessWidget {
         if (img.toString().isNotEmpty) images.add(img.toString());
       }
     }
-    final cardCategory = leafCategoryResolver(
-      translateCategoryPath(data['categoryPath'], data['category']),
-      translateCategoryToken((data['category'] ?? '').toString()),
-    );
-    final translatedPath = translateCategoryPath(
-      data['categoryPath'],
-      data['category'],
-    );
     return _UrgentListingCard(
       data: data,
       listingId: doc.id,
       images: images,
       priceText: formatPrice(data['price']),
-      cardCategory: cardCategory,
-      fullCategory: translatedPath.isNotEmpty ? translatedPath : cardCategory,
+      categoryName: categoryLabelForListing(data),
     );
   }
 }
@@ -907,16 +1277,14 @@ class _UrgentListingCard extends StatelessWidget {
     required this.listingId,
     required this.images,
     required this.priceText,
-    required this.cardCategory,
-    required this.fullCategory,
+    required this.categoryName,
   });
 
   final Map<String, dynamic> data;
   final String listingId;
   final List<String> images;
   final String priceText;
-  final String cardCategory;
-  final String fullCategory;
+  final String categoryName;
 
   String _locationText(Map<String, dynamic> data) {
     final city = data['city']?.toString().trim() ?? '';
@@ -944,6 +1312,10 @@ class _UrgentListingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final image = images.isEmpty ? '' : images.first;
     final price = priceText.replaceFirst('₺', '');
+    final defectMarkers = DefectMarker.fromData(data['defectMarkers']);
+    final imageMarkers = defectMarkers
+        .where((marker) => marker.imageIndex == 0)
+        .toList();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -956,7 +1328,7 @@ class _UrgentListingCard extends StatelessWidget {
           ),
         ),
         child: Container(
-          width: 155,
+          width: double.infinity,
           margin: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -982,10 +1354,13 @@ class _UrgentListingCard extends StatelessWidget {
                     children: [
                       image.isEmpty
                           ? const Center(child: Icon(Icons.image_outlined))
-                          : Image.network(
-                              image,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => const Center(
+                          : DefectMarkerPhoto(
+                              image: NetworkImage(image),
+                              fit: imageMarkers.isEmpty
+                                  ? BoxFit.cover
+                                  : BoxFit.contain,
+                              markers: imageMarkers,
+                              errorWidget: const Center(
                                 child: Icon(Icons.broken_image_outlined),
                               ),
                             ),
@@ -994,6 +1369,28 @@ class _UrgentListingCard extends StatelessWidget {
                         left: 8,
                         child: _remainingTimeChip(data['urgentUntil']),
                       ),
+                      if (defectMarkers.isNotEmpty)
+                        Positioned(
+                          bottom: 8,
+                          left: 8,
+                          child: _miniChip(
+                            label: tr('defect_marker_details'),
+                            color: Colors.white,
+                            background: Colors.red.shade700,
+                            icon: Icons.warning_amber_rounded,
+                          ),
+                        ),
+                      if (images.length > 1)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: _miniChip(
+                            label: '${images.length}',
+                            color: Colors.white,
+                            background: Colors.black54,
+                            icon: Icons.photo_library_outlined,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -1004,32 +1401,58 @@ class _UrgentListingCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      data['title']?.toString().trim().isNotEmpty == true
-                          ? data['title'].toString().trim()
-                          : tr('no_title'),
+                      categoryName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: LocalFonts.poppins(
+                        color: AppColors.primary,
                         fontWeight: FontWeight.w600,
-                        fontSize: 12,
+                        fontSize: 10,
                       ),
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      data['title']?.toString().trim().isNotEmpty == true
+                          ? data['title'].toString().trim()
+                          : tr('no_title'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: LocalFonts.poppins(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11.5,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
                     Text(
                       '$price TL',
                       style: LocalFonts.poppins(
                         color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
                       ),
                     ),
-                    Text(
-                      _locationText(data),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: LocalFonts.poppins(
-                        color: Colors.grey[600],
-                        fontSize: 10,
-                      ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on_outlined,
+                          size: 12,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 2),
+                        Expanded(
+                          child: Text(
+                            _locationText(data),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: LocalFonts.poppins(
+                              color: Colors.grey[600],
+                              fontSize: 9.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

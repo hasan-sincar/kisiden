@@ -129,6 +129,7 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FC),
       appBar: AppBar(
         title: Text(
           tr('create_ticket'),
@@ -136,36 +137,154 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF246BDF)),
+            )
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFF142C67),
+                          Color(0xFF1763D4),
+                          Color(0xFF3B8AF1),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          height: 50,
+                          width: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.mark_unread_chat_alt_rounded,
+                            color: Colors.white,
+                            size: 27,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            tr('create_ticket'),
+                            style: LocalFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.support_agent_rounded,
+                          color: Color(0xFFFFD875),
+                          size: 25,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  _buildFieldLabel(tr('ticket_subject')),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _subjectController,
                     decoration: InputDecoration(
-                      labelText: tr('ticket_subject'),
-                      border: const OutlineInputBorder(),
+                      hintText: tr('ticket_subject'),
+                      prefixIcon: const Icon(Icons.subject_rounded),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 15,
+                        vertical: 15,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F1)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F1)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF246BDF),
+                          width: 1.5,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
+                  _buildFieldLabel(tr('ticket_message')),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _messageController,
-                    maxLines: 5,
+                    minLines: 5,
+                    maxLines: 8,
                     decoration: InputDecoration(
-                      labelText: tr('ticket_message'),
-                      border: const OutlineInputBorder(),
+                      hintText: tr('ticket_message'),
+                      alignLabelWithHint: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.all(15),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F1)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(color: Color(0xFFE2E8F1)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF246BDF),
+                          width: 1.5,
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 18),
+                  _buildFieldLabel(tr('image_selected')),
+                  const SizedBox(height: 8),
                   if (_selectedImage != null) ...[
-                    Image.file(_selectedImage!, height: 150, fit: BoxFit.cover),
-                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.file(
+                        _selectedImage!,
+                        height: 180,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                   ],
                   OutlinedButton.icon(
                     onPressed: _pickImage,
-                    icon: const Icon(Icons.image),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF245EC4),
+                      backgroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      side: const BorderSide(color: Color(0xFFDCE5F2)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: Icon(
+                      _selectedImage == null
+                          ? Icons.add_photo_alternate_outlined
+                          : Icons.check_circle_outline_rounded,
+                    ),
                     label: Text(
                       _selectedImage == null
                           ? tr(
@@ -174,23 +293,40 @@ class _CreateTicketScreenState extends State<CreateTicketScreen> {
                           : tr('image_selected'),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
+                  const SizedBox(height: 22),
+                  FilledButton.icon(
                     onPressed: _submitTicket,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1455C0),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
                     ),
-                    child: Text(
+                    icon: const Icon(Icons.send_rounded, size: 19),
+                    label: Text(
                       tr('send'),
                       style: LocalFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Text(
+      label,
+      style: LocalFonts.poppins(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: const Color(0xFF34415A),
+      ),
     );
   }
 }

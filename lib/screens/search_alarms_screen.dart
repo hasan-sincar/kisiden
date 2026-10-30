@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/database_service.dart';
 import '../utils/turkey_locations.dart';
 import '../utils/translations.dart';
+import '../utils/theme_colors.dart';
 import 'all_listings_screen.dart';
 
 class SearchAlarmsScreen extends StatefulWidget {
@@ -25,6 +26,245 @@ class _SearchAlarmsScreenState extends State<SearchAlarmsScreen> {
     );
   }
 
+  Widget _buildAlarmOverview(int count) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr('search_alarms_intro'),
+                  style: LocalFonts.poppins(
+                    color: const Color(0xFF7B8799),
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  tr('search_alarms_count').replaceFirst('%s', '$count'),
+                  style: LocalFonts.poppins(
+                    color: const Color(0xFF243047),
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: const Icon(
+              Icons.notifications_active_rounded,
+              color: AppColors.primary,
+              size: 22,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAlarmCard(QueryDocumentSnapshot alarm) {
+    final data = alarm.data() as Map<String, dynamic>;
+    final rawPath = data['categoryPath'];
+    final categoryPath = rawPath is String ? rawPath : '';
+    final categoryName = categoryPath.isEmpty
+        ? tr('category')
+        : categoryPath.split(' > ').last;
+    final city = data['city']?.toString();
+    final district = data['district']?.toString();
+    final minPrice = data['minPrice'];
+    final maxPrice = data['maxPrice'];
+    final hasPriceRange = minPrice != null || maxPrice != null;
+    final maxIsUnlimited = maxPrice == null || maxPrice == 0;
+    final priceText =
+        '${minPrice ?? 0}₺ - ${maxIsUnlimited ? tr('unlimited') : '$maxPrice₺'}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE9EEF6)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1C2B45).withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 15, 10, 15),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: AppColors.secondary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: const Icon(
+                Icons.notifications_active_rounded,
+                color: AppColors.secondary,
+                size: 23,
+              ),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    categoryName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: LocalFonts.poppins(
+                      color: const Color(0xFF243047),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  if (categoryPath.contains(' > ')) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      categoryPath,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LocalFonts.poppins(
+                        color: const Color(0xFF8994A6),
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 7,
+                    runSpacing: 7,
+                    children: [
+                      if ((city ?? '').isNotEmpty)
+                        _buildAlarmTag(
+                          Icons.location_on_outlined,
+                          [
+                            city,
+                            if ((district ?? '').isNotEmpty) district,
+                          ].join(' · '),
+                          const Color(0xFF28776F),
+                        ),
+                      if (hasPriceRange)
+                        _buildAlarmTag(
+                          Icons.payments_outlined,
+                          priceText,
+                          const Color(0xFF39804C),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: tr('delete'),
+              onPressed: () => _dbService.deleteSearchAlarm(alarm.id),
+              style: IconButton.styleFrom(
+                foregroundColor: Colors.red.shade400,
+                backgroundColor: Colors.red.withValues(alpha: 0.06),
+                visualDensity: VisualDensity.compact,
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 21),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAlarmTag(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: LocalFonts.poppins(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 94,
+              height: 94,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.07),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.notifications_none_rounded,
+                size: 48,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              tr('no_alarms_set'),
+              textAlign: TextAlign.center,
+              style: LocalFonts.poppins(
+                color: const Color(0xFF243047),
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              tr('search_alarms_empty_hint'),
+              textAlign: TextAlign.center,
+              style: LocalFonts.poppins(
+                color: const Color(0xFF7B8799),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
@@ -32,10 +272,12 @@ class _SearchAlarmsScreenState extends State<SearchAlarmsScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        backgroundColor: Colors.grey[50],
+        elevation: 0,
         title: Text(
           tr('search_alarms'),
           style: LocalFonts.poppins(
-            color: Colors.black87,
+            color: const Color(0xFF243047),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -48,139 +290,49 @@ class _SearchAlarmsScreenState extends State<SearchAlarmsScreen> {
               .orderBy('createdAt', descending: true)
               .snapshots(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData)
-              return const Center(child: CircularProgressIndicator());
-            var alarms = snapshot.data!.docs;
-
-            if (alarms.isEmpty) {
+            if (snapshot.hasError) {
               return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.notifications_off_outlined,
-                      size: 80,
-                      color: Colors.grey[300],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      tr('no_alarms_set'),
-                      style: LocalFonts.poppins(
-                        color: Colors.grey,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: _showAddAlarmModal,
-                      icon: const Icon(Icons.add_alert, color: Colors.white),
-                      label: Text(
-                        tr('set_new_alarm'),
-                        style: LocalFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 12,
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    tr('search_alarms_load_failed'),
+                    textAlign: TextAlign.center,
+                    style: LocalFonts.poppins(color: Colors.red.shade700),
+                  ),
                 ),
               );
             }
+            if (!snapshot.hasData) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              );
+            }
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: alarms.length,
-              itemBuilder: (context, index) {
-                var data = alarms[index].data() as Map<String, dynamic>;
-                String catName =
-                    data['categoryPath']?.split(' > ').last ?? tr('category');
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.amber[50],
-                        child: Icon(
-                          Icons.notifications_active,
-                          color: Colors.amber[600],
+            final alarms = snapshot.data!.docs;
+            return Column(
+              children: [
+                _buildAlarmOverview(alarms.length),
+                Expanded(
+                  child: alarms.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                          itemCount: alarms.length,
+                          itemBuilder: (context, index) =>
+                              _buildAlarmCard(alarms[index]),
                         ),
-                      ),
-                      title: Text(
-                        catName,
-                        style: LocalFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 4),
-                          if (data['city'] != null)
-                            Text(
-                              '📍 ${data['city']} ${data['district'] != null ? "- ${data['district']}" : ""}',
-                              style: LocalFonts.poppins(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          if (data['minPrice'] != null ||
-                              data['maxPrice'] != null)
-                            Text(
-                              '💰 ${data['minPrice'] ?? 0}₺ - ${data['maxPrice'] == 0 || data['maxPrice'] == null ? tr('unlimited') : "${data['maxPrice']}₺"}',
-                              style: LocalFonts.poppins(
-                                fontSize: 12,
-                                color: Colors.green[700],
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                        ],
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.red,
-                        ),
-                        onPressed: () =>
-                            _dbService.deleteSearchAlarm(alarms[index].id),
-                      ),
-                    ),
-                  ),
-                );
-              },
+                ),
+              ],
             );
           },
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddAlarmModal,
-        backgroundColor: Colors.amber[600],
-        elevation: 0,
-        icon: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 3,
+        icon: const Icon(Icons.add_alert_rounded),
         label: Text(
           tr('set_alarm'),
           style: LocalFonts.poppins(

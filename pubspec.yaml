@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.60+60
+version: 1.0.68+68
 
 environment:
   sdk: ^3.10.0
@@ -38,17 +38,17 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  firebase_core: ^4.11.0
-  firebase_auth: ^6.5.4
-  cloud_firestore: ^6.6.0
-  firebase_storage: ^13.4.3
+  firebase_core: ^4.15.0
+  firebase_auth: ^6.7.0
+  cloud_firestore: ^6.10.0
+  firebase_storage: ^13.6.0
   google_sign_in: ^6.2.2
   url_launcher: ^6.3.2
   image_picker: ^1.2.1
   in_app_purchase: ^3.3.0
   in_app_purchase_android: ^0.5.3
   flutter_ringtone_player: ^4.0.0+4
-  firebase_messaging: ^16.4.1
+  firebase_messaging: ^16.7.0
   geolocator: ^14.0.2
   google_maps_flutter: ^2.12.3
   share_plus: ^13.2.0
@@ -63,17 +63,24 @@ dependencies:
   http: ^1.5.0
   speech_to_text: ^7.4.0
   meta_seo: ^3.0.9
-  firebase_analytics: ^12.4.3
-  firebase_app_check: ^0.4.5
+  firebase_analytics: ^12.6.0
+  firebase_app_check: ^0.4.8
   cached_network_image: ^3.4.1
   sign_in_with_apple: ^8.1.0
   crypto: ^3.0.7
-  firebase_crashlytics: ^5.2.4
-  cloud_functions: ^6.0.4
+  firebase_crashlytics: ^5.4.0
+  cloud_functions: ^6.5.0
   package_info_plus: ^10.2.0
-  flutter_html: ^3.0.0-beta.2
+  flutter_html: ^3.0.0
   translator: ^1.0.3+1
   geocoding: ^5.0.0
+  scrollable_positioned_list: 0.3.8
+  camera: ^0.12.1
+  camera_desktop: ^2.0.0
+
+dependency_overrides:
+  firebase_core_platform_interface: ^8.1.1
+  html: 0.15.5
 
 dev_dependencies:
   flutter_test:

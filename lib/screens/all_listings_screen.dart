@@ -8,10 +8,12 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/database_service.dart';
+import '../services/banner_ad_settings_service.dart';
 import '../utils/theme_colors.dart';
 import '../utils/turkey_locations.dart';
 import '../utils/translations.dart';
 import 'listing_detail_screen.dart';
+import 'listing_comparison_screen.dart';
 
 class AllListingsScreen extends StatefulWidget {
   final Map<String, dynamic>? initialFilters;
@@ -60,6 +62,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
   String _currentParentName = "Tümü";
   bool _urgentOnly = false;
   String _sortBy = 'date_desc';
+  int? _createdWithinHours;
   double _distance = 30.0;
   final TextEditingController _minPriceController = TextEditingController();
   final TextEditingController _maxPriceController = TextEditingController();
@@ -71,6 +74,123 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
   Position? _userPosition;
   bool _isGridView = false;
   QuerySnapshot? _cachedListingsSnapshot;
+  final Map<String, Map<String, dynamic>> _selectedListings = {};
+
+  void _toggleComparisonSelection(String listingId, Map<String, dynamic> data) {
+    if (_selectedListings.containsKey(listingId)) {
+      setState(() => _selectedListings.remove(listingId));
+      return;
+    }
+
+    if (_selectedListings.length >= 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(tr('comparison_limit_reached').replaceFirst('%s', '4')),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedListings[listingId] = Map<String, dynamic>.from(data);
+    });
+  }
+
+  Widget _comparisonToggleButton(String listingId, Map<String, dynamic> data) {
+    final isSelected = _selectedListings.containsKey(listingId);
+    return Material(
+      color: isSelected
+          ? Colors.blue[800]
+          : Colors.white.withValues(alpha: 0.95),
+      shape: const CircleBorder(),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+        visualDensity: VisualDensity.compact,
+        tooltip: tr(
+          isSelected ? 'remove_from_comparison' : 'add_to_comparison',
+        ),
+        icon: Icon(
+          isSelected ? Icons.check_rounded : Icons.compare_arrows_rounded,
+          color: isSelected ? Colors.white : Colors.black87,
+          size: 20,
+        ),
+        onPressed: () => _toggleComparisonSelection(listingId, data),
+      ),
+    );
+  }
+
+  void _openComparison() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ListingComparisonScreen(
+          listings: _selectedListings.entries.toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComparisonBar() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                tr(
+                  'comparison_selection_count',
+                ).replaceFirst('%s', _selectedListings.length.toString()),
+                style: LocalFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+            ),
+            IconButton(
+              onPressed: () => setState(_selectedListings.clear),
+              tooltip: tr('clear_selection'),
+              icon: const Icon(Icons.clear_all_rounded),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: _selectedListings.length >= 2 ? _openComparison : null,
+              child: Text(tr('compare_listings')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultsHeader(int count) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      child: Row(
+        children: [
+          Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Text(
+            tr('listing_results_count').replaceFirst('%s', count.toString()),
+            style: LocalFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -110,6 +230,10 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
           filters['maxPrice'] < double.infinity &&
           filters['maxPrice'] > 0)
         _maxPriceController.text = filters['maxPrice'].toStringAsFixed(0);
+      if (filters['createdWithinHours'] == 24 ||
+          filters['createdWithinHours'] == 48) {
+        _createdWithinHours = filters['createdWithinHours'] as int;
+      }
     });
   }
 
@@ -123,6 +247,13 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
         _neighborhoodController.text = _filterNeighborhood ?? '';
         _distance = prefs.getDouble('allListingsDistance') ?? 30.0;
         _sortBy = prefs.getString('sortBy') ?? 'date_desc';
+        final createdWithinHours = prefs.getInt(
+          'allListingsCreatedWithinHours',
+        );
+        _createdWithinHours =
+            createdWithinHours == 24 || createdWithinHours == 48
+            ? createdWithinHours
+            : null;
         _minPriceController.text = prefs.getString('minPrice') ?? "";
         _maxPriceController.text = prefs.getString('maxPrice') ?? "";
       });
@@ -155,6 +286,14 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
       }
       await prefs.setDouble('allListingsDistance', _distance);
       await prefs.setString('sortBy', _sortBy);
+      if (_createdWithinHours == null) {
+        await prefs.remove('allListingsCreatedWithinHours');
+      } else {
+        await prefs.setInt(
+          'allListingsCreatedWithinHours',
+          _createdWithinHours!,
+        );
+      }
       await prefs.setString('minPrice', _minPriceController.text);
       await prefs.setString('maxPrice', _maxPriceController.text);
     } catch (e) {
@@ -215,6 +354,33 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
     await _savePreferences();
   }
 
+  Widget _filterSection({required String title, required Widget child}) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: LocalFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
   Future<void> _getUserLocation() async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
@@ -243,6 +409,14 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
     } catch (e) {
       print(e);
     }
+  }
+
+  DateTime? _createdAt(Map<String, dynamic> listing) {
+    final value = listing['createdAt'];
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   String _formatLocation(String? text) {
@@ -402,8 +576,13 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFFF5F7FB),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+      ),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (context) {
         return StatefulBuilder(
@@ -411,9 +590,9 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
             return Padding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 24,
-                right: 24,
-                top: 24,
+                left: 16,
+                right: 16,
+                top: 8,
               ),
               child: SingleChildScrollView(
                 child: Column(
@@ -424,108 +603,159 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Filtrele',
+                          tr('filter'),
                           style: LocalFonts.poppins(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
+                        IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.black87,
+                          ),
+                          icon: const Icon(Icons.close_rounded),
                           onPressed: () => Navigator.pop(context),
                         ),
                       ],
                     ),
-                    const Divider(),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
 
-                    Text(
-                      'Fiyat Aralığı',
-                      style: LocalFonts.poppins(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                    _filterSection(
+                      title: tr('price_range'),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _minPriceController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: tr('min_price'),
+                                filled: true,
+                                fillColor: const Color(0xFFF7F8FA),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 11,
+                                ),
+                              ),
+                              onChanged: (val) {
+                                setModalState(() {});
+                                setState(() {});
+                                _savePreferences();
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _maxPriceController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                labelText: tr('max_price'),
+                                filled: true,
+                                fillColor: const Color(0xFFF7F8FA),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 11,
+                                ),
+                              ),
+                              onChanged: (val) {
+                                setModalState(() {});
+                                setState(() {});
+                                _savePreferences();
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _minPriceController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Min Fiyat (₺)',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 12,
+                    _filterSection(
+                      title: tr('listing_time_filter'),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          for (final option in <({int? hours, String key})>[
+                            (hours: null, key: 'any_date'),
+                            (hours: 24, key: 'last_24_hours'),
+                            (hours: 48, key: 'last_48_hours'),
+                          ])
+                            ChoiceChip(
+                              label: Text(tr(option.key)),
+                              selected: _createdWithinHours == option.hours,
+                              onSelected: (selected) {
+                                final nextValue = selected
+                                    ? option.hours
+                                    : null;
+                                setModalState(
+                                  () => _createdWithinHours = nextValue,
+                                );
+                                setState(() => _createdWithinHours = nextValue);
+                                _savePreferences();
+                              },
+                              selectedColor: AppColors.primary.withValues(
+                                alpha: 0.12,
                               ),
-                            ),
-                            onChanged: (val) {
-                              setModalState(() {});
-                              setState(() {});
-                              _savePreferences();
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: TextField(
-                            controller: _maxPriceController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Max Fiyat (₺)',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 12,
+                              side: BorderSide(
+                                color: _createdWithinHours == option.hours
+                                    ? AppColors.primary.withValues(alpha: 0.45)
+                                    : Colors.grey.shade300,
                               ),
+                              labelStyle: LocalFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: _createdWithinHours == option.hours
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: _createdWithinHours == option.hours
+                                    ? AppColors.primary
+                                    : Colors.black87,
+                              ),
+                              showCheckmark: false,
                             ),
-                            onChanged: (val) {
-                              setModalState(() {});
-                              setState(() {});
-                              _savePreferences();
-                            },
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 24),
 
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Mesafe',
-                          style: LocalFonts.poppins(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                    _filterSection(
+                      title: tr('distance'),
+                      child: Column(
+                        children: [
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              _distance == 30.0
+                                  ? tr('all')
+                                  : '${_distance.toStringAsFixed(1)} km',
+                              style: LocalFonts.poppins(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                        ),
-                        Text(
-                          _distance == 30.0
-                              ? 'Tümü'
-                              : '${_distance.toStringAsFixed(1)} km',
-                          style: LocalFonts.poppins(
-                            color: Colors.blue[800],
-                            fontWeight: FontWeight.bold,
+                          Slider(
+                            value: _distance,
+                            min: 0.1,
+                            max: 30.0,
+                            divisions: 300,
+                            activeColor: AppColors.primary,
+                            onChanged: (val) {
+                              setModalState(() => _distance = val);
+                              setState(() => _distance = val);
+                            },
+                            onChangeEnd: (val) {
+                              _savePreferences();
+                            },
                           ),
-                        ),
-                      ],
-                    ),
-                    Slider(
-                      value: _distance,
-                      min: 0.1,
-                      max: 30.0,
-                      divisions: 300,
-                      activeColor: Colors.blue[800],
-                      onChanged: (val) {
-                        setModalState(() => _distance = val);
-                      },
-                      onChangeEnd: (val) {
-                        setState(() => _distance = val);
-                        _savePreferences();
-                      },
+                        ],
+                      ),
                     ),
                     if (_userPosition == null)
                       InkWell(
@@ -545,126 +775,124 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                           ),
                         ),
                       ),
-                    const SizedBox(height: 24),
-
-                    Text(
-                      tr('location_filter'),
-                      style: LocalFonts.poppins(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () =>
-                            _useCurrentLocationForFilter(setModalState),
-                        icon: const Icon(Icons.my_location),
-                        label: Text(tr('use_current_location')),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: tr('city'),
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 12,
-                              ),
+                    _filterSection(
+                      title: tr('location_filter'),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: () =>
+                                  _useCurrentLocationForFilter(setModalState),
+                              child: Text(tr('use_current_location')),
                             ),
-                            initialValue: _filterCity,
-                            items: [
-                              DropdownMenuItem(
-                                value: null,
-                                child: Text(tr('all')),
-                              ),
-                              ...turkeyLocations.keys.map(
-                                (city) => DropdownMenuItem(
-                                  value: city,
-                                  child: Text(
-                                    city,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                            ],
-                            onChanged: (val) {
-                              setModalState(() {
-                                _filterCity = val;
-                                _filterDistrict = null;
-                                _filterNeighborhood = null;
-                                _neighborhoodController.clear();
-                              });
-                              setState(() {
-                                _filterCity = val;
-                                _filterDistrict = null;
-                                _filterNeighborhood = null;
-                                _neighborhoodController.clear();
-                              });
-                              _savePreferences();
-                            },
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: tr('district'),
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 12,
-                              ),
-                            ),
-                            initialValue: _filterDistrict,
-                            items: [
-                              DropdownMenuItem(
-                                value: null,
-                                child: Text(tr('all')),
-                              ),
-                              if (_filterCity != null)
-                                ...turkeyLocations[_filterCity]!.map(
-                                  (d) => DropdownMenuItem(
-                                    value: d,
-                                    child: Text(
-                                      d,
-                                      overflow: TextOverflow.ellipsis,
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                    labelText: tr('city'),
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 12,
                                     ),
                                   ),
+                                  initialValue: _filterCity,
+                                  items: [
+                                    DropdownMenuItem(
+                                      value: null,
+                                      child: Text(tr('all')),
+                                    ),
+                                    ...turkeyLocations.keys.map(
+                                      (city) => DropdownMenuItem(
+                                        value: city,
+                                        child: Text(
+                                          city,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  onChanged: (val) {
+                                    setModalState(() {
+                                      _filterCity = val;
+                                      _filterDistrict = null;
+                                      _filterNeighborhood = null;
+                                      _neighborhoodController.clear();
+                                    });
+                                    setState(() {
+                                      _filterCity = val;
+                                      _filterDistrict = null;
+                                      _filterNeighborhood = null;
+                                      _neighborhoodController.clear();
+                                    });
+                                    _savePreferences();
+                                  },
                                 ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                    labelText: tr('district'),
+                                    border: OutlineInputBorder(),
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 12,
+                                    ),
+                                  ),
+                                  initialValue: _filterDistrict,
+                                  items: [
+                                    DropdownMenuItem(
+                                      value: null,
+                                      child: Text(tr('all')),
+                                    ),
+                                    if (_filterCity != null)
+                                      ...turkeyLocations[_filterCity]!.map(
+                                        (d) => DropdownMenuItem(
+                                          value: d,
+                                          child: Text(
+                                            d,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: (val) {
+                                    setModalState(() => _filterDistrict = val);
+                                    setState(() => _filterDistrict = val);
+                                    _savePreferences();
+                                  },
+                                ),
+                              ),
                             ],
-                            onChanged: (val) {
-                              setModalState(() => _filterDistrict = val);
-                              setState(() => _filterDistrict = val);
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _neighborhoodController,
+                            decoration: InputDecoration(
+                              labelText: tr('neighborhood_optional'),
+                              filled: true,
+                              fillColor: const Color(0xFFF7F8FA),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            onChanged: (value) {
+                              setModalState(() => _filterNeighborhood = value);
+                              setState(() => _filterNeighborhood = value);
                               _savePreferences();
                             },
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: _neighborhoodController,
-                      decoration: InputDecoration(
-                        labelText: tr('neighborhood_optional'),
-                        border: const OutlineInputBorder(),
+                        ],
                       ),
-                      onChanged: (value) {
-                        setModalState(() => _filterNeighborhood = value);
-                        setState(() => _filterNeighborhood = value);
-                        _savePreferences();
-                      },
                     ),
-                    const SizedBox(height: 24),
-
-                    const SizedBox(height: 6),
                     ElevatedButton(
                       onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
@@ -675,14 +903,14 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                         ),
                       ),
                       child: Text(
-                        'Sonuçları Göster',
+                        tr('show_results'),
                         style: LocalFonts.poppins(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),
@@ -798,6 +1026,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final double screenWidth = MediaQuery.sizeOf(context).width;
     final int crossAxisCount = screenWidth > 1200
         ? 5
@@ -807,9 +1036,12 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
         widget.customTitle ?? (_urgentOnly ? 'Acil İlanlar' : 'Tüm İlanlar');
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(
         centerTitle: false,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        elevation: 0,
         title: Text(
           pageTitle,
           maxLines: 1,
@@ -817,32 +1049,48 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
           style: LocalFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         actions: [
-          IconButton(
+          IconButton.filledTonal(
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+              foregroundColor: AppColors.primary,
+            ),
             icon: Icon(
               _isGridView ? Icons.view_list_rounded : Icons.grid_view_rounded,
-              color: Colors.black87,
             ),
             tooltip: _isGridView ? 'Liste görünümü' : 'Izgara görünümü',
             onPressed: () {
               setState(() => _isGridView = !_isGridView);
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.sort_rounded, color: Colors.black87),
+          IconButton.filledTonal(
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black87,
+            ),
+            icon: const Icon(Icons.sort_rounded),
             onPressed: _showSortModal,
           ),
-          IconButton(
-            icon: const Icon(Icons.tune_rounded, color: Colors.black87),
+          IconButton.filledTonal(
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black87,
+            ),
+            icon: const Icon(Icons.tune_rounded),
             onPressed: _showFilterModal,
           ),
         ],
       ),
+      bottomNavigationBar: _selectedListings.isEmpty
+          ? null
+          : _buildComparisonBar(),
       body: SafeArea(
         child: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('users')
-              .doc(FirebaseAuth.instance.currentUser!.uid)
-              .snapshots(),
+          stream: currentUserId == null
+              ? null
+              : FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(currentUserId)
+                    .snapshots(),
           builder: (context, userSnap) {
             List<String> hiddenUsers = [];
             if (userSnap.hasData && userSnap.data!.exists) {
@@ -924,13 +1172,23 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                   double? maxP = double.tryParse(_maxPriceController.text);
                   if (minP != null && listingPrice < minP) matchPrice = false;
                   if (maxP != null && listingPrice > maxP) matchPrice = false;
+                  bool matchCreatedAt = true;
+                  if (_createdWithinHours != null) {
+                    final createdAt = _createdAt(data);
+                    final cutoff = DateTime.now().subtract(
+                      Duration(hours: _createdWithinHours!),
+                    );
+                    matchCreatedAt =
+                        createdAt != null && !createdAt.isBefore(cutoff);
+                  }
 
                   return matchCategory &&
                       matchDistance &&
                       matchCity &&
                       matchDistrict &&
                       matchNeighborhood &&
-                      matchPrice;
+                      matchPrice &&
+                      matchCreatedAt;
                 }).toList();
 
                 filteredDocs.sort((a, b) {
@@ -967,20 +1225,45 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                   );
                 });
 
-                if (filteredDocs.isEmpty)
+                if (filteredDocs.isEmpty) {
                   return Center(
-                    child: Text(
-                      'Aradığınız kriterde ilan bulunamadı.',
-                      style: LocalFonts.poppins(color: Colors.grey),
+                    child: Container(
+                      margin: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(28),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(22),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 44,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Aradığınız kriterde ilan bulunamadı.',
+                            textAlign: TextAlign.center,
+                            style: LocalFonts.poppins(
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   );
+                }
 
                 return Column(
                   children: [
+                    _buildResultsHeader(filteredDocs.length),
                     Expanded(
                       child: _isGridView
                           ? GridView.builder(
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
                               gridDelegate:
                                   SliverGridDelegateWithFixedCrossAxisCount(
                                     crossAxisCount: crossAxisCount,
@@ -990,6 +1273,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                   ),
                               itemCount: filteredDocs.length,
                               itemBuilder: (context, index) {
+                                final listingId = filteredDocs[index].id;
                                 var data =
                                     filteredDocs[index].data()
                                         as Map<String, dynamic>;
@@ -1042,123 +1326,153 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                     ),
                                   ),
                                   child: Container(
+                                    clipBehavior: Clip.antiAlias,
                                     decoration: BoxDecoration(
                                       color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(20),
                                       boxShadow: [
                                         BoxShadow(
                                           color: Colors.black.withValues(
-                                            alpha: 0.05,
+                                            alpha: 0.07,
                                           ),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 3),
+                                          blurRadius: 14,
+                                          offset: const Offset(0, 5),
                                         ),
                                       ],
+                                      border: Border.all(
+                                        color: Colors.grey.shade100,
+                                      ),
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                    child: Stack(
                                       children: [
-                                        Expanded(
-                                          child: ClipRRect(
-                                            borderRadius:
-                                                const BorderRadius.vertical(
-                                                  top: Radius.circular(16),
-                                                ),
-                                            child: allImages.first.isEmpty
-                                                ? Container(
-                                                    color: Colors.grey[200],
-                                                    alignment: Alignment.center,
-                                                    child: const Icon(
-                                                      Icons.image,
-                                                      color: Colors.grey,
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
+                                              child: ClipRRect(
+                                                borderRadius:
+                                                    const BorderRadius.vertical(
+                                                      top: Radius.circular(20),
                                                     ),
-                                                  )
-                                                : Stack(
-                                                    fit: StackFit.expand,
-                                                    children: [
+                                                child: Stack(
+                                                  fit: StackFit.expand,
+                                                  children: [
+                                                    if (allImages.first.isEmpty)
+                                                      Container(
+                                                        color: Colors.grey[200],
+                                                        alignment:
+                                                            Alignment.center,
+                                                        child: const Icon(
+                                                          Icons.image,
+                                                          color: Colors.grey,
+                                                        ),
+                                                      )
+                                                    else
                                                       Image.network(
                                                         allImages.first,
                                                         width: double.infinity,
                                                         fit: BoxFit.cover,
                                                       ),
-                                                      if (distanceText
-                                                          .isNotEmpty)
-                                                        Positioned(
-                                                          top: 6,
-                                                          left: 6,
-                                                          child: _distanceBadge(
-                                                            distanceText,
-                                                          ),
+                                                    if (distanceText.isNotEmpty)
+                                                      Positioned(
+                                                        top: 6,
+                                                        left: 6,
+                                                        child: _distanceBadge(
+                                                          distanceText,
                                                         ),
-                                                    ],
-                                                  ),
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.all(10),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                data['title'] ?? '',
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: LocalFonts.poppins(
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 12,
-                                                  color: Colors.black87,
-                                                  height: 1.15,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              SizedBox(
-                                                height: 30,
-                                                child: Row(
-                                                  children: [
-                                                    Text(
-                                                      '₺$formattedPrice',
-                                                      maxLines: 1,
-                                                      softWrap: false,
-                                                      style: LocalFonts.poppins(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        color: Colors.blue[800],
-                                                        fontSize: 15,
                                                       ),
-                                                    ),
-                                                    if (distanceText
-                                                        .isNotEmpty) ...[
-                                                      const SizedBox(width: 8),
-                                                      _distanceBadge(
-                                                        distanceText,
-                                                      ),
-                                                    ],
                                                   ],
                                                 ),
                                               ),
-                                              const SizedBox(height: 2),
-                                              SizedBox(
-                                                height: 16,
-                                                child: Text(
-                                                  data['city'] != null &&
-                                                          data['district'] !=
-                                                              null
-                                                      ? _listingLocationText(
-                                                          data,
-                                                        )
-                                                      : '',
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: LocalFonts.poppins(
-                                                    fontSize: 10,
-                                                    color: Colors.grey[600],
+                                            ),
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                    10,
+                                                    10,
+                                                    10,
+                                                    48,
                                                   ),
-                                                ),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    data['title'] ?? '',
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: LocalFonts.poppins(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 13,
+                                                      color: Colors.black87,
+                                                      height: 1.15,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  SizedBox(
+                                                    height: 30,
+                                                    child: Row(
+                                                      children: [
+                                                        Text(
+                                                          '₺$formattedPrice',
+                                                          maxLines: 1,
+                                                          softWrap: false,
+                                                          style:
+                                                              LocalFonts.poppins(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                                color: Colors
+                                                                    .blue[800],
+                                                                fontSize: 16,
+                                                              ),
+                                                        ),
+                                                        if (distanceText
+                                                            .isNotEmpty) ...[
+                                                          const SizedBox(
+                                                            width: 8,
+                                                          ),
+                                                          _distanceBadge(
+                                                            distanceText,
+                                                          ),
+                                                        ],
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  SizedBox(
+                                                    height: 16,
+                                                    child: Text(
+                                                      data['city'] != null &&
+                                                              data['district'] !=
+                                                                  null
+                                                          ? _listingLocationText(
+                                                              data,
+                                                            )
+                                                          : '',
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: LocalFonts.poppins(
+                                                        fontSize: 11,
+                                                        color: Colors.grey[600],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ],
+                                            ),
+                                          ],
+                                        ),
+                                        Positioned(
+                                          right: 8,
+                                          bottom: 8,
+                                          child: _comparisonToggleButton(
+                                            listingId,
+                                            data,
                                           ),
                                         ),
                                       ],
@@ -1175,6 +1489,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                   ? const BannerAdWidget()
                                   : const SizedBox(height: 12),
                               itemBuilder: (context, index) {
+                                final listingId = filteredDocs[index].id;
                                 var data =
                                     filteredDocs[index].data()
                                         as Map<String, dynamic>;
@@ -1218,19 +1533,22 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                     ),
                                   ),
                                   child: Container(
-                                    height: 115,
+                                    height: 136,
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(16),
                                       boxShadow: [
                                         BoxShadow(
                                           color: Colors.black.withValues(
-                                            alpha: 0.05,
+                                            alpha: 0.07,
                                           ),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 3),
+                                          blurRadius: 14,
+                                          offset: const Offset(0, 5),
                                         ),
                                       ],
+                                      border: Border.all(
+                                        color: Colors.grey.shade100,
+                                      ),
                                     ),
                                     child: Container(
                                       decoration: BoxDecoration(
@@ -1266,14 +1584,21 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                       ),
                                                   child: SizedBox(
                                                     width: 115,
-                                                    height: 115,
-                                                    child:
-                                                        allImages.first.isEmpty
-                                                        ? const Icon(
+                                                    height: isUrgent
+                                                        ? 118
+                                                        : 136,
+                                                    child: Stack(
+                                                      fit: StackFit.expand,
+                                                      children: [
+                                                        if (allImages
+                                                            .first
+                                                            .isEmpty)
+                                                          const Icon(
                                                             Icons.image,
                                                             color: Colors.grey,
                                                           )
-                                                        : PageView.builder(
+                                                        else
+                                                          PageView.builder(
                                                             itemCount: allImages
                                                                 .length,
                                                             itemBuilder:
@@ -1286,13 +1611,18 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                                       .cover,
                                                                 ),
                                                           ),
+                                                      ],
+                                                    ),
                                                   ),
                                                 ),
                                                 Expanded(
                                                   child: Padding(
                                                     padding:
-                                                        const EdgeInsets.all(
+                                                        const EdgeInsets.fromLTRB(
                                                           10,
+                                                          8,
+                                                          48,
+                                                          8,
                                                         ),
                                                     child: Column(
                                                       crossAxisAlignment:
@@ -1312,7 +1642,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                                 fontWeight:
                                                                     FontWeight
                                                                         .w600,
-                                                                fontSize: 13,
+                                                                fontSize: 15,
                                                                 color: Colors
                                                                     .black87,
                                                                 height: 1.1,
@@ -1336,7 +1666,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                                         .bold,
                                                                 color: Colors
                                                                     .blue[800],
-                                                                fontSize: 15,
+                                                                fontSize: 17,
                                                               ),
                                                             ),
                                                             if (isCatShowcased)
@@ -1381,7 +1711,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                           height: 2,
                                                         ),
                                                         SizedBox(
-                                                          height: 16,
+                                                          height: 18,
                                                           child: Text(
                                                             data['city'] !=
                                                                         null &&
@@ -1397,7 +1727,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                                     .ellipsis,
                                                             style:
                                                                 LocalFonts.poppins(
-                                                                  fontSize: 10,
+                                                                  fontSize: 12,
                                                                   color: Colors
                                                                       .grey[600],
                                                                 ),
@@ -1457,6 +1787,14 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                                                 ),
                                               ),
                                             ),
+                                          Positioned(
+                                            right: 8,
+                                            bottom: 8,
+                                            child: _comparisonToggleButton(
+                                              listingId,
+                                              data,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -1489,43 +1827,18 @@ class _BannerAdWidgetState extends State<BannerAdWidget> {
   @override
   void initState() {
     super.initState();
-    _scheduleAdLoad();
-  }
-
-  Future<void> _scheduleAdLoad() async {
-    if (kIsWeb) {
-      await _fetchAdSettingsAndLoad();
-      return;
-    }
-
-    await Future.delayed(const Duration(seconds: 8));
-    if (!mounted) return;
-    await _fetchAdSettingsAndLoad();
+    _fetchAdSettingsAndLoad();
   }
 
   Future<void> _fetchAdSettingsAndLoad() async {
     try {
       if (kIsWeb) return;
-      var doc = await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('ads')
-          .get();
-      String androidId = 'ca-app-pub-3940256099942544/6300978111';
-      String iosId = 'ca-app-pub-3940256099942544/2934735716';
-      bool active = true;
-      if (doc.exists) {
-        var data = doc.data() as Map<String, dynamic>;
-        active = data['isActive'] ?? true;
-        if (data['androidId']?.toString().isNotEmpty ?? false)
-          androidId = data['androidId'];
-        if (data['iosId']?.toString().isNotEmpty ?? false)
-          iosId = data['iosId'];
-      }
-      if (!active) return;
+      final settings = await BannerAdSettings.load();
+      if (!settings.isActive) return;
       _bannerAd = BannerAd(
         adUnitId: defaultTargetPlatform == TargetPlatform.android
-            ? androidId
-            : iosId,
+            ? settings.androidId
+            : settings.iosId,
         request: const AdRequest(),
         size: AdSize.banner,
         listener: BannerAdListener(

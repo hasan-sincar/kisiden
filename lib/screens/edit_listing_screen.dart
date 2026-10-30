@@ -10,6 +10,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/translations.dart';
+import '../widgets/defect_marker_tools.dart';
 
 class EditListingScreen extends StatefulWidget {
   final String listingId;
@@ -38,11 +39,13 @@ class _EditListingScreenState extends State<EditListingScreen> {
 
   final List<dynamic> _currentImages =
       []; // Karma liste: String (URL) veya Uint8List (yeni resim)
+  List<DefectMarker> _defectMarkers = <DefectMarker>[];
   bool _isLoading = false;
   String _loadingText = "";
   bool _autoRenew = false;
   bool _offersEnabled = false;
   bool _tradeEnabled = false;
+  bool _cashOnDeliveryAvailable = false;
   int _offerValidityHours = 24;
   int _offerMinimumPercent = 70;
   String _selectedCategoryPath = '';
@@ -83,10 +86,13 @@ class _EditListingScreenState extends State<EditListingScreen> {
         if (img.toString().isNotEmpty) _currentImages.add(img.toString());
       }
     }
+    _defectMarkers = DefectMarker.fromData(widget.currentData['defectMarkers']);
 
     _autoRenew = widget.currentData['autoRenew'] ?? false;
     _offersEnabled = widget.currentData['isOfferEnabled'] as bool? ?? false;
     _tradeEnabled = widget.currentData['tradeEnabled'] as bool? ?? false;
+    _cashOnDeliveryAvailable =
+        widget.currentData['cashOnDeliveryAvailable'] == true;
     _offerValidityHours =
         (widget.currentData['offerValidityHours'] as num?)?.toInt() ?? 24;
     _offerMinimumPercent =
@@ -429,11 +435,38 @@ class _EditListingScreenState extends State<EditListingScreen> {
           _currentImages.add(watermarkedBytes);
         }
       }
+
       setState(() {
         _isLoading = false;
         _loadingText = "";
       });
     }
+  }
+
+  Future<void> _editDefectMarkers() async {
+    final markers = await Navigator.push<List<DefectMarker>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => DefectMarkerEditorScreen(
+          images: _currentImages.map<ImageProvider>((image) {
+            return image is String
+                ? NetworkImage(image)
+                : MemoryImage(image as Uint8List);
+          }).toList(),
+          initialMarkers: _defectMarkers,
+        ),
+      ),
+    );
+    if (markers != null && mounted) {
+      setState(() => _defectMarkers = markers);
+    }
+  }
+
+  void _removePhotoAt(int index) {
+    setState(() {
+      _currentImages.removeAt(index);
+      _defectMarkers = removeDefectMarkerImage(_defectMarkers, index);
+    });
   }
 
   Future<void> _updateListing() async {
@@ -457,20 +490,35 @@ class _EditListingScreenState extends State<EditListingScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       List<String> finalUrls = [];
+      final originalToFinalIndex = <int, int>{};
 
       for (int i = 0; i < _currentImages.length; i++) {
         var item = _currentImages[i];
         if (item is String) {
+          originalToFinalIndex[i] = finalUrls.length;
           finalUrls.add(item);
         } else if (item is Uint8List) {
           String fileName =
               "${user?.uid}_${DateTime.now().millisecondsSinceEpoch}_$i";
           String? url = await _dbService.uploadImage(item, fileName);
           if (url != null) {
+            originalToFinalIndex[i] = finalUrls.length;
             finalUrls.add(url);
           }
         }
       }
+      final finalDefectMarkers = _defectMarkers
+          .where(
+            (marker) => originalToFinalIndex.containsKey(marker.imageIndex),
+          )
+          .map(
+            (marker) => marker
+                .copyWith(
+                  imageIndex: originalToFinalIndex[marker.imageIndex],
+                )
+                .toMap(),
+          )
+          .toList();
 
       String? finalMainImageUrl = finalUrls.isNotEmpty ? finalUrls.first : null;
       List<String> finalAdditionalImages = finalUrls.length > 1
@@ -502,6 +550,8 @@ class _EditListingScreenState extends State<EditListingScreen> {
           _offerMinimumAmountController.text.trim().replaceAll(',', '.'),
         ),
         tradeEnabled: _tradeEnabled,
+        cashOnDeliveryAvailable: _cashOnDeliveryAvailable,
+        defectMarkers: finalDefectMarkers,
         isAdmin: widget.isAdminEditor,
       );
 
@@ -608,6 +658,11 @@ class _EditListingScreenState extends State<EditListingScreen> {
                             if (oldIndex < newIndex) {
                               newIndex -= 1;
                             }
+                            _defectMarkers = reorderDefectMarkerImage(
+                              _defectMarkers,
+                              oldIndex,
+                              newIndex,
+                            );
                             final dynamic item = _currentImages.removeAt(
                               oldIndex,
                             );
@@ -694,9 +749,7 @@ class _EditListingScreenState extends State<EditListingScreen> {
                                         );
                                         return;
                                       }
-                                      setState(
-                                        () => _currentImages.removeAt(index),
-                                      );
+                                      _removePhotoAt(index);
                                     },
                                     child: Container(
                                       margin: const EdgeInsets.all(4),
@@ -716,6 +769,14 @@ class _EditListingScreenState extends State<EditListingScreen> {
                             ),
                           );
                         },
+                      ),
+                    ),
+                  if (_currentImages.isNotEmpty)
+                    OutlinedButton.icon(
+                      onPressed: _editDefectMarkers,
+                      icon: const Icon(Icons.warning_amber_rounded),
+                      label: Text(
+                        '${tr('mark_photo_defects')} (${_defectMarkers.length})',
                       ),
                     ),
                   const SizedBox(height: 16),
@@ -790,6 +851,16 @@ class _EditListingScreenState extends State<EditListingScreen> {
                       value: _tradeEnabled,
                       onChanged: (value) =>
                           setState(() => _tradeEnabled = value),
+                    ),
+                  ),
+                  Card(
+                    child: SwitchListTile(
+                      title: Text(tr('cash_on_delivery_option')),
+                      subtitle: Text(tr('cash_on_delivery_option_desc')),
+                      value: _cashOnDeliveryAvailable,
+                      onChanged: (value) => setState(
+                        () => _cashOnDeliveryAvailable = value,
+                      ),
                     ),
                   ),
                   TextField(
