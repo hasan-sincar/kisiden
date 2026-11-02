@@ -359,12 +359,12 @@ class _EditListingScreenState extends State<EditListingScreen> {
     canvas.drawImage(image, Offset.zero, Paint());
 
     final textStyle = TextStyle(
-      color: Colors.white.withValues(alpha: 0.35),
+      color: Colors.white.withValues(alpha: 0.21),
       fontSize: image.width * 0.15,
       fontWeight: FontWeight.bold,
       shadows: [
         Shadow(
-          color: Colors.black.withValues(alpha: 0.3),
+          color: Colors.black.withValues(alpha: 0.18),
           offset: const Offset(2, 2),
           blurRadius: 6,
         ),
@@ -499,9 +499,9 @@ class _EditListingScreenState extends State<EditListingScreen> {
     if (_tradeEnabled &&
         _selectedTradeTypes.isEmpty &&
         (!_wasTradeEnabled || _initialSelectedTradeTypes.isNotEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('trade_types_required'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('trade_types_required'))));
       return;
     }
 
@@ -535,9 +535,7 @@ class _EditListingScreenState extends State<EditListingScreen> {
           )
           .map(
             (marker) => marker
-                .copyWith(
-                  imageIndex: originalToFinalIndex[marker.imageIndex],
-                )
+                .copyWith(imageIndex: originalToFinalIndex[marker.imageIndex])
                 .toMap(),
           )
           .toList();
@@ -903,9 +901,8 @@ class _EditListingScreenState extends State<EditListingScreen> {
                       title: Text(tr('cash_on_delivery_option')),
                       subtitle: Text(tr('cash_on_delivery_option_desc')),
                       value: _cashOnDeliveryAvailable,
-                      onChanged: (value) => setState(
-                        () => _cashOnDeliveryAvailable = value,
-                      ),
+                      onChanged: (value) =>
+                          setState(() => _cashOnDeliveryAvailable = value),
                     ),
                   ),
                   TextField(

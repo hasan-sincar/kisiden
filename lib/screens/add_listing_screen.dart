@@ -1048,12 +1048,12 @@ class _AddListingScreenState extends State<AddListingScreen> {
 
     // Transparan Filigran Yazısı Ayarları
     final textStyle = TextStyle(
-      color: Colors.white.withValues(alpha: 0.35), // Transparan beyaz
+      color: Colors.white.withValues(alpha: 0.21), // Transparan beyaz
       fontSize: image.width * 0.15, // Resmin büyüklüğüne göre ölçekle
       fontWeight: FontWeight.bold,
       shadows: [
         Shadow(
-          color: Colors.black.withValues(alpha: 0.3),
+          color: Colors.black.withValues(alpha: 0.18),
           offset: const Offset(2, 2),
           blurRadius: 6,
         ),
@@ -2045,113 +2045,370 @@ class _AddListingScreenState extends State<AddListingScreen> {
       decimalDigits: 0,
     ).format(price);
 
+    final previewFeatures = <String, String>{..._autoAttributes};
+    final neighborhood =
+        _selectedNeighborhood ?? _neighborhoodController.text.trim();
+    if (neighborhood.isNotEmpty) {
+      previewFeatures['Mahalle'] = neighborhood;
+    }
+    _featureTextControllers.forEach((key, controller) {
+      final value = controller.text.trim();
+      if (value.isNotEmpty) previewFeatures[key] = value;
+    });
+    _featureDropdownValues.forEach((key, value) {
+      if (value != null && value.isNotEmpty) previewFeatures[key] = value;
+    });
+
+    var activePhotoIndex = 0;
     return showDialog<_ListingPreviewAction>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(tr('listing_preview_title')),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        final screenHeight = MediaQuery.sizeOf(dialogContext).height;
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 560,
+              maxHeight: screenHeight * 0.9,
+            ),
+            child: SizedBox(
+              width: double.maxFinite,
+              child: Column(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.memory(
-                      _optimizedImages.first,
-                      width: 88,
-                      height: 88,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+                    child: Row(
                       children: [
-                        Text(
-                          tr('listing_cover_photo'),
-                          style: LocalFonts.poppins(
-                            fontWeight: FontWeight.bold,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                tr('listing_preview_title'),
+                                style: LocalFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF172033),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                tr('listing_cover_photo'),
+                                style: LocalFonts.poppins(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        Text(
-                          '${_optimizedImages.length} ${tr('listing_photos_count')}',
-                          style: LocalFonts.poppins(fontSize: 12),
-                        ),
-                        TextButton(
+                        IconButton(
+                          tooltip: tr('close'),
                           onPressed: () => Navigator.pop(
                             dialogContext,
-                            _ListingPreviewAction.editListingInfo,
+                            _ListingPreviewAction.cancel,
                           ),
-                          child: Text(tr('edit_listing_details')),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: SizedBox(
+                              height: 220,
+                              child: StatefulBuilder(
+                                builder: (context, setPhotoState) => Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    PageView.builder(
+                                      itemCount: _optimizedImages.length,
+                                      onPageChanged: (index) {
+                                        setPhotoState(
+                                          () => activePhotoIndex = index,
+                                        );
+                                      },
+                                      itemBuilder: (context, index) =>
+                                          Image.memory(
+                                            _optimizedImages[index],
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, _, _) =>
+                                                Container(
+                                                  color: Colors.grey.shade200,
+                                                  child: const Icon(
+                                                    Icons.image_not_supported,
+                                                    size: 44,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                          ),
+                                    ),
+                                    Positioned(
+                                      left: 12,
+                                      bottom: 12,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.58,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            20,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${activePhotoIndex + 1}/${_optimizedImages.length} · ${tr('listing_photos_count')}',
+                                          style: LocalFonts.poppins(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      right: 12,
+                                      bottom: 12,
+                                      child: IconButton.filledTonal(
+                                        tooltip: tr('edit_listing_details'),
+                                        onPressed: () => Navigator.pop(
+                                          dialogContext,
+                                          _ListingPreviewAction.editListingInfo,
+                                        ),
+                                        icon: const Icon(Icons.edit_outlined),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF7F8FC),
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _titleController.text.trim(),
+                                  style: LocalFonts.poppins(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.3,
+                                    color: const Color(0xFF172033),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  formattedPrice,
+                                  style: LocalFonts.poppins(
+                                    fontSize: 23,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(
+                                      Icons.location_on_outlined,
+                                      size: 18,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        [_selectedCity, _selectedDistrict]
+                                            .whereType<String>()
+                                            .where((value) => value.isNotEmpty)
+                                            .join(', '),
+                                        style: LocalFonts.poppins(
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.08,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    fullCategoryDisplayPath.isEmpty
+                                        ? selectedCategoryName
+                                        : fullCategoryDisplayPath,
+                                    style: LocalFonts.poppins(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildPreviewSection(
+                            title: tr('description'),
+                            child: Text(
+                              _descriptionController.text.trim(),
+                              style: LocalFonts.poppins(
+                                fontSize: 14,
+                                height: 1.55,
+                                color: const Color(0xFF343B49),
+                              ),
+                            ),
+                          ),
+                          if (previewFeatures.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            _buildPreviewSection(
+                              title: tr('category_features'),
+                              child: Column(
+                                children: previewFeatures.entries
+                                    .map(
+                                      (entry) => Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 7,
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                entry.key,
+                                                style: LocalFonts.poppins(
+                                                  fontSize: 13,
+                                                  color: Colors.black54,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Flexible(
+                                              child: Text(
+                                                entry.value,
+                                                textAlign: TextAlign.end,
+                                                style: LocalFonts.poppins(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: const Color(
+                                                    0xFF172033,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
+                          ],
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () => Navigator.pop(
+                                dialogContext,
+                                _ListingPreviewAction.editCategory,
+                              ),
+                              icon: const Icon(Icons.edit_outlined, size: 17),
+                              label: Text(tr('edit_category')),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(
+                              dialogContext,
+                              _ListingPreviewAction.cancel,
+                            ),
+                            child: Text(tr('cancel')),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => Navigator.pop(
+                              dialogContext,
+                              _ListingPreviewAction.publish,
+                            ),
+                            icon: const Icon(Icons.check_circle_outline),
+                            label: Text(tr('confirm_publish')),
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const Divider(height: 24),
-              Text(
-                _titleController.text.trim(),
-                style: LocalFonts.poppins(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                formattedPrice,
-                style: LocalFonts.poppins(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${_selectedCity ?? ''}, ${_selectedDistrict ?? ''}',
-                style: LocalFonts.poppins(fontSize: 12),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(
-                    dialogContext,
-                    _ListingPreviewAction.editListingInfo,
-                  ),
-                  child: Text(tr('edit_listing_details')),
-                ),
-              ),
-              const Divider(height: 16),
-              Text(
-                fullCategoryDisplayPath.isEmpty
-                    ? selectedCategoryName
-                    : fullCategoryDisplayPath,
-                style: LocalFonts.poppins(),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(
-                    dialogContext,
-                    _ListingPreviewAction.editCategory,
-                  ),
-                  child: Text(tr('edit_category')),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, _ListingPreviewAction.cancel),
-            child: Text(tr('cancel')),
+        );
+      },
+    );
+  }
+
+  Widget _buildPreviewSection({required String title, required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE9ECF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: LocalFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF172033),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, _ListingPreviewAction.publish),
-            child: Text(tr('confirm_publish')),
-          ),
+          const SizedBox(height: 8),
+          child,
         ],
       ),
     );
@@ -2176,9 +2433,9 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
 
     if (_tradeEnabled && _selectedTradeTypes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('trade_types_required'))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr('trade_types_required'))));
       return;
     }
 
@@ -3361,8 +3618,6 @@ class _AddListingScreenState extends State<AddListingScreen> {
           maxLines: 5,
           decoration: InputDecoration(
             labelText: tr('description'),
-            helperText: tr('description_character_count'),
-            counterText: '${_descriptionController.text.length}',
             errorText:
                 _showStep1Validation &&
                     _descriptionController.text.trim().isEmpty

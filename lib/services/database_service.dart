@@ -309,7 +309,7 @@ class DatabaseService {
         });
       }
 
-      final listingRef = await _firestore.collection('listings').add({
+      await _firestore.collection('listings').add({
         'listingNo': listingNo,
         'title': title,
         'description': description,
@@ -346,15 +346,6 @@ class DatabaseService {
         'listingRightExpiresAt': listingRightExpiresAt,
         'listingRightSource': usesExtraListingRight ? 'extra' : null,
       });
-
-      await _notifyAdmins(
-        titleKey: 'admin_alert_new_listing_title',
-        messageKey: 'admin_alert_new_listing_message',
-        messageArgs: [title, sellerName],
-        type: 'listing',
-        targetId: listingRef.id,
-        eventId: listingRef.id,
-      );
 
       return true;
     } catch (e) {

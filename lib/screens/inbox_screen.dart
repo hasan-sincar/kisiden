@@ -234,10 +234,7 @@ class _InboxScreenState extends State<InboxScreen> {
                                     color: Colors.grey[600],
                                   ),
                                   const SizedBox(width: 4),
-                                  ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 180,
-                                    ),
+                                  Flexible(
                                     child: Text(
                                       data['listingTitle'].toString(),
                                       style: LocalFonts.poppins(

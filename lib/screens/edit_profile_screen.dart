@@ -56,7 +56,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _emailController.text =
             data['email'] ?? FirebaseAuth.instance.currentUser?.email ?? '';
         _aboutController.text = data['aboutMe'] ?? '';
-        _contactPreference = data['contactPreference'] ?? 'both';
+        final savedContactPreference = data['contactPreference'];
+        _contactPreference =
+            savedContactPreference == 'call_only' ||
+                savedContactPreference == 'message_only'
+            ? savedContactPreference
+            : 'both';
         _instagramController.text = data['instagram'] ?? '';
         _facebookController.text = data['facebook'] ?? '';
         _websiteController.text = data['website'] ?? '';
@@ -708,9 +713,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             e is StateError && e.message == 'name_change_cooldown'
@@ -1146,13 +1149,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               ),
                             ),
                             DropdownMenuItem(
-                              value: 'message_only',
-                              child: Text(
-                                tr('message_only'),
-                                style: LocalFonts.poppins(fontSize: 14),
-                              ),
-                            ),
-                            DropdownMenuItem(
                               value: 'call_only',
                               child: Text(
                                 tr('call_whatsapp_only'),
@@ -1160,9 +1156,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               ),
                             ),
                             DropdownMenuItem(
-                              value: 'whatsapp_only',
+                              value: 'message_only',
                               child: Text(
-                                tr('whatsapp_only'),
+                                tr('message_only'),
                                 style: LocalFonts.poppins(fontSize: 14),
                               ),
                             ),
@@ -1175,30 +1171,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           stream: _dbService.emailNotificationsStream(),
                           builder: (context, snapshot) {
                             bool isEnabled = snapshot.data ?? true;
-                            return SwitchListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                tr('email_notifications'),
-                                style: LocalFonts.poppins(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
+                            return Material(
+                              color: Colors.transparent,
+                              child: SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  tr('email_notifications'),
+                                  style: LocalFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
                                 ),
-                              ),
-                              subtitle: Text(
-                                tr('email_notifications_desc'),
-                                style: LocalFonts.poppins(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
+                                subtitle: Text(
+                                  tr('email_notifications_desc'),
+                                  style: LocalFonts.poppins(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
                                 ),
+                                value: isEnabled,
+                                activeThumbColor: Colors.blue[800],
+                                onChanged: (bool value) async {
+                                  await _dbService.toggleEmailNotifications(
+                                    value,
+                                  );
+                                },
                               ),
-                              value: isEnabled,
-                              activeThumbColor: Colors.blue[800],
-                              onChanged: (bool value) async {
-                                await _dbService.toggleEmailNotifications(
-                                  value,
-                                );
-                              },
                             );
                           },
                         ),

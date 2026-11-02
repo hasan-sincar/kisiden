@@ -306,93 +306,93 @@ class _HomeScreenState extends State<HomeScreen>
             final preview = snapshot.data ?? [];
             if (preview.isEmpty) return const SizedBox();
             return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        tr('recently_viewed'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          tr('recently_viewed'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: LocalFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 17,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: Size.zero,
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ViewedListingsScreen(),
+                          ),
+                        ),
+                        child: Text(
+                          tr('see_all'),
+                          style: LocalFonts.poppins(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...preview.map((entry) {
+                  final data = Map<String, dynamic>.from(entry['data'] as Map);
+                  final image = data['imageUrl']?.toString() ?? '';
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: ListTile(
+                      leading: image.isEmpty
+                          ? const Icon(Icons.image_outlined)
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                image,
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    const Icon(Icons.broken_image_outlined),
+                              ),
+                            ),
+                      title: Text(
+                        data['title']?.toString() ?? '',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: LocalFonts.poppins(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 17,
-                        ),
+                        style: LocalFonts.poppins(fontWeight: FontWeight.w600),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: Size.zero,
-                        padding: EdgeInsets.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
+                      subtitle: Text(
+                        '${data['price'] ?? ''} • ${data['city'] ?? ''}',
+                        style: LocalFonts.poppins(color: Colors.grey[600]),
                       ),
-                      onPressed: () => Navigator.push(
+                      onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const ViewedListingsScreen(),
-                        ),
-                      ),
-                      child: Text(
-                        tr('see_all'),
-                        style: LocalFonts.poppins(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ...preview.map((entry) {
-                final data = Map<String, dynamic>.from(entry['data'] as Map);
-                final image = data['imageUrl']?.toString() ?? '';
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: ListTile(
-                    leading: image.isEmpty
-                        ? const Icon(Icons.image_outlined)
-                        : ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              image,
-                              width: 56,
-                              height: 56,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  const Icon(Icons.broken_image_outlined),
-                            ),
+                          builder: (_) => ListingDetailScreen(
+                            data: data,
+                            listingId: entry['id'].toString(),
                           ),
-                    title: Text(
-                      data['title']?.toString() ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: LocalFonts.poppins(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      '${data['price'] ?? ''} • ${data['city'] ?? ''}',
-                      style: LocalFonts.poppins(color: Colors.grey[600]),
-                    ),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ListingDetailScreen(
-                          data: data,
-                          listingId: entry['id'].toString(),
                         ),
                       ),
                     ),
-                  ),
-                );
-              }),
-            ],
+                  );
+                }),
+              ],
             );
           },
         );
@@ -425,9 +425,13 @@ class _HomeScreenState extends State<HomeScreen>
   String _filterCategoryDisplayName = "";
   String _sortBy = 'date_desc';
   double _distance = 30.0;
+  static const String _searchHistoryKey = 'home_search_history';
+  static const int _searchHistoryLimit = 10;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchText = "";
+  List<String> _searchHistory = [];
+  bool _showSearchHistory = false;
   final TextEditingController _minPriceController = TextEditingController();
   final TextEditingController _maxPriceController = TextEditingController();
   final TextEditingController _neighborhoodController = TextEditingController();
@@ -575,7 +579,9 @@ class _HomeScreenState extends State<HomeScreen>
     _filterCategoryName = tr('all');
     _currentParentDisplayName = tr('all');
     _filterCategoryDisplayName = tr('all');
+    _searchFocusNode.addListener(_handleSearchFocusChange);
     _loadPreferences();
+    _loadSearchHistory();
     _initSpeech();
 
     _scrollController.addListener(() {
@@ -621,6 +627,7 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     _urgentPulseController.dispose();
     _searchController.dispose();
+    _searchFocusNode.removeListener(_handleSearchFocusChange);
     _searchFocusNode.dispose();
     _minPriceController.dispose();
     _maxPriceController.dispose();
@@ -632,6 +639,188 @@ class _HomeScreenState extends State<HomeScreen>
   void _dismissSearchFocus() {
     _searchFocusNode.unfocus();
     FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  void _handleSearchFocusChange() {
+    if (!mounted) return;
+    setState(() => _showSearchHistory = _searchFocusNode.hasFocus);
+    if (!_searchFocusNode.hasFocus) {
+      unawaited(_rememberSearch(_searchController.text));
+    }
+  }
+
+  List<String> _normalizeSearchHistory(Iterable<String> values) {
+    final normalized = <String>[];
+    final seen = <String>{};
+    for (final value in values) {
+      final query = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+      if (query.isEmpty || !seen.add(query.toLowerCase())) continue;
+      normalized.add(query);
+      if (normalized.length == _searchHistoryLimit) break;
+    }
+    return normalized;
+  }
+
+  Future<void> _loadSearchHistory() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final history = _normalizeSearchHistory(
+        preferences.getStringList(_searchHistoryKey) ?? const [],
+      );
+      if (!mounted) return;
+      setState(() => _searchHistory = history);
+    } catch (error) {
+      debugPrint('Yerel arama geçmişi yüklenemedi: $error');
+    }
+  }
+
+  Future<void> _rememberSearch(String value) async {
+    final query = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (query.isEmpty) return;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final history = _normalizeSearchHistory([
+        query,
+        ...?preferences.getStringList(_searchHistoryKey),
+      ]);
+      await preferences.setStringList(_searchHistoryKey, history);
+      if (mounted) setState(() => _searchHistory = history);
+    } catch (error) {
+      debugPrint('Yerel arama geçmişi kaydedilemedi: $error');
+    }
+  }
+
+  Future<void> _deleteSearchHistoryEntry(String query) async {
+    final history = _searchHistory
+        .where((entry) => entry.toLowerCase() != query.toLowerCase())
+        .toList();
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setStringList(_searchHistoryKey, history);
+      if (mounted) setState(() => _searchHistory = history);
+    } catch (error) {
+      debugPrint('Arama geçmişi öğesi silinemedi: $error');
+    }
+  }
+
+  Future<void> _clearSearchHistory() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.remove(_searchHistoryKey);
+      if (mounted) setState(() => _searchHistory = []);
+    } catch (error) {
+      debugPrint('Arama geçmişi temizlenemedi: $error');
+    }
+  }
+
+  Widget _buildSearchHistory() {
+    final query = _searchController.text.trim().toLowerCase();
+    final visibleHistory = _searchHistory
+        .where((entry) => query.isEmpty || entry.toLowerCase().contains(query))
+        .toList();
+    if (!_showSearchHistory || visibleHistory.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0x14000000)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 8, 2),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    tr('recent_searches'),
+                    style: LocalFonts.poppins(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _clearSearchHistory,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: Text(
+                    tr('clear_all'),
+                    style: LocalFonts.poppins(
+                      fontSize: 11,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (final search in visibleHistory)
+            SizedBox(
+              height: 40,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _searchController.text = search;
+                          _searchText = search.toLowerCase();
+                        });
+                        _searchFocusNode.unfocus();
+                        _savePreferences();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.history_rounded,
+                              size: 18,
+                              color: Colors.grey[500],
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                search,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: LocalFonts.poppins(
+                                  fontSize: 13,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: tr('delete'),
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: Colors.grey[500],
+                    ),
+                    onPressed: () => _deleteSearchHistoryEntry(search),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   bool _hasActiveFilters() {
@@ -1038,6 +1227,7 @@ class _HomeScreenState extends State<HomeScreen>
                                       controller: _searchController,
                                       focusNode: _searchFocusNode,
                                       autofocus: false,
+                                      textInputAction: TextInputAction.search,
                                       cursorColor: Colors.black87,
                                       decoration: InputDecoration(
                                         filled: false,
@@ -1119,12 +1309,18 @@ class _HomeScreenState extends State<HomeScreen>
                                           },
                                         );
                                       },
+                                      onSubmitted: (value) {
+                                        unawaited(_rememberSearch(value));
+                                        _searchFocusNode.unfocus();
+                                      },
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
+
+                          _buildSearchHistory(),
 
                           if (_selectedTradeTypes.isEmpty &&
                               _filterCategoryName == tr('all') &&
@@ -1561,15 +1757,16 @@ class _HomeScreenState extends State<HomeScreen>
                                             ))
                                               return false;
 
+                                            final bool isSearchMode =
+                                                _searchText.trim().isNotEmpty;
                                             if (!listingMatchesTradeTypeFilter(
                                               data,
                                               _selectedTradeTypes,
+                                              requireDesiredTradeTypes:
+                                                  isSearchMode,
                                             )) {
                                               return false;
                                             }
-
-                                            final bool isSearchMode =
-                                                _searchText.trim().isNotEmpty;
 
                                             bool matchLocation = true;
                                             if (!isSearchMode &&
@@ -2122,6 +2319,14 @@ class _HomeScreenState extends State<HomeScreen>
                                                 var data =
                                                     filteredDocs[index].data()
                                                         as Map<String, dynamic>;
+                                                final isSearchMode = _searchText
+                                                    .trim()
+                                                    .isNotEmpty;
+                                                final desiredTradeTypeLabels =
+                                                    listingDesiredTradeTypeLabels(
+                                                      data,
+                                                      tr,
+                                                    );
 
                                                 String
                                                 formattedPrice = data['price']
@@ -2322,6 +2527,27 @@ class _HomeScreenState extends State<HomeScreen>
                                                                           1.2,
                                                                     ),
                                                                   ),
+                                                                  if (isSearchMode &&
+                                                                      desiredTradeTypeLabels
+                                                                          .isNotEmpty) ...[
+                                                                    const SizedBox(
+                                                                      height: 3,
+                                                                    ),
+                                                                    Text(
+                                                                      '${tr('trade_request_label')}: ${desiredTradeTypeLabels.join(', ')}',
+                                                                      maxLines:
+                                                                          1,
+                                                                      overflow:
+                                                                          TextOverflow
+                                                                              .ellipsis,
+                                                                      style: LocalFonts.poppins(
+                                                                        fontSize:
+                                                                            10,
+                                                                        color: AppColors
+                                                                            .primary,
+                                                                      ),
+                                                                    ),
+                                                                  ],
                                                                   const SizedBox(
                                                                     height: 4,
                                                                   ),

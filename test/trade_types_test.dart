@@ -18,6 +18,18 @@ void main() {
           'home_appliance',
           'television',
           'camera',
+          'vehicle',
+          'motorcycle_bicycle',
+          'clothing_accessories',
+          'furniture_home',
+          'sports_outdoor',
+          'musical_instruments',
+          'books_education',
+          'toys_baby',
+          'tools_hardware',
+          'collectibles_hobby',
+          'personal_care',
+          'office_equipment',
           allTradeTypesId,
         ]),
       );
@@ -28,6 +40,72 @@ void main() {
       expect(
         listingMatchesTradeTypeFilter({'tradeEnabled': false}, <String>{}),
         isTrue,
+      );
+    });
+
+    test('resolves desired trade type labels for search result cards', () {
+      expect(
+        listingDesiredTradeTypeLabels({
+          'tradeEnabled': true,
+          'tradePreferences': {
+            'desiredTradeTypes': ['phone', 'tablet', 'unknown'],
+          },
+        }, (key) => key),
+        ['trade_type_phone', 'trade_type_tablet'],
+      );
+      expect(
+        listingDesiredTradeTypeLabels({'tradeEnabled': false}, (key) => key),
+        isEmpty,
+      );
+    });
+
+    test('requires an active trade preference when searching listings', () {
+      expect(
+        listingMatchesTradeTypeFilter(
+          {
+            'tradeEnabled': true,
+            'tradePreferences': {
+              'desiredTradeTypes': ['phone', 'tablet'],
+            },
+          },
+          <String>{},
+          requireDesiredTradeTypes: true,
+        ),
+        isTrue,
+      );
+      expect(
+        listingMatchesTradeTypeFilter(
+          {'tradeEnabled': true, 'tradePreferences': <String, dynamic>{}},
+          <String>{},
+          requireDesiredTradeTypes: true,
+        ),
+        isFalse,
+      );
+      expect(
+        listingMatchesTradeTypeFilter(
+          {
+            'tradeEnabled': true,
+            'tradePreferences': {
+              'desiredTradeTypes': ['  '],
+            },
+          },
+          <String>{},
+          requireDesiredTradeTypes: true,
+        ),
+        isFalse,
+      );
+      expect(
+        listingMatchesTradeTypeFilter(
+          {
+            'tradeEnabled': false,
+            'tradePreferences': {
+              'desiredTradeTypes': ['phone'],
+            },
+          },
+          <String>{},
+          requireDesiredTradeTypes: true,
+        ),
+        isFalse,
       );
     });
 

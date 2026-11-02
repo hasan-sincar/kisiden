@@ -2154,6 +2154,65 @@ async function sendNotification(userId, title, message, type = 'general', target
   });
 }
 
+exports.notifyAdminsForNewListing = onDocumentCreated({
+  document: "listings/{listingId}",
+  region: "europe-west1",
+}, async (event) => {
+  const listing = event.data?.data();
+  const listingId = event.params.listingId;
+  if (!listing || listing.status !== "pending") return null;
+
+  const title = String(listing.title || "").trim().slice(0, 150) || "Başlıksız ilan";
+  const sellerName = String(listing.sellerName || "").trim().slice(0, 120) || "Kullanıcı";
+  const admins = new Map();
+  for (const email of ADMIN_EMAIL_ALLOWLIST) {
+    const snapshot = await db.collection("users").where("email", "==", email).get();
+    for (const doc of snapshot.docs) {
+      if (await isAdminUid(doc.id)) admins.set(doc.id, doc.data());
+    }
+  }
+  if (admins.size === 0) {
+    logger.warn(`Yeni ilan için admin bulunamadı: ${listingId}`);
+    return null;
+  }
+
+  const titles = {
+    tr: "Yeni Onay Bekleyen İlan",
+    en: "New Listing Awaiting Approval",
+    ar: "إعلان جديد بانتظار الموافقة",
+  };
+  const messages = {
+    tr: `"${title}" başlıklı ilan ${sellerName} tarafından onaya gönderildi.`,
+    en: `"${title}" was submitted for approval by ${sellerName}.`,
+    ar: `تم إرسال الإعلان "${title}" للموافقة بواسطة ${sellerName}.`,
+  };
+
+  const createdCount = await Promise.all([...admins.entries()].map(async ([adminId, user]) => {
+    const language = String(user.languageCode || "tr").split("-")[0].toLowerCase();
+    const notificationRef = db.collection("users").doc(adminId)
+      .collection("notifications").doc(`admin_listing_${listingId}`);
+    return db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(notificationRef);
+      if (existing.exists) return false;
+      transaction.create(notificationRef, {
+        title: titles[language] || titles.tr,
+        message: messages[language] || messages.tr,
+        isRead: false,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        type: "listing",
+        targetId: listingId,
+        source: "admin_alert",
+      });
+      return true;
+    });
+  })).then((created) => created.filter(Boolean).length);
+
+  logger.info(`Yeni ilan admin bildirimi oluşturuldu: ${listingId}`, {
+    adminCount: createdCount,
+  });
+  return null;
+});
+
 exports.notifyInterestedBuyersAfterListingTransfer = onDocumentUpdated(
   "listing_transfers/{transferId}",
   async (event) => {
@@ -3711,8 +3770,17 @@ exports.sendUserNotification = onCall({
   }
 
   const senderRef = db.collection("users").doc(senderId);
-  const notificationRef = db.collection("users").doc(receiverId)
-    .collection("notifications").doc();
+  const notificationsRef = db.collection("users").doc(receiverId)
+    .collection("notifications");
+  const notificationId = source === "admin_alert" &&
+      type === "listing" &&
+      targetId === eventId &&
+      sanitizeListingId(targetId)
+    ? `admin_listing_${targetId}`
+    : null;
+  const notificationRef = notificationId
+    ? notificationsRef.doc(notificationId)
+    : notificationsRef.doc();
   await db.runTransaction(async (tx) => {
     const senderSnap = await tx.get(senderRef);
     if (!senderSnap.exists) {

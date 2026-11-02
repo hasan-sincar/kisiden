@@ -297,6 +297,92 @@ class _ChatScreenState extends State<ChatScreen> {
         .snapshots();
   }
 
+  DateTime? _messageDate(dynamic timestamp) {
+    if (timestamp is Timestamp) return timestamp.toDate();
+    if (timestamp is DateTime) return timestamp;
+    return null;
+  }
+
+  bool _isSameMessageDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  String _messageDateLabel(DateTime date) {
+    final now = DateTime.now();
+    if (_isSameMessageDay(date, now)) return tr('today');
+
+    final yesterday = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 1));
+    if (_isSameMessageDay(date, yesterday)) return tr('yesterday');
+
+    return '${date.day.toString().padLeft(2, '0')}.'
+        '${date.month.toString().padLeft(2, '0')}.${date.year}';
+  }
+
+  Widget _withMessageDate({
+    required Widget message,
+    required dynamic timestamp,
+    required dynamic olderTimestamp,
+    required bool isMe,
+  }) {
+    final date = _messageDate(timestamp);
+    final olderDate = _messageDate(olderTimestamp);
+    final showDateSeparator =
+        date != null &&
+        (olderDate == null || !_isSameMessageDay(date, olderDate));
+    final relativeTime = formatRelativeTime(timestamp);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (showDateSeparator)
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 4),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
+                child: Text(
+                  _messageDateLabel(date),
+                  style: LocalFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        message,
+        if (relativeTime.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 14, right: 14, bottom: 2),
+            child: Align(
+              alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+              child: Text(
+                relativeTime,
+                style: LocalFonts.poppins(
+                  fontSize: 10,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Future<void> _hydrateChatListingMeta() async {
     try {
       final chatDoc = await FirebaseFirestore.instance
@@ -1266,6 +1352,10 @@ class _ChatScreenState extends State<ChatScreen> {
                         var data =
                             messages[index].data() as Map<String, dynamic>;
                         bool isMe = data['senderId'] == currentUserId;
+                        final olderTimestamp = index + 1 < messages.length
+                            ? (messages[index + 1].data()
+                                  as Map<String, dynamic>)['timestamp']
+                            : null;
                         final isTargetMessage =
                             messages[index].id == widget.initialMessageId;
 
@@ -1305,188 +1395,198 @@ class _ChatScreenState extends State<ChatScreen> {
                             statusText = '${tr('offer_cancelled')}';
                           }
 
-                          return Align(
-                            alignment: isMe
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              padding: const EdgeInsets.all(16),
-                              width: MediaQuery.of(context).size.width * 0.75,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: Colors.purple.shade200,
-                                  width: 2,
+                          return _withMessageDate(
+                            timestamp: data['timestamp'],
+                            olderTimestamp: olderTimestamp,
+                            isMe: isMe,
+                            message: Align(
+                              alignment: isMe
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.purple.withValues(alpha: 0.1),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 4),
+                                padding: const EdgeInsets.all(16),
+                                width: MediaQuery.of(context).size.width * 0.75,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Colors.purple.shade200,
+                                    width: 2,
                                   ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.local_offer,
-                                        color: Colors.purple,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.purple.withValues(
+                                        alpha: 0.1,
                                       ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          data['offerKind'] == 'counter'
-                                              ? tr('counter_offer_received')
-                                              : isMe
-                                              ? tr('your_offer_to_seller')
-                                              : tr('buyers_offer'),
-                                          style: LocalFonts.poppins(
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.purple[800],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const Divider(), const SizedBox(height: 8),
-                                  Text(
-                                    '₺${offerAmount.toStringAsFixed(0)}',
-                                    style: LocalFonts.poppins(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
                                     ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        '${tr('status')}: ',
-                                        style: LocalFonts.poppins(
-                                          fontSize: 12,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                      Text(
-                                        statusText,
-                                        style: LocalFonts.poppins(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: statusColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  // Satıcı teklifi görüyorsa Kabul Et / Reddet butonlarını çıkar
-                                  if (!isMe && status == 'pending') ...[
-                                    const SizedBox(height: 16),
-                                    Column(
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
                                       children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: ElevatedButton(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor:
-                                                      Colors.red[600],
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
-                                                        ),
-                                                  ),
-                                                ),
-                                                onPressed: () => _dbService
-                                                    .updateOfferStatus(
-                                                      chatRoomId,
-                                                      messageId,
-                                                      'rejected',
-                                                      data['senderId'],
-                                                    ),
-                                                child: Text(
-                                                  tr('reject'),
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: ElevatedButton(
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor:
-                                                      Colors.green[600],
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          8,
-                                                        ),
-                                                  ),
-                                                ),
-                                                onPressed: () => _dbService
-                                                    .updateOfferStatus(
-                                                      chatRoomId,
-                                                      messageId,
-                                                      'accepted',
-                                                      data['senderId'],
-                                                    ),
-                                                child: Text(
-                                                  tr('accept'),
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
+                                        const Icon(
+                                          Icons.local_offer,
+                                          color: Colors.purple,
                                         ),
-                                        const SizedBox(height: 8),
-                                        SizedBox(
-                                          width: double.infinity,
-                                          child: OutlinedButton.icon(
-                                            onPressed: () =>
-                                                _showCounterOfferDialog(
-                                                  receiverId: data['senderId']
-                                                      .toString(),
-                                                  listingTitle:
-                                                      (_chatListingTitle ?? '')
-                                                          .toString(),
-                                                  listingId:
-                                                      (_chatListingId ?? '')
-                                                          .toString(),
-                                                ),
-                                            icon: const Icon(Icons.swap_horiz),
-                                            label: Text(tr('counter_offer')),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            data['offerKind'] == 'counter'
+                                                ? tr('counter_offer_received')
+                                                : isMe
+                                                ? tr('your_offer_to_seller')
+                                                : tr('buyers_offer'),
+                                            style: LocalFonts.poppins(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.purple[800],
+                                            ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ],
-                                  if (isMe && status == 'pending') ...[
-                                    const SizedBox(height: 12),
-                                    OutlinedButton.icon(
-                                      onPressed: () =>
-                                          _dbService.updateOfferStatus(
-                                            chatRoomId,
-                                            messageId,
-                                            'cancelled',
-                                            widget.receiverId,
-                                          ),
-                                      icon: const Icon(Icons.undo),
-                                      label: Text(tr('cancel')),
+                                    const Divider(), const SizedBox(height: 8),
+                                    Text(
+                                      '₺${offerAmount.toStringAsFixed(0)}',
+                                      style: LocalFonts.poppins(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
                                     ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Text(
+                                          '${tr('status')}: ',
+                                          style: LocalFonts.poppins(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                        Text(
+                                          statusText,
+                                          style: LocalFonts.poppins(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: statusColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+
+                                    // Satıcı teklifi görüyorsa Kabul Et / Reddet butonlarını çıkar
+                                    if (!isMe && status == 'pending') ...[
+                                      const SizedBox(height: 16),
+                                      Column(
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.red[600],
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  onPressed: () => _dbService
+                                                      .updateOfferStatus(
+                                                        chatRoomId,
+                                                        messageId,
+                                                        'rejected',
+                                                        data['senderId'],
+                                                      ),
+                                                  child: Text(
+                                                    tr('reject'),
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.green[600],
+                                                    shape: RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                  onPressed: () => _dbService
+                                                      .updateOfferStatus(
+                                                        chatRoomId,
+                                                        messageId,
+                                                        'accepted',
+                                                        data['senderId'],
+                                                      ),
+                                                  child: Text(
+                                                    tr('accept'),
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: OutlinedButton.icon(
+                                              onPressed: () =>
+                                                  _showCounterOfferDialog(
+                                                    receiverId: data['senderId']
+                                                        .toString(),
+                                                    listingTitle:
+                                                        (_chatListingTitle ??
+                                                                '')
+                                                            .toString(),
+                                                    listingId:
+                                                        (_chatListingId ?? '')
+                                                            .toString(),
+                                                  ),
+                                              icon: const Icon(
+                                                Icons.swap_horiz,
+                                              ),
+                                              label: Text(tr('counter_offer')),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                    if (isMe && status == 'pending') ...[
+                                      const SizedBox(height: 12),
+                                      OutlinedButton.icon(
+                                        onPressed: () =>
+                                            _dbService.updateOfferStatus(
+                                              chatRoomId,
+                                              messageId,
+                                              'cancelled',
+                                              widget.receiverId,
+                                            ),
+                                        icon: const Icon(Icons.undo),
+                                        label: Text(tr('cancel')),
+                                      ),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ),
                           );
@@ -1501,29 +1601,34 @@ class _ChatScreenState extends State<ChatScreen> {
                                 )
                               : null;
                           if (point == null) return const SizedBox.shrink();
-                          return Align(
-                            alignment: isMe
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                            child: Card(
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              child: ListTile(
-                                leading: const Icon(
-                                  Icons.verified_user_outlined,
-                                  color: Colors.green,
+                          return _withMessageDate(
+                            timestamp: data['timestamp'],
+                            olderTimestamp: olderTimestamp,
+                            isMe: isMe,
+                            message: Align(
+                              alignment: isMe
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
+                              child: Card(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
                                 ),
-                                title: Text(point.name),
-                                subtitle: Text(point.address),
-                                trailing: const Icon(Icons.map_outlined),
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => SafeMeetingMapScreen(
-                                      points: [point],
-                                      initialSelectedId: point.id,
+                                child: ListTile(
+                                  leading: const Icon(
+                                    Icons.verified_user_outlined,
+                                    color: Colors.green,
+                                  ),
+                                  title: Text(point.name),
+                                  subtitle: Text(point.address),
+                                  trailing: const Icon(Icons.map_outlined),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => SafeMeetingMapScreen(
+                                        points: [point],
+                                        initialSelectedId: point.id,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1539,78 +1644,88 @@ class _ChatScreenState extends State<ChatScreen> {
                               data['tradeListingTitle']?.toString() ?? '';
                           final tradeImage =
                               data['tradeListingImage']?.toString() ?? '';
-                          return Align(
-                            alignment: isMe
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                            child: Card(
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(12),
-                                onTap: tradeListingId.isEmpty
-                                    ? null
-                                    : () async {
-                                        final listing = await FirebaseFirestore
-                                            .instance
-                                            .collection('listings')
-                                            .doc(tradeListingId)
-                                            .get();
-                                        if (!mounted || !listing.exists) {
-                                          return;
-                                        }
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => ListingDetailScreen(
-                                              data: listing.data()!,
-                                              listingId: tradeListingId,
+                          return _withMessageDate(
+                            timestamp: data['timestamp'],
+                            olderTimestamp: olderTimestamp,
+                            isMe: isMe,
+                            message: Align(
+                              alignment: isMe
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
+                              child: Card(
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(12),
+                                  onTap: tradeListingId.isEmpty
+                                      ? null
+                                      : () async {
+                                          final listing =
+                                              await FirebaseFirestore.instance
+                                                  .collection('listings')
+                                                  .doc(tradeListingId)
+                                                  .get();
+                                          if (!mounted || !listing.exists) {
+                                            return;
+                                          }
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  ListingDetailScreen(
+                                                    data: listing.data()!,
+                                                    listingId: tradeListingId,
+                                                  ),
                                             ),
-                                          ),
-                                        );
-                                      },
-                                child: ListTile(
-                                  leading: const Icon(
-                                    Icons.swap_horiz_rounded,
-                                    color: Colors.deepPurple,
-                                  ),
-                                  title: Text(
-                                    tr('trade_listing_shared'),
-                                    style: LocalFonts.poppins(
-                                      fontWeight: FontWeight.bold,
+                                          );
+                                        },
+                                  child: ListTile(
+                                    leading: const Icon(
+                                      Icons.swap_horiz_rounded,
                                       color: Colors.deepPurple,
                                     ),
+                                    title: Text(
+                                      tr('trade_listing_shared'),
+                                      style: LocalFonts.poppins(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.deepPurple,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      tradeTitle.isEmpty
+                                          ? tr('listing_detail')
+                                          : tradeTitle,
+                                    ),
+                                    trailing: tradeImage.isEmpty
+                                        ? const Icon(Icons.chevron_right)
+                                        : Image.network(
+                                            tradeImage,
+                                            width: 48,
+                                            height: 48,
+                                            fit: BoxFit.cover,
+                                          ),
                                   ),
-                                  subtitle: Text(
-                                    tradeTitle.isEmpty
-                                        ? tr('listing_detail')
-                                        : tradeTitle,
-                                  ),
-                                  trailing: tradeImage.isEmpty
-                                      ? const Icon(Icons.chevron_right)
-                                      : Image.network(
-                                          tradeImage,
-                                          width: 48,
-                                          height: 48,
-                                          fit: BoxFit.cover,
-                                        ),
                                 ),
                               ),
                             ),
                           );
                         }
 
-                        return Align(
-                          alignment: isMe
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: Column(
-                            crossAxisAlignment: isMe
-                                ? CrossAxisAlignment.end
-                                : CrossAxisAlignment.start,
-                            children: [
+                        return _withMessageDate(
+                          timestamp: data['timestamp'],
+                          olderTimestamp: olderTimestamp,
+                          isMe: isMe,
+                          message: Align(
+                            alignment: isMe
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: Column(
+                              crossAxisAlignment: isMe
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              children: [
                               Container(
                                 margin: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -1688,7 +1803,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ],
                                   ),
                                 ),
-                            ],
+                              ],
+                            ),
                           ),
                         );
                       },
