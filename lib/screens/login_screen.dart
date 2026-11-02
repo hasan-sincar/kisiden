@@ -5,11 +5,13 @@ import 'package:appim/utils/local_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../services/guest_session_service.dart';
+import '../services/web_qr_login_service.dart';
 import 'otp_screen.dart';
 import '../main.dart';
 import '../utils/translations.dart';
 import 'legal_document_screen.dart';
 import 'contact_us_screen.dart';
+import '../widgets/web_qr_login_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -276,6 +278,59 @@ class _LoginScreenState extends State<LoginScreen> {
         (route) => false,
       );
       return;
+    }
+  }
+
+  Future<void> _loginWithQr() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final session = await WebQrLoginService().createWebSession();
+      if (!mounted) return;
+      final customToken = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => WebQrLoginDialog(session: session),
+      );
+      if (customToken == null) return;
+
+      final credential = await FirebaseAuth.instance.signInWithCustomToken(
+        customToken,
+      );
+      if (credential.user == null) {
+        throw StateError('Web oturumu acilamadi.');
+      }
+      await GuestSessionService.end();
+      if (!mounted) return;
+      try {
+        await WebQrLoginService().acknowledgeWebSession(session);
+      } catch (error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${tr('qr_login_cleanup_failed')}: $error'),
+          ),
+        );
+      }
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const RootScreen()),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message ?? tr('generic_try_again_error'))),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${tr('generic_try_again_error')}: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -590,6 +645,27 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                         ),
                       ),
+                      if (kIsWeb) ...[
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: OutlinedButton.icon(
+                            onPressed: _isLoading ? null : _loginWithQr,
+                            icon: const Icon(Icons.qr_code_2_rounded),
+                            label: Text(tr('web_qr_login')),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF17191D),
+                              side: const BorderSide(
+                                color: Color(0xFFE1E3E8),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       if (defaultTargetPlatform == TargetPlatform.android ||
                           defaultTargetPlatform == TargetPlatform.macOS) ...[
                         const SizedBox(height: 21),

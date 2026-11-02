@@ -35,7 +35,9 @@ import '../utils/auth_gate.dart';
 import '../utils/home_widget_sync.dart';
 import '../main.dart'; // YENİ: pendingDeepLink'e erişmek için
 import '../widgets/app_download_banner.dart'; // YENİ: Akıllı Uygulama İndirme Banner'ı
+import '../widgets/trade_type_selector.dart';
 import '../services/viewed_listings_service.dart';
+import '../data/trade_types.dart';
 
 part 'home_screen_controller.dart';
 
@@ -49,6 +51,40 @@ class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   Future<List<Map<String, dynamic>>>? _recentlyViewedFuture;
   int? _recentlyViewedRevision;
+
+  Widget _buildHomeListingImage({
+    required String imageUrl,
+    required BoxFit fit,
+    double? width,
+    Widget Function(BuildContext, String)? placeholder,
+    Widget Function(BuildContext, String, Object)? errorWidget,
+  }) {
+    if (kIsWeb) {
+      return Image.network(
+        imageUrl,
+        width: width,
+        fit: fit,
+        loadingBuilder: placeholder == null
+            ? null
+            : (context, child, progress) {
+                if (progress == null) return child;
+                return placeholder(context, imageUrl);
+              },
+        errorBuilder: errorWidget == null
+            ? null
+            : (context, error, stackTrace) =>
+                  errorWidget(context, imageUrl, error),
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      width: width,
+      fit: fit,
+      placeholder: placeholder,
+      errorWidget: errorWidget,
+    );
+  }
 
   Widget _buildNearbyListingsPreview(List<String> hiddenUsers) {
     final position = _userPosition;
@@ -189,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   ? const Center(
                                       child: Icon(Icons.image_outlined),
                                     )
-                                  : CachedNetworkImage(
+                                  : _buildHomeListingImage(
                                       imageUrl: image,
                                       width: double.infinity,
                                       fit: BoxFit.cover,
@@ -400,6 +436,7 @@ class _HomeScreenState extends State<HomeScreen>
   String? _filterCity;
   String? _filterDistrict;
   int? _createdWithinHours;
+  final Set<String> _selectedTradeTypes = <String>{};
 
   double? _parsePrice(dynamic value) {
     if (value is num) return value.toDouble();
@@ -607,6 +644,7 @@ class _HomeScreenState extends State<HomeScreen>
         _maxPriceController.text.trim().isNotEmpty ||
         _distance < 30.0 ||
         _createdWithinHours != null ||
+        _selectedTradeTypes.isNotEmpty ||
         _featureDropdownValues.values.any(
           (value) => value != null && value.isNotEmpty,
         );
@@ -631,6 +669,7 @@ class _HomeScreenState extends State<HomeScreen>
       _maxPriceController.clear();
       _distance = 30.0;
       _createdWithinHours = null;
+      _selectedTradeTypes.clear();
       for (final key in _featureDropdownValues.keys) {
         _featureDropdownValues[key] = null;
       }
@@ -731,6 +770,7 @@ class _HomeScreenState extends State<HomeScreen>
               hasLocationFilter ||
               _distance < 30.0 ||
               _createdWithinHours != null ||
+              _selectedTradeTypes.isNotEmpty ||
               _minPriceController.text.trim().isNotEmpty ||
               _maxPriceController.text.trim().isNotEmpty)
           ? 1000
@@ -1086,7 +1126,8 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                           ),
 
-                          if (_filterCategoryName == tr('all') &&
+                          if (_selectedTradeTypes.isEmpty &&
+                              _filterCategoryName == tr('all') &&
                               _searchText.isEmpty)
                             StreamBuilder<QuerySnapshot>(
                               stream: FirebaseFirestore.instance
@@ -1290,7 +1331,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                                 fit: StackFit
                                                                     .expand,
                                                                 children: [
-                                                                  CachedNetworkImage(
+                                                                  _buildHomeListingImage(
                                                                     imageUrl:
                                                                         allImages
                                                                             .first,
@@ -1406,7 +1447,8 @@ class _HomeScreenState extends State<HomeScreen>
                               },
                             ),
 
-                          if (_filterCategoryName == tr('all') &&
+                          if (_selectedTradeTypes.isEmpty &&
+                              _filterCategoryName == tr('all') &&
                               _searchText.isEmpty &&
                               _filterCity == null &&
                               _filterDistrict == null &&
@@ -1415,12 +1457,14 @@ class _HomeScreenState extends State<HomeScreen>
                               _maxPriceController.text.isEmpty &&
                               _distance >= 30.0 &&
                               _createdWithinHours == null &&
+                              _selectedTradeTypes.isEmpty &&
                               !_featureDropdownValues.values.any(
                                 (value) => value != null && value.isNotEmpty,
                               ))
                             _buildAuctionShowcase(), // MÜZAYEDE VİTRİNİ
 
-                          if (_filterCategoryName == tr('all') &&
+                          if (_selectedTradeTypes.isEmpty &&
+                              _filterCategoryName == tr('all') &&
                               _searchText.isEmpty &&
                               _filterCity == null &&
                               _filterDistrict == null &&
@@ -1429,6 +1473,7 @@ class _HomeScreenState extends State<HomeScreen>
                               _maxPriceController.text.isEmpty &&
                               _distance >= 30.0 &&
                               _createdWithinHours == null &&
+                              _selectedTradeTypes.isEmpty &&
                               !_featureDropdownValues.values.any(
                                 (value) => value != null && value.isNotEmpty,
                               ))
@@ -1515,6 +1560,13 @@ class _HomeScreenState extends State<HomeScreen>
                                               data['sellerId'],
                                             ))
                                               return false;
+
+                                            if (!listingMatchesTradeTypeFilter(
+                                              data,
+                                              _selectedTradeTypes,
+                                            )) {
+                                              return false;
+                                            }
 
                                             final bool isSearchMode =
                                                 _searchText.trim().isNotEmpty;
@@ -1749,6 +1801,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                   .isNotEmpty ||
                                               _distance < 30.0 ||
                                               _createdWithinHours != null ||
+                                              _selectedTradeTypes.isNotEmpty ||
                                               _featureDropdownValues.values.any(
                                                 (v) =>
                                                     v != null && v.isNotEmpty,
@@ -1950,6 +2003,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                   .isEmpty &&
                                               _distance >= 30.0 &&
                                               _createdWithinHours == null &&
+                                              _selectedTradeTypes.isEmpty &&
                                               !_featureDropdownValues.values
                                                   .any(
                                                     (value) =>
@@ -2043,6 +2097,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                   .text
                                                   .isNotEmpty ||
                                               _distance < 30.0 ||
+                                              _selectedTradeTypes.isNotEmpty ||
                                               _featureDropdownValues.values.any(
                                                 (value) =>
                                                     value != null &&
@@ -2203,7 +2258,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                                               (
                                                                                 context,
                                                                                 imgIndex,
-                                                                              ) => CachedNetworkImage(
+                                                                              ) => _buildHomeListingImage(
                                                                                 imageUrl: allImages[imgIndex],
                                                                                 fit: BoxFit.cover,
                                                                                 placeholder:
@@ -2550,7 +2605,7 @@ class _HomeScreenState extends State<HomeScreen>
                                                                                 (
                                                                                   context,
                                                                                   imgIndex,
-                                                                                ) => CachedNetworkImage(
+                                                                                ) => _buildHomeListingImage(
                                                                                   imageUrl: allImages[imgIndex],
                                                                                   fit: BoxFit.cover,
                                                                                   placeholder:

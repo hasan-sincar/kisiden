@@ -112,7 +112,7 @@ service cloud.firestore {
         && request.resource.data.aboutMe.size() <= 2000
         && request.resource.data.coverPhotoUrl is string
         && request.resource.data.coverPhotoUrl.size() <= 2000
-        && request.resource.data.contactPreference in ['both', 'message_only', 'call_only']
+        && request.resource.data.contactPreference in ['both', 'message_only', 'call_only', 'whatsapp_only']
         && request.resource.data.languageCode is string
         && request.resource.data.languageCode.size() <= 20
       );
@@ -128,6 +128,10 @@ service cloud.firestore {
           'phoneNumber', 'email', 'profileSetupSkipped',
           'profileSetupSkippedAt', 'customReadyMessages', 'updatedAt'
       ])
+      && (
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contactPreference'])
+        || request.resource.data.contactPreference in ['both', 'message_only', 'call_only', 'whatsapp_only']
+      )
       || (
         // İlan oluştururken yalnızca mevcut bir ek hakkın tüketilmesine izin ver.
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([

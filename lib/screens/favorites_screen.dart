@@ -5,9 +5,29 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'listing_detail_screen.dart';
 import '../utils/translations.dart';
 import '../utils/theme_colors.dart';
+import '../data/trade_types.dart';
+import '../widgets/trade_type_selector.dart';
 
-class FavoritesScreen extends StatelessWidget {
+class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
+
+  @override
+  State<FavoritesScreen> createState() => _FavoritesScreenState();
+}
+
+class _FavoritesScreenState extends State<FavoritesScreen> {
+  final Set<String> _selectedTradeTypes = <String>{};
+  final Map<String, Future<DocumentSnapshot>> _listingFutures = {};
+
+  Future<DocumentSnapshot> _loadListing(String listingId) {
+    return _listingFutures.putIfAbsent(
+      listingId,
+      () => FirebaseFirestore.instance
+          .collection('listings')
+          .doc(listingId)
+          .get(),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +39,21 @@ class FavoritesScreen extends StatelessWidget {
         title: Text(
           tr('favorites'),
           style: LocalFonts.poppins(fontWeight: FontWeight.bold),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(68),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: TradeTypeSelector(
+              showHeading: false,
+              selectedTypes: _selectedTradeTypes,
+              onTypeToggled: (typeId) => setState(() {
+                if (!_selectedTradeTypes.add(typeId)) {
+                  _selectedTradeTypes.remove(typeId);
+                }
+              }),
+            ),
+          ),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -48,10 +83,7 @@ class FavoritesScreen extends StatelessWidget {
               String listingId = favDocs[index].id;
 
               return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance
-                    .collection('listings')
-                    .doc(listingId)
-                    .get(),
+                future: _loadListing(listingId),
                 builder: (context, listingSnap) {
                   if (!listingSnap.hasData) return const SizedBox();
                   if (!listingSnap.data!.exists) {
@@ -66,6 +98,12 @@ class FavoritesScreen extends StatelessWidget {
                   }
 
                   var data = listingSnap.data!.data() as Map<String, dynamic>;
+                  if (!listingMatchesTradeTypeFilter(
+                    data,
+                    _selectedTradeTypes,
+                  )) {
+                    return const SizedBox.shrink();
+                  }
 
                   return Card(
                     margin: const EdgeInsets.symmetric(

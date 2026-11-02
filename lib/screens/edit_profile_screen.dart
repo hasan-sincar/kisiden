@@ -1159,6 +1159,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 style: LocalFonts.poppins(fontSize: 14),
                               ),
                             ),
+                            DropdownMenuItem(
+                              value: 'whatsapp_only',
+                              child: Text(
+                                tr('whatsapp_only'),
+                                style: LocalFonts.poppins(fontSize: 14),
+                              ),
+                            ),
                           ],
                           onChanged: (val) =>
                               setState(() => _contactPreference = val!),

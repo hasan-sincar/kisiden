@@ -2235,6 +2235,10 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                           bool showCall =
                               contactPref == 'both' ||
                               contactPref == 'call_only';
+                          bool showWhatsApp =
+                              contactPref == 'both' ||
+                              contactPref == 'call_only' ||
+                              contactPref == 'whatsapp_only';
                           bool showMessage =
                               contactPref == 'both' ||
                               contactPref == 'message_only';
@@ -2370,13 +2374,13 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
                                     },
                                   ),
                                 ),
-                              if (showCall && sellerPhone.isNotEmpty)
+                              if (showWhatsApp && sellerPhone.isNotEmpty)
                                 const SizedBox(width: 8),
-                              if (showCall && sellerPhone.isNotEmpty)
+                              if (showWhatsApp && sellerPhone.isNotEmpty)
                                 Expanded(
                                   child: _buildActionBtn(
                                     Icons.chat,
-                                    'WhatsApp',
+                                    tr('whatsapp'),
                                     Colors.green[600]!,
                                     () => _openWhatsApp(context, sellerPhone),
                                   ),

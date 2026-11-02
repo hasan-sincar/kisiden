@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/translations.dart';
 import '../widgets/defect_marker_tools.dart';
+import '../widgets/trade_type_selector.dart';
 
 class EditListingScreen extends StatefulWidget {
   final String listingId;
@@ -45,6 +46,9 @@ class _EditListingScreenState extends State<EditListingScreen> {
   bool _autoRenew = false;
   bool _offersEnabled = false;
   bool _tradeEnabled = false;
+  bool _wasTradeEnabled = false;
+  final Set<String> _selectedTradeTypes = <String>{};
+  late Set<String> _initialSelectedTradeTypes;
   bool _cashOnDeliveryAvailable = false;
   int _offerValidityHours = 24;
   int _offerMinimumPercent = 70;
@@ -91,6 +95,15 @@ class _EditListingScreenState extends State<EditListingScreen> {
     _autoRenew = widget.currentData['autoRenew'] ?? false;
     _offersEnabled = widget.currentData['isOfferEnabled'] as bool? ?? false;
     _tradeEnabled = widget.currentData['tradeEnabled'] as bool? ?? false;
+    _wasTradeEnabled = _tradeEnabled;
+    final rawTradePreferences = widget.currentData['tradePreferences'];
+    if (rawTradePreferences is Map) {
+      final desiredTradeTypes = rawTradePreferences['desiredTradeTypes'];
+      if (desiredTradeTypes is List) {
+        _selectedTradeTypes.addAll(desiredTradeTypes.whereType<String>());
+      }
+    }
+    _initialSelectedTradeTypes = Set<String>.from(_selectedTradeTypes);
     _cashOnDeliveryAvailable =
         widget.currentData['cashOnDeliveryAvailable'] == true;
     _offerValidityHours =
@@ -483,6 +496,15 @@ class _EditListingScreenState extends State<EditListingScreen> {
       return;
     }
 
+    if (_tradeEnabled &&
+        _selectedTradeTypes.isEmpty &&
+        (!_wasTradeEnabled || _initialSelectedTradeTypes.isNotEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('trade_types_required'))),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _loadingText = tr('updating_listing');
@@ -532,6 +554,12 @@ class _EditListingScreenState extends State<EditListingScreen> {
                     '')
                 .toString();
       final categoryLeaf = categoryPath.split('>').last.trim();
+      final tradePreferences = widget.currentData['tradePreferences'] is Map
+          ? Map<String, dynamic>.from(
+              widget.currentData['tradePreferences'] as Map,
+            )
+          : <String, dynamic>{};
+      tradePreferences['desiredTradeTypes'] = _selectedTradeTypes.toList();
 
       await _dbService.updateListing(
         listingId: widget.listingId,
@@ -550,6 +578,7 @@ class _EditListingScreenState extends State<EditListingScreen> {
           _offerMinimumAmountController.text.trim().replaceAll(',', '.'),
         ),
         tradeEnabled: _tradeEnabled,
+        tradePreferences: tradePreferences,
         cashOnDeliveryAvailable: _cashOnDeliveryAvailable,
         defectMarkers: finalDefectMarkers,
         isAdmin: widget.isAdminEditor,
@@ -853,6 +882,22 @@ class _EditListingScreenState extends State<EditListingScreen> {
                           setState(() => _tradeEnabled = value),
                     ),
                   ),
+                  if (_tradeEnabled)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: TradeTypeSelector(
+                          selectedTypes: _selectedTradeTypes,
+                          onTypeToggled: (typeId) {
+                            setState(() {
+                              if (!_selectedTradeTypes.add(typeId)) {
+                                _selectedTradeTypes.remove(typeId);
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ),
                   Card(
                     child: SwitchListTile(
                       title: Text(tr('cash_on_delivery_option')),

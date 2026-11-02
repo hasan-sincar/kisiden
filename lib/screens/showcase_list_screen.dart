@@ -13,6 +13,8 @@ import '../utils/turkey_locations.dart';
 import 'listing_detail_screen.dart';
 import '../utils/theme_colors.dart';
 import '../utils/translations.dart';
+import '../data/trade_types.dart';
+import '../widgets/trade_type_selector.dart';
 
 class ShowcaseListScreen extends StatefulWidget {
   final bool isAuctionMode;
@@ -37,6 +39,7 @@ class _ShowcaseListScreenState extends State<ShowcaseListScreen> {
   String? _filterDistrict;
   String? _filterNeighborhood;
   Position? _userPosition;
+  final Set<String> _selectedTradeTypes = <String>{};
 
   @override
   void initState() {
@@ -60,6 +63,9 @@ class _ShowcaseListScreenState extends State<ShowcaseListScreen> {
         _maxPriceController.text = prefs.getString('maxPrice') ?? "";
         _filterNeighborhood = prefs.getString('filterNeighborhood');
         _neighborhoodController.text = _filterNeighborhood ?? "";
+        _selectedTradeTypes
+          ..clear()
+          ..addAll(prefs.getStringList('showcase_tradeTypes') ?? const []);
       });
     } catch (e) {
       print(e);
@@ -93,6 +99,14 @@ class _ShowcaseListScreenState extends State<ShowcaseListScreen> {
         );
       } else {
         await prefs.remove('filterNeighborhood');
+      }
+      if (_selectedTradeTypes.isEmpty) {
+        await prefs.remove('showcase_tradeTypes');
+      } else {
+        await prefs.setStringList(
+          'showcase_tradeTypes',
+          _selectedTradeTypes.toList(),
+        );
       }
     } catch (e) {
       print(e);
@@ -590,6 +604,28 @@ class _ShowcaseListScreenState extends State<ShowcaseListScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    Text(
+                      tr('trade_types_filter'),
+                      style: LocalFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TradeTypeSelector(
+                      showHeading: false,
+                      selectedTypes: _selectedTradeTypes,
+                      onTypeToggled: (typeId) {
+                        setModalState(() {
+                          if (!_selectedTradeTypes.add(typeId)) {
+                            _selectedTradeTypes.remove(typeId);
+                          }
+                        });
+                        setState(() {});
+                        _savePreferences();
+                      },
+                    ),
                     const SizedBox(height: 30),
                     ElevatedButton(
                       onPressed: () => Navigator.pop(context),
@@ -888,7 +924,11 @@ class _ShowcaseListScreenState extends State<ShowcaseListScreen> {
                   if (minP != null && listingPrice < minP) matchPrice = false;
                   if (maxP != null && listingPrice > maxP) matchPrice = false;
 
-                  return matchCategory &&
+                  return listingMatchesTradeTypeFilter(
+                        data,
+                        _selectedTradeTypes,
+                      ) &&
+                      matchCategory &&
                       matchDistance &&
                       matchCity &&
                       matchDistrict &&

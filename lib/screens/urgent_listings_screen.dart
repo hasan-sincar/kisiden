@@ -6,6 +6,8 @@ import '../services/database_service.dart';
 import '../utils/turkey_locations.dart';
 import '../utils/translations.dart';
 import '../utils/theme_colors.dart';
+import '../data/trade_types.dart';
+import '../widgets/trade_type_selector.dart';
 import 'all_listings_screen.dart';
 import 'listing_detail_screen.dart';
 import '../widgets/defect_marker_tools.dart';
@@ -38,6 +40,7 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
   String? _districtFilter;
   String _neighborhoodFilter = '';
   String _searchFilter = '';
+  final Set<String> _selectedTradeTypes = <String>{};
   bool _isGridView = false;
   Timer? _expiryRefreshTimer;
 
@@ -74,6 +77,7 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
     if (_neighborhoodFilter.trim().isNotEmpty) count++;
     if (_minPrice != null) count++;
     if (_maxPrice != null) count++;
+    if (_selectedTradeTypes.isNotEmpty) count++;
     return count;
   }
 
@@ -87,6 +91,7 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
       _cityFilter = null;
       _districtFilter = null;
       _neighborhoodFilter = '';
+      _selectedTradeTypes.clear();
     });
   }
 
@@ -220,6 +225,9 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
     final category = _normalizeText(
       '${data['categoryPath'] ?? ''} ${data['category'] ?? ''}',
     );
+    if (!listingMatchesTradeTypeFilter(data, _selectedTradeTypes)) {
+      return false;
+    }
     if (_categoryFilter.isNotEmpty &&
         !category.contains(_normalizeText(_categoryFilter))) {
       return false;
@@ -553,6 +561,26 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      Text(
+                        tr('trade_types_filter'),
+                        style: LocalFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TradeTypeSelector(
+                        showHeading: false,
+                        selectedTypes: _selectedTradeTypes,
+                        onTypeToggled: (typeId) {
+                          setSheetState(() {
+                            if (!_selectedTradeTypes.add(typeId)) {
+                              _selectedTradeTypes.remove(typeId);
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
@@ -690,6 +718,7 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
                             _cityFilter = null;
                             _districtFilter = null;
                             _neighborhoodFilter = '';
+                            _selectedTradeTypes.clear();
                             searchController.clear();
                             neighborhoodController.clear();
                             minController.clear();
@@ -1092,6 +1121,17 @@ class _UrgentListingsViewState extends State<_UrgentListingsView> {
                                 _activeFilterChip(
                                   '₺${_minPrice?.toStringAsFixed(0) ?? '0'} - '
                                   '₺${_maxPrice?.toStringAsFixed(0) ?? '∞'}',
+                                ),
+                              if (_selectedTradeTypes.isNotEmpty)
+                                _activeFilterChip(
+                                  tradeTypes
+                                      .where(
+                                        (type) => _selectedTradeTypes.contains(
+                                          type.id,
+                                        ),
+                                      )
+                                      .map((type) => tr(type.labelKey))
+                                      .join(', '),
                                 ),
                               ActionChip(
                                 avatar: const Icon(

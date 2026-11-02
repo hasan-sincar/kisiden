@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:appim/utils/local_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import '../services/database_service.dart';
 import 'edit_listing_screen.dart';
 import 'listing_detail_screen.dart';
@@ -3579,97 +3577,6 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
   String _searchQuery = '';
   bool _showProOnly = false;
   bool _showSearchField = false;
-  bool _isBackfillingProfiles = false;
-  int _backfilledProfileCount = 0;
-
-  Future<void> _backfillPublicProfiles() async {
-    final shouldStart = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(tr('public_profiles_backfill_title')),
-        content: Text(tr('public_profiles_backfill_confirm')),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(tr('cancel')),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(tr('public_profiles_backfill_start')),
-          ),
-        ],
-      ),
-    );
-    if (shouldStart != true || !mounted) return;
-
-    setState(() {
-      _isBackfillingProfiles = true;
-      _backfilledProfileCount = 0;
-    });
-
-    try {
-      await FirebaseAuth.instance.currentUser?.getIdToken(true);
-      final appCheckToken = await FirebaseAppCheck.instance.getToken(true);
-      if (appCheckToken == null || appCheckToken.isEmpty) {
-        throw StateError('app_check_token_unavailable');
-      }
-      final callable = FirebaseFunctions.instanceFor(
-        region: 'europe-west1',
-      ).httpsCallable('backfillPublicProfiles');
-      String afterUid = '';
-
-      while (mounted) {
-        final result = await callable.call({
-          'afterUid': afterUid,
-          'limit': 200,
-        });
-        final response = result.data;
-        if (response is! Map ||
-            response['processed'] is! num ||
-            response['nextUid'] is! String ||
-            response['done'] is! bool) {
-          throw StateError('invalid_public_profile_backfill_response');
-        }
-
-        final processed = (response['processed'] as num).toInt();
-        final nextUid = response['nextUid'] as String;
-        if (processed == 0 && response['done'] != true) {
-          throw StateError('public_profile_backfill_did_not_advance');
-        }
-        if (processed > 0 && nextUid == afterUid) {
-          throw StateError('public_profile_backfill_did_not_advance');
-        }
-
-        if (mounted) {
-          setState(() => _backfilledProfileCount += processed);
-        }
-        if (response['done'] == true) break;
-        afterUid = nextUid;
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              tr(
-                'public_profiles_backfill_complete',
-              ).replaceFirst('%s', _backfilledProfileCount.toString()),
-            ),
-          ),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${tr('public_profiles_backfill_failed')}: $error'),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isBackfillingProfiles = false);
-    }
-  }
 
   String _resolveUserName(Map<String, dynamic> data) {
     final raw = (data['name'] ?? '').toString().trim();
@@ -4744,57 +4651,6 @@ class _AdminUsersTabState extends State<_AdminUsersTab> {
         }).toList();
         return CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(
-              child: Card(
-                margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        tr('public_profiles_backfill_title'),
-                        style: LocalFonts.poppins(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        tr('public_profiles_backfill_description'),
-                        style: LocalFonts.poppins(
-                          fontSize: 12,
-                          color: Colors.grey[700],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_isBackfillingProfiles) ...[
-                        const LinearProgressIndicator(),
-                        const SizedBox(height: 6),
-                        Text(
-                          tr('public_profiles_backfill_progress').replaceFirst(
-                            '%s',
-                            _backfilledProfileCount.toString(),
-                          ),
-                          style: LocalFonts.poppins(fontSize: 12),
-                        ),
-                      ],
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: OutlinedButton.icon(
-                          onPressed: _isBackfillingProfiles
-                              ? null
-                              : _backfillPublicProfiles,
-                          icon: const Icon(Icons.sync),
-                          label: Text(
-                            _isBackfillingProfiles
-                                ? tr('public_profiles_backfill_running')
-                                : tr('public_profiles_backfill_action'),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),

@@ -101,7 +101,7 @@ exports.syncPublicProfile = onDocumentWritten({
 
 exports.getPublicUserProfile = onCall({
   region: "europe-west1",
-  enforceAppCheck: true,
+  enforceAppCheck: false,
 }, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
@@ -133,45 +133,245 @@ exports.getPublicUserProfile = onCall({
   };
 });
 
-exports.backfillPublicProfiles = onCall({
+const WEB_QR_LOGIN_TTL_MS = 2 * 60 * 1000;
+const WEB_QR_LOGIN_SESSION_ID_PATTERN = /^[a-f0-9]{64}$/;
+
+function hashWebQrLoginSecret(value) {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function getWebQrLoginInput(request, includeSecret = false) {
+  const sessionId = request.data?.sessionId;
+  const browserSecret = request.data?.browserSecret;
+  if (
+    typeof sessionId !== "string" ||
+    !WEB_QR_LOGIN_SESSION_ID_PATTERN.test(sessionId)
+  ) {
+    throw new HttpsError("invalid-argument", "Gecersiz QR oturumu.");
+  }
+  if (
+    includeSecret &&
+    (typeof browserSecret !== "string" || !WEB_QR_LOGIN_SESSION_ID_PATTERN.test(browserSecret))
+  ) {
+    throw new HttpsError("invalid-argument", "Gecersiz web oturum anahtari.");
+  }
+  return { sessionId, browserSecret };
+}
+
+function isValidWebQrLoginSecret(sessionData, browserSecret) {
+  const savedHash = sessionData.secretHash;
+  if (typeof savedHash !== "string" || !/^[a-f0-9]{64}$/.test(savedHash)) {
+    return false;
+  }
+  const expected = Buffer.from(savedHash, "hex");
+  const actual = Buffer.from(hashWebQrLoginSecret(browserSecret), "hex");
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+exports.createWebQrLoginSession = onCall({
   region: "europe-west1",
-  enforceAppCheck: true,
 }, async (request) => {
-  if (!request.auth?.uid) {
+  const ip = request.rawRequest.ip;
+  if (typeof ip !== "string" || !ip.trim()) {
+    throw new HttpsError("failed-precondition", "QR oturumu baslatilamadi.");
+  }
+
+  const now = Date.now();
+  const rateLimitId = hashWebQrLoginSecret(ip);
+  const rateLimitRef = db.collection("web_qr_login_rate_limits").doc(rateLimitId);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(rateLimitRef);
+    const data = snapshot.data() || {};
+    const windowStartedAt = data.windowStartedAt?.toMillis?.() || 0;
+    const count = now - windowStartedAt < 60_000
+      ? Number(data.count) || 0
+      : 0;
+    if (count >= 10) {
+      throw new HttpsError("resource-exhausted", "Cok fazla QR giris istegi.");
+    }
+
+    transaction.set(rateLimitRef, {
+      count: count + 1,
+      windowStartedAt: count === 0
+        ? admin.firestore.Timestamp.fromMillis(now)
+        : data.windowStartedAt,
+      expiresAt: admin.firestore.Timestamp.fromMillis(now + 10 * 60_000),
+    });
+  });
+
+  const sessionId = crypto.randomBytes(32).toString("hex");
+  const browserSecret = crypto.randomBytes(32).toString("hex");
+  const expiresAt = admin.firestore.Timestamp.fromMillis(now + WEB_QR_LOGIN_TTL_MS);
+  await db.collection("web_qr_login_sessions").doc(sessionId).create({
+    secretHash: hashWebQrLoginSecret(browserSecret),
+    status: "pending",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt,
+  });
+
+  return { sessionId, browserSecret };
+});
+
+exports.approveWebQrLoginSession = onCall({
+  region: "europe-west1",
+}, async (request) => {
+  const userId = request.auth?.uid;
+  if (!userId || request.auth.token.firebase?.sign_in_provider === "anonymous") {
+    throw new HttpsError("unauthenticated", "Kayitli bir hesapla giris yapin.");
+  }
+  const { sessionId } = getWebQrLoginInput(request);
+  const sessionRef = db.collection("web_qr_login_sessions").doc(sessionId);
+
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(sessionRef);
+    if (!snapshot.exists) {
+      throw new HttpsError("not-found", "QR oturumu bulunamadi.");
+    }
+    const session = snapshot.data() || {};
+    if (!session.expiresAt?.toDate || session.expiresAt.toMillis() <= Date.now()) {
+      throw new HttpsError("deadline-exceeded", "QR oturumunun suresi doldu.");
+    }
+    if (session.status === "approved" && session.approvedUid === userId) return;
+    if (session.status !== "pending") {
+      throw new HttpsError("failed-precondition", "QR oturumu artik kullanilamiyor.");
+    }
+    transaction.update(sessionRef, {
+      status: "approved",
+      approvedUid: userId,
+      approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { approved: true };
+});
+
+exports.completeWebQrLoginSession = onCall({
+  region: "europe-west1",
+}, async (request) => {
+  const { sessionId, browserSecret } = getWebQrLoginInput(request, true);
+  const sessionRef = db.collection("web_qr_login_sessions").doc(sessionId);
+  const result = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(sessionRef);
+    if (!snapshot.exists) {
+      throw new HttpsError("not-found", "QR oturumu bulunamadi.");
+    }
+    const session = snapshot.data() || {};
+    if (!isValidWebQrLoginSecret(session, browserSecret)) {
+      throw new HttpsError("permission-denied", "Web oturum anahtari gecersiz.");
+    }
+    if (!session.expiresAt?.toDate || session.expiresAt.toMillis() <= Date.now()) {
+      if (session.status === "pending") {
+        transaction.update(sessionRef, { status: "expired" });
+      }
+      return { status: "expired" };
+    }
+    if (session.status === "pending") return { status: "pending" };
+    if (session.status === "cancelled") return { status: "cancelled" };
+    if (session.status === "consumed") return { status: "used" };
+    if (session.status === "complete" && typeof session.customToken === "string") {
+      return { status: "complete", customToken: session.customToken };
+    }
+    if (session.status !== "approved" || typeof session.approvedUid !== "string") {
+      throw new HttpsError("failed-precondition", "QR oturumu artik kullanilamiyor.");
+    }
+
+    const customToken = await admin.auth().createCustomToken(session.approvedUid);
+    transaction.update(sessionRef, {
+      status: "complete",
+      customToken,
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { status: "complete", customToken };
+  });
+
+  return result;
+});
+
+exports.acknowledgeWebQrLoginSession = onCall({
+  region: "europe-west1",
+}, async (request) => {
+  const userId = request.auth?.uid;
+  if (!userId) {
     throw new HttpsError("unauthenticated", "Giris yapmaniz gerekiyor.");
   }
-  if (!isAdminRequest(request)) {
-    throw new HttpsError("permission-denied", "Bu islem icin yonetici yetkisi gerekiyor.");
-  }
+  const { sessionId, browserSecret } = getWebQrLoginInput(request, true);
+  const sessionRef = db.collection("web_qr_login_sessions").doc(sessionId);
 
-  const afterUid = String(request.data?.afterUid || "").trim();
-  if (afterUid.length > 128 || afterUid.includes("/")) {
-    throw new HttpsError("invalid-argument", "Gecersiz devam anahtari.");
-  }
-  const requestedLimit = Number(request.data?.limit) || 100;
-  const limit = Math.max(1, Math.min(200, Math.floor(requestedLimit)));
-  let query = db.collection("users")
-    .orderBy(admin.firestore.FieldPath.documentId())
-    .limit(limit);
-  if (afterUid) query = query.startAfter(afterUid);
-
-  const snapshot = await query.get();
-  const batch = db.batch();
-  snapshot.docs.forEach((userDoc) => {
-    batch.set(
-      db.collection("public_profiles").doc(userDoc.id),
-      publicProfileFromUser(userDoc.id, userDoc.data() || {}),
-    );
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(sessionRef);
+    if (!snapshot.exists) {
+      throw new HttpsError("not-found", "QR oturumu bulunamadi.");
+    }
+    const session = snapshot.data() || {};
+    if (!isValidWebQrLoginSecret(session, browserSecret)) {
+      throw new HttpsError("permission-denied", "Web oturum anahtari gecersiz.");
+    }
+    if (session.approvedUid !== userId) {
+      throw new HttpsError("permission-denied", "QR oturumu bu hesaba ait degil.");
+    }
+    if (session.status === "consumed") return;
+    if (session.status !== "complete") {
+      throw new HttpsError("failed-precondition", "QR oturumu tamamlanmadi.");
+    }
+    transaction.update(sessionRef, {
+      status: "consumed",
+      customToken: admin.firestore.FieldValue.delete(),
+      consumedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
   });
-  if (!snapshot.empty) await batch.commit();
 
-  return {
-    processed: snapshot.size,
-    nextUid: snapshot.docs.length > 0
-      ? snapshot.docs[snapshot.docs.length - 1].id
-      : afterUid,
-    done: snapshot.size < limit,
-  };
+  return { acknowledged: true };
+});
+
+exports.cancelWebQrLoginSession = onCall({
+  region: "europe-west1",
+}, async (request) => {
+  const { sessionId, browserSecret } = getWebQrLoginInput(request, true);
+  const sessionRef = db.collection("web_qr_login_sessions").doc(sessionId);
+
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(sessionRef);
+    if (!snapshot.exists) return;
+    const session = snapshot.data() || {};
+    if (!isValidWebQrLoginSecret(session, browserSecret)) {
+      throw new HttpsError("permission-denied", "Web oturum anahtari gecersiz.");
+    }
+    if (
+      session.status === "pending" ||
+      session.status === "approved" ||
+      session.status === "complete"
+    ) {
+      transaction.update(sessionRef, {
+        status: "cancelled",
+        customToken: admin.firestore.FieldValue.delete(),
+        cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+  });
+
+  return { cancelled: true };
+});
+
+exports.cleanupExpiredWebQrLoginSessions = onSchedule({
+  schedule: "every 5 minutes",
+  region: "europe-west1",
+  timeZone: "UTC",
+}, async () => {
+  const now = admin.firestore.Timestamp.now();
+  for (const collectionName of [
+    "web_qr_login_sessions",
+    "web_qr_login_rate_limits",
+  ]) {
+    const collection = db.collection(collectionName);
+    let expired = await collection.where("expiresAt", "<=", now).limit(400).get();
+    while (!expired.empty) {
+      const batch = db.batch();
+      expired.docs.forEach((document) => batch.delete(document.ref));
+      await batch.commit();
+      if (expired.size < 400) break;
+      expired = await collection.where("expiresAt", "<=", now).limit(400).get();
+    }
+  }
 });
 
 exports.searchListingTransferRecipients = onCall({
@@ -1332,14 +1532,53 @@ const isBot = (userAgent) => {
     // Yaygın kullanılan botların user-agent listesi
     const botAgents = [
         "googlebot", "bingbot", "yahoo", "duckduckbot", "baiduspider",
-        "yandex", "sogou", "exabot", "facebot", "facebookexternalhit",
+        "google-firebase", "yandex", "sogou", "exabot", "facebot", "facebookexternalhit",
         "twitterbot", "linkedinbot", "pinterest", "whatsapp", "telegrambot",
     ];
     return botAgents.some((bot) => userAgent.toLowerCase().includes(bot));
 };
 
+function isListingAvailableForSeo(listing, now = new Date()) {
+    if (listing.status !== "active") {
+        return false;
+    }
+
+    const listingRightExpiresAt = listing.listingRightExpiresAt;
+    if (
+        listingRightExpiresAt &&
+        typeof listingRightExpiresAt.toDate === "function"
+    ) {
+        return !(listingRightExpiresAt.toDate() <= now);
+    }
+
+    const createdAt = listing.createdAt;
+    if (!createdAt || typeof createdAt.toDate !== "function") {
+        return true;
+    }
+
+    const thirtyDaysAgo = new Date(now.getTime());
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    return !(createdAt.toDate() <= thirtyDaysAgo);
+}
+
+function seoImageUrl(value) {
+    if (typeof value !== "string" || !value.trim()) {
+        return null;
+    }
+
+    try {
+        const imageUrl = new URL(value.trim());
+        return imageUrl.protocol === "https:" ? imageUrl.href : null;
+    } catch (error) {
+        return null;
+    }
+}
+
 // İlan sayfası için sunucu taraflı render (SSR for Bots)
 const renderListingPage = async (req, res) => {
+    res.set("Cache-Control", "private, no-store, max-age=0");
+    res.vary("User-Agent");
+
     // Eğer istek bir bottan geliyorsa, SEO için özel HTML oluştur
     if (isBot(req.headers["user-agent"])) {
     const listingId = sanitizeListingId(req.query.id);
@@ -1354,38 +1593,61 @@ const renderListingPage = async (req, res) => {
                 return res.status(404).send("<!DOCTYPE html><html><head><title>İlan Bulunamadı</title></head><body><h1>404 - İlan Bulunamadı</h1></body></html>");
             }
 
-            const data = doc.data();
-            const url = `${DOMAIN}/ilan?id=${listingId}`;
-      const rawTitle = data.title || "Kişiden İlanı";
-      const title = escapeHtml(rawTitle);
-            let description = data.description || "Bu ilanı Kişiden uygulamasında inceleyin.";
-            if (description.length > 160) {
-                description = description.substring(0, 157) + "...";
+            const data = doc.data() || {};
+            if (!isListingAvailableForSeo(data)) {
+                return res.status(404).send(
+                    "<!DOCTYPE html><html lang=\"tr\"><head>" +
+                    "<meta charset=\"UTF-8\"><title>İlan Bulunamadı</title>" +
+                    "</head><body><h1>404 - İlan Bulunamadı</h1></body></html>"
+                );
             }
-      description = escapeHtml(description.replace(/\r?\n|\r/g, " "));
 
-            const imageUrl = data.imageUrl || `${DOMAIN}/icons/Icon-512.png`;
-            const price = data.price || 0;
-      const sellerName = escapeHtml(data.sellerName || "Kişiden Satıcısı");
+            const url = `${DOMAIN}/ilan?id=${listingId}`;
+            const rawTitle = boundedString(data.title, 300) || "Kişiden İlanı";
+            const title = escapeHtml(rawTitle);
+            let rawDescription = boundedString(data.description, 10000) ||
+                "Bu ilanı Kişiden uygulamasında inceleyin.";
+            if (rawDescription.length > 160) {
+                rawDescription = rawDescription.substring(0, 157) + "...";
+            }
+            rawDescription = rawDescription.replace(/\r?\n|\r/g, " ");
+            const description = escapeHtml(rawDescription);
+
+            const productImageUrl = seoImageUrl(data.imageUrl);
+            const imageUrl = escapeHtml(
+                productImageUrl || `${DOMAIN}/icons/Icon-512.png`
+            );
+            const priceValue = typeof data.price === "string"
+                ? data.price.trim()
+                : data.price;
+            const hasPrice = typeof priceValue === "number" ||
+                (typeof priceValue === "string" && priceValue.length > 0);
+            const price = hasPrice ? Number(priceValue) : NaN;
+            const rawSellerName = boundedString(data.sellerName, 120) ||
+                "Kişiden Satıcısı";
 
             // Google Zengin Sonuçlar (Rich Snippets) için JSON-LD Yapısal Verisi
             const jsonLd = {
-                "@context": "https://schema.org/",
+                "@context": "https://schema.org",
                 "@type": "Product",
-                "name": title,
-                "image": imageUrl,
-                "description": description,
+                "name": rawTitle,
+                "description": rawDescription,
                 "sku": listingId,
-                "brand": { "@type": "Brand", "name": "Kişiden" },
-                "offers": {
+            };
+            if (productImageUrl) {
+                jsonLd.image = productImageUrl;
+            }
+            if (Number.isFinite(price) && price >= 0) {
+                jsonLd.offers = {
                     "@type": "Offer",
                     "url": url,
                     "priceCurrency": "TRY",
                     "price": price,
                     "availability": "https://schema.org/InStock",
-                    "seller": { "@type": "Organization", "name": sellerName },
-                },
-            };
+                    "seller": { "@type": "Person", "name": rawSellerName },
+                };
+            }
+            const jsonLdScript = JSON.stringify(jsonLd).replace(/</g, "\\u003c");
 
             // Bota özel tam HTML sayfası döndür
             const html = `
@@ -1396,12 +1658,16 @@ const renderListingPage = async (req, res) => {
                     <title>${title}</title>
                     <meta name="description" content="${description}">
                     <link rel="canonical" href="${url}" />
+                    <meta property="og:type" content="product">
                     <meta property="og:title" content="${title}">
                     <meta property="og:description" content="${description}">
                     <meta property="og:image" content="${imageUrl}">
                     <meta property="og:url" content="${url}">
                     <meta name="twitter:card" content="summary_large_image">
-                    <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
+                    <meta name="twitter:title" content="${title}">
+                    <meta name="twitter:description" content="${description}">
+                    <meta name="twitter:image" content="${imageUrl}">
+                    <script type="application/ld+json">${jsonLdScript}</script>
                 </head>
                 <body>
                     <h1>${title}</h1>
@@ -1481,32 +1747,33 @@ const generateSitemap = async (req, res) => {
     root.att("xmlns", "http://www.sitemaps.org/schemas/sitemap/0.9");
 
     root.ele("url").ele("loc", `${DOMAIN}/`).up().ele("changefreq", "daily").up().ele("priority", "1.0");
+    root.ele("url").ele("loc", `${DOMAIN}/privacy.html`).up().ele("changefreq", "monthly").up().ele("priority", "0.8");
 
     try {
         const snapshot = await db.collection("listings").where("status", "==", "active").get();
+        const now = new Date();
         snapshot.forEach((doc) => {
-            const listing = doc.data();
-            const lastMod = listing.createdAt ? listing.createdAt.toDate().toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
-            root.ele("url")
-                .ele("loc", `${DOMAIN}/ilan?id=${doc.id}`)
-                .up()
-                .ele("lastmod", lastMod)
-                .up();
+            const listingId = sanitizeListingId(doc.id);
+            const listing = doc.data() || {};
+            if (!listingId || !isListingAvailableForSeo(listing, now)) {
+                return;
+            }
+
+            const url = root.ele("url").ele("loc", `${DOMAIN}/ilan?id=${listingId}`).up();
+            const lastModified = listing.updatedAt ||
+                listing.lastEditChangeSummary?.updatedAt ||
+                listing.createdAt;
+            if (lastModified && typeof lastModified.toDate === "function") {
+                const lastModifiedDate = lastModified.toDate();
+                if (Number.isFinite(lastModifiedDate.getTime())) {
+                    url.ele("lastmod", lastModifiedDate.toISOString().split("T")[0]);
+                }
+            }
         });
 
-        // YENİ: Kategorileri dinamik olarak sitemap'e dahil et
-        const categoriesSnap = await db.collection("categories").get();
-        categoriesSnap.forEach((doc) => {
-            const category = doc.data();
-            const lastMod = category.createdAt ? category.createdAt.toDate().toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
-            root.ele("url")
-                .ele("loc", `${DOMAIN}/kategori?id=${doc.id}`)
-                .up()
-                .ele("lastmod", lastMod)
-                .up();
-        });
     } catch (error) {
         logger.error("Sitemap oluşturma hatası:", error);
+        return res.status(500).send("Sitemap oluşturulamadı.");
     }
 
     return res.status(200).send(root.end({ pretty: true }));

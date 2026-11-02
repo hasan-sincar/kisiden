@@ -51,6 +51,7 @@ class SellerProfileScreen extends StatefulWidget {
 
 class _SellerProfileScreenState extends State<SellerProfileScreen> {
   final DatabaseService _dbService = DatabaseService();
+  late final Future<Map<String, dynamic>?> _sellerProfileFuture;
   bool _hasReviewPermission = false;
   String? _pendingReviewListingTitle;
 
@@ -84,6 +85,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _sellerProfileFuture = _dbService.getPublicUserProfile(widget.sellerId);
     _checkReviewPermission();
   }
 
@@ -243,10 +245,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
     return DefaultTabController(
       length: 2,
       child: FutureBuilder<Map<String, dynamic>?>(
-        future: DatabaseService().getPublicUserProfile(
-          widget.sellerId,
-          refresh: true,
-        ),
+        future: _sellerProfileFuture,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Scaffold(

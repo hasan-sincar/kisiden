@@ -79,7 +79,7 @@
 <key>NSPhotoLibraryUsageDescription</key>
 <string>İlanlarınıza veya destek taleplerine fotoğraf eklemek için galerine erişmemiz gerekiyor.</string>
 <key>NSCameraUsageDescription</key>
-<string>İlanlarınıza veya profilinize fotoğraf eklemek için kamerana erişmemiz gerekiyor.</string>
+<string>İlanlarınıza veya profilinize fotoğraf eklemek ve web'de QR kod ile giriş yapmak için kameranıza erişmemiz gerekiyor.</string>
 <key>NSMicrophoneUsageDescription</key>
 <string>Sesli arama özelliğini kullanmak için mikrofonunuza erişmemiz gerekiyor.</string>
 <key>NSSpeechRecognitionUsageDescription</key>

@@ -11,6 +11,8 @@ import '../services/banner_ad_settings_service.dart';
 import '../utils/turkey_locations.dart';
 import '../utils/translations.dart';
 import '../utils/theme_colors.dart';
+import '../data/trade_types.dart';
+import '../widgets/trade_type_selector.dart';
 import 'listing_detail_screen.dart';
 import 'listing_comparison_screen.dart';
 
@@ -40,6 +42,7 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
   String? _filterNeighborhood;
   Position? _userPosition;
   final Map<String, Map<String, dynamic>> _selectedListings = {};
+  final Set<String> _selectedTradeTypes = <String>{};
 
   void _toggleComparisonSelection(String listingId, Map<String, dynamic> data) {
     if (_selectedListings.containsKey(listingId)) {
@@ -165,6 +168,9 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
         _maxPriceController.text = prefs.getString('nearby_maxPrice') ?? "";
         _filterNeighborhood = prefs.getString('nearby_filterNeighborhood');
         _neighborhoodController.text = _filterNeighborhood ?? "";
+        _selectedTradeTypes
+          ..clear()
+          ..addAll(prefs.getStringList('nearby_tradeTypes') ?? const []);
       });
     } catch (e) {
       print(e);
@@ -206,6 +212,14 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
         );
       } else {
         await prefs.remove('nearby_filterNeighborhood');
+      }
+      if (_selectedTradeTypes.isEmpty) {
+        await prefs.remove('nearby_tradeTypes');
+      } else {
+        await prefs.setStringList(
+          'nearby_tradeTypes',
+          _selectedTradeTypes.toList(),
+        );
       }
     } catch (e) {
       print(e);
@@ -756,6 +770,28 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    Text(
+                      tr('trade_types_filter'),
+                      style: LocalFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TradeTypeSelector(
+                      showHeading: false,
+                      selectedTypes: _selectedTradeTypes,
+                      onTypeToggled: (typeId) {
+                        setModalState(() {
+                          if (!_selectedTradeTypes.add(typeId)) {
+                            _selectedTradeTypes.remove(typeId);
+                          }
+                        });
+                        setState(() {});
+                        _savePreferences();
+                      },
+                    ),
                     const SizedBox(height: 30),
                     ElevatedButton(
                       onPressed: () => Navigator.pop(context),
@@ -1030,7 +1066,11 @@ class _NearbyListingsScreenState extends State<NearbyListingsScreen> {
                       createdAt != null && !createdAt.isBefore(cutoff);
                 }
 
-                return matchCategory &&
+                return listingMatchesTradeTypeFilter(
+                      data,
+                      _selectedTradeTypes,
+                    ) &&
+                    matchCategory &&
                     matchDistance &&
                     matchCity &&
                     matchDistrict &&

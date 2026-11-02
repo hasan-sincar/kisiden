@@ -77,6 +77,8 @@ dependencies:
   scrollable_positioned_list: 0.3.8
   camera: ^0.12.1
   camera_desktop: ^2.0.0
+  mobile_scanner: ^7.5.0
+  qr_flutter: ^4.1.0
 
 dependency_overrides:
   firebase_core_platform_interface: ^8.1.1
@@ -149,7 +151,7 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "assets/logo.png"
+  image_path: "assets/launcher_icon.png"
   remove_alpha_ios: true
   background_color_ios: "#ffffff"
   min_sdk_android: 21

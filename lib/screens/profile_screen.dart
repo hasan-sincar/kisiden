@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:appim/utils/local_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -21,6 +22,7 @@ import '../main.dart'; // YENİ: appLocale erişimi için
 import 'pro_purchase_screen.dart'; // YENİ: Pro Satın Alma Ekranı
 import 'legal_document_screen.dart'; // YENİ: Yasal belgeler için
 import 'faq_screen.dart';
+import 'qr_login_scanner_screen.dart';
 import '../utils/theme_colors.dart';
 
 class _DeletingAccountScreen extends StatelessWidget {
@@ -696,6 +698,22 @@ class ProfileScreen extends StatelessWidget {
                             );
                           },
                         ),
+                        if (!kIsWeb &&
+                            !user.isAnonymous &&
+                            (defaultTargetPlatform == TargetPlatform.android ||
+                                defaultTargetPlatform == TargetPlatform.iOS))
+                          _buildMenuTile(
+                            Icons.qr_code_scanner_rounded,
+                            tr('web_qr_login'),
+                            AppColors.primary,
+                            () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const QrLoginScannerScreen(),
+                              ),
+                            ),
+                          ),
                         _buildMenuTile(
                           Icons.favorite,
                           tr('favorite_listings'),

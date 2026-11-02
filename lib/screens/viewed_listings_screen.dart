@@ -1,30 +1,66 @@
 import 'package:flutter/material.dart';
 
+import '../data/trade_types.dart';
 import '../services/viewed_listings_service.dart';
 import '../utils/local_fonts.dart';
 import '../utils/translations.dart';
+import '../widgets/trade_type_selector.dart';
 import 'listing_detail_screen.dart';
 
-class ViewedListingsScreen extends StatelessWidget {
+class ViewedListingsScreen extends StatefulWidget {
   const ViewedListingsScreen({super.key});
+
+  @override
+  State<ViewedListingsScreen> createState() => _ViewedListingsScreenState();
+}
+
+class _ViewedListingsScreenState extends State<ViewedListingsScreen> {
+  final Set<String> _selectedTradeTypes = <String>{};
+  late final Future<List<Map<String, dynamic>>> _entriesFuture =
+      ViewedListingsService.load();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(tr('recently_viewed'))),
+      appBar: AppBar(
+        title: Text(tr('recently_viewed')),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(68),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: TradeTypeSelector(
+              showHeading: false,
+              selectedTypes: _selectedTradeTypes,
+              onTypeToggled: (typeId) => setState(() {
+                if (!_selectedTradeTypes.add(typeId)) {
+                  _selectedTradeTypes.remove(typeId);
+                }
+              }),
+            ),
+          ),
+        ),
+      ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: ViewedListingsService.load(),
+        future: _entriesFuture,
         builder: (context, snapshot) {
           final entries = snapshot.data ?? [];
           if (entries.isEmpty) {
             return Center(child: Text(tr('no_recently_viewed')));
           }
+          final filteredEntries = entries.where((entry) {
+            final data = Map<String, dynamic>.from(entry['data'] as Map);
+            return listingMatchesTradeTypeFilter(data, _selectedTradeTypes);
+          }).toList();
+          if (filteredEntries.isEmpty) {
+            return Center(child: Text(tr('no_listings_found_criteria')));
+          }
+
           return ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: entries.length,
+            itemCount: filteredEntries.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
-              final entry = entries[index];
+              final entry = filteredEntries[index];
               final data = Map<String, dynamic>.from(entry['data'] as Map);
               final image = data['imageUrl']?.toString() ?? '';
               return ListTile(

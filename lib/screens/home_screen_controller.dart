@@ -573,6 +573,7 @@ extension _HomeScreenController on _HomeScreenState {
             city: _filterCity,
             district: _filterDistrict,
             neighborhood: _filterNeighborhood ?? '',
+            selectedTradeTypes: _selectedTradeTypes,
             categoryFeatures: List<Map<String, dynamic>>.from(
               _categoryFeatures,
             ),
@@ -592,6 +593,9 @@ extension _HomeScreenController on _HomeScreenState {
           _filterDistrict = result.district;
           _filterNeighborhood = result.neighborhood;
           _neighborhoodController.text = result.neighborhood;
+          _selectedTradeTypes
+            ..clear()
+            ..addAll(result.selectedTradeTypes);
           _featureDropdownValues
             ..clear()
             ..addAll(result.featureValues);
@@ -1228,6 +1232,7 @@ class _HomeFilterResult {
     required this.city,
     required this.district,
     required this.neighborhood,
+    required this.selectedTradeTypes,
     required this.featureValues,
     required this.clearCategory,
   });
@@ -1239,6 +1244,7 @@ class _HomeFilterResult {
   final String? city;
   final String? district;
   final String neighborhood;
+  final List<String> selectedTradeTypes;
   final Map<String, String?> featureValues;
   final bool clearCategory;
 }
@@ -1264,6 +1270,7 @@ class _HomeFilterPage extends StatefulWidget {
     required this.city,
     required this.district,
     required this.neighborhood,
+    required this.selectedTradeTypes,
     required this.categoryFeatures,
     required this.featureValues,
     required this.onUseCurrentLocation,
@@ -1276,6 +1283,7 @@ class _HomeFilterPage extends StatefulWidget {
   final String? city;
   final String? district;
   final String neighborhood;
+  final Set<String> selectedTradeTypes;
   final List<Map<String, dynamic>> categoryFeatures;
   final Map<String, String?> featureValues;
   final Future<_HomeLocationResult?> Function() onUseCurrentLocation;
@@ -1293,6 +1301,7 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
   String? _city;
   String? _district;
   late final Map<String, String?> _featureValues;
+  late final Set<String> _selectedTradeTypes;
   bool _isLocating = false;
   bool _clearCategory = false;
 
@@ -1307,6 +1316,7 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
     _city = widget.city;
     _district = widget.district;
     _featureValues = Map<String, String?>.from(widget.featureValues);
+    _selectedTradeTypes = Set<String>.from(widget.selectedTradeTypes);
   }
 
   @override
@@ -1326,6 +1336,7 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
       _createdWithinHours = null;
       _city = null;
       _district = null;
+      _selectedTradeTypes.clear();
       _clearCategory = true;
       for (final key in _featureValues.keys) {
         _featureValues[key] = null;
@@ -1467,6 +1478,18 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
               ],
+            ),
+          ),
+          _filterSection(
+            title: tr('trade_types_filter'),
+            child: TradeTypeSelector(
+              showHeading: false,
+              selectedTypes: _selectedTradeTypes,
+              onTypeToggled: (typeId) => setState(() {
+                if (!_selectedTradeTypes.add(typeId)) {
+                  _selectedTradeTypes.remove(typeId);
+                }
+              }),
             ),
           ),
           _filterSection(
@@ -1669,6 +1692,7 @@ class _HomeFilterPageState extends State<_HomeFilterPage> {
                 city: _city,
                 district: _district,
                 neighborhood: _neighborhoodController.text,
+                selectedTradeTypes: _selectedTradeTypes.toList(),
                 featureValues: _featureValues,
                 clearCategory: _clearCategory,
               ),

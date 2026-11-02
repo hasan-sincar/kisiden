@@ -22,6 +22,7 @@ import 'pro_purchase_screen.dart';
 import '../utils/theme_colors.dart';
 import 'listing_success_screen.dart'; // YENİ: Başarı Ekranı
 import '../widgets/defect_marker_tools.dart';
+import '../widgets/trade_type_selector.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:cloud_functions/cloud_functions.dart';
@@ -42,6 +43,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
   final _priceController = TextEditingController();
   bool _offersEnabled = false;
   bool _tradeEnabled = false;
+  final Set<String> _selectedTradeTypes = <String>{};
   bool _cashOnDeliveryAvailable = false;
   int _offerValidityHours = 24;
   int _offerMinimumPercent = 70;
@@ -169,6 +171,7 @@ class _AddListingScreenState extends State<AddListingScreen> {
       'featureDropdownValues': _featureDropdownValues,
       'offersEnabled': _offersEnabled,
       'tradeEnabled': _tradeEnabled,
+      'desiredTradeTypes': _selectedTradeTypes.toList(),
       'cashOnDeliveryAvailable': _cashOnDeliveryAvailable,
       'offerValidityHours': _offerValidityHours,
       'offerMinimumPercent': _offerMinimumPercent,
@@ -469,6 +472,14 @@ class _AddListingScreenState extends State<AddListingScreen> {
           : {};
       _offersEnabled = draft['offersEnabled'] == true;
       _tradeEnabled = draft['tradeEnabled'] == true;
+      final desiredTradeTypes = draft['desiredTradeTypes'];
+      _selectedTradeTypes
+        ..clear()
+        ..addAll(
+          desiredTradeTypes is List
+              ? desiredTradeTypes.whereType<String>()
+              : const <String>[],
+        );
       _cashOnDeliveryAvailable = draft['cashOnDeliveryAvailable'] == true;
       _offerValidityHours = draft['offerValidityHours'] == 48 ? 48 : 24;
       _offerMinimumPercent = [70, 80, 90].contains(draft['offerMinimumPercent'])
@@ -1249,6 +1260,91 @@ class _AddListingScreenState extends State<AddListingScreen> {
     }
   }
 
+  List<_CategorySearchResult> _buildCategorySearchResults(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final categoriesById = {for (final doc in docs) doc.id: doc};
+    final parentIds = <String>{};
+    for (final doc in docs) {
+      final parentId = doc.data()['parentId']?.toString() ?? '';
+      if (parentId.isNotEmpty) parentIds.add(parentId);
+    }
+
+    final results = <_CategorySearchResult>[];
+    for (final doc in docs) {
+      if (parentIds.contains(doc.id)) continue;
+
+      final pathDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+      final visitedIds = <String>{};
+      var current = doc;
+      var hasRoot = false;
+
+      while (visitedIds.add(current.id)) {
+        pathDocs.add(current);
+        final parentId = current.data()['parentId']?.toString() ?? '';
+        if (parentId.isEmpty) {
+          hasRoot = true;
+          break;
+        }
+
+        final parent = categoriesById[parentId];
+        if (parent == null) break;
+        current = parent;
+      }
+
+      if (!hasRoot) continue;
+      final originalPathParts = <String>[];
+      final displayPathParts = <String>[];
+      final attributes = <String, String>{};
+
+      for (final pathDoc in pathDocs.reversed) {
+        final data = pathDoc.data();
+        final originalName = data['name']?.toString().trim() ?? '';
+        if (originalName.isEmpty) continue;
+
+        originalPathParts.add(originalName);
+        displayPathParts.add(getTranslatedText(data, 'name'));
+
+        final attributeType = data['attributeType']?.toString().trim() ?? '';
+        if (attributeType.isNotEmpty) {
+          attributes[attributeType] = originalName;
+        }
+      }
+
+      if (originalPathParts.isEmpty) continue;
+      results.add(
+        _CategorySearchResult(
+          categoryId: doc.id,
+          path: originalPathParts.join(' > '),
+          displayPath: displayPathParts.join(' > '),
+          attributes: attributes,
+        ),
+      );
+    }
+
+    results.sort(
+      (a, b) =>
+          a.displayPath.toLowerCase().compareTo(b.displayPath.toLowerCase()),
+    );
+    return results;
+  }
+
+  String _normalizeCategorySearchText(String value) {
+    var normalized = value.trim().toLowerCase();
+    const replacements = <String, String>{
+      'ç': 'c',
+      'ğ': 'g',
+      'ı': 'i',
+      'ö': 'o',
+      'ş': 's',
+      'ü': 'u',
+    };
+    replacements.forEach((character, replacement) {
+      normalized = normalized.replaceAll(character, replacement);
+    });
+    return normalized.replaceAll(RegExp(r'\s+'), ' ');
+  }
+
   Future<void> _showCategoryPicker(
     String parentId,
     String currentPath, [
@@ -1256,204 +1352,354 @@ class _AddListingScreenState extends State<AddListingScreen> {
     Map<String, String>? currentAttributes,
   ]) async {
     var emptyCategorySubmitted = false;
+    var searchQuery = '';
+    var searchResetVersion = 0;
+    Future<QuerySnapshot<Map<String, dynamic>>>? categorySearchFuture;
+    List<_CategorySearchResult>? categorySearchResults;
     final action = await showModalBottomSheet<_CategoryPickerAction>(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return StreamBuilder<QuerySnapshot>(
-          stream: _dbService.getCategoriesStream(parentId),
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    tr('categories_load_failed'),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              );
-            }
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            var docs = snapshot.data!.docs.toList();
-
-            docs.sort((a, b) {
-              var ad = a.data() as Map<String, dynamic>;
-              var bd = b.data() as Map<String, dynamic>;
-              int orderA = ad['order'] ?? 0;
-              int orderB = bd['order'] ?? 0;
-              if (orderA != orderB) return orderA.compareTo(orderB);
-              Timestamp? tA = ad['createdAt'];
-              Timestamp? tB = bd['createdAt'];
-              if (tA != null && tB != null) return tA.compareTo(tB);
-              return 0;
-            });
-
-            if (docs.isEmpty) {
-              if (!emptyCategorySubmitted) {
-                emptyCategorySubmitted = true;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!context.mounted) return;
-                  Navigator.pop(
-                    context,
-                    _CategoryPickerAction.selectCategory(
-                      categoryId: parentId,
-                      path: currentPath,
-                      displayPath: currentDisplayPath,
-                      attributes: currentAttributes ?? {},
+        final mediaQuery = MediaQuery.of(context);
+        final availableHeight =
+            mediaQuery.size.height - mediaQuery.viewInsets.bottom;
+        return SizedBox(
+          height: availableHeight * 0.8,
+          child: StreamBuilder<QuerySnapshot>(
+            stream: _dbService.getCategoriesStream(parentId),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      tr('categories_load_failed'),
+                      textAlign: TextAlign.center,
                     ),
-                  );
-                });
+                  ),
+                );
               }
-              return Center(
-                child: Text(tr('approving'), style: LocalFonts.poppins()),
-              );
-            }
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
-                  child: Row(
-                    children: [
-                      if (currentPath.isNotEmpty)
-                        IconButton(
-                          icon: const Icon(Icons.arrow_back),
-                          tooltip: 'Üst kategoriye dön',
-                          onPressed: () async {
-                            final parentSnapshot = await FirebaseFirestore
-                                .instance
-                                .collection('categories')
-                                .doc(parentId)
-                                .get();
-                            if (!context.mounted) return;
-                            final categoryData = parentSnapshot.data();
-                            final grandParentId =
-                                categoryData?['parentId']?.toString() ?? '';
-                            final pathParts = currentPath
-                                .split(' > ')
-                                .where((part) => part.isNotEmpty)
-                                .toList();
-                            final displayParts = currentDisplayPath
-                                .split(' > ')
-                                .where((part) => part.isNotEmpty)
-                                .toList();
-                            pathParts.removeLast();
-                            if (displayParts.isNotEmpty) {
-                              displayParts.removeLast();
-                            }
-                            Navigator.pop(
-                              context,
-                              _CategoryPickerAction.openCategory(
-                                parentId: grandParentId,
-                                path: pathParts.join(' > '),
-                                displayPath: displayParts.join(' > '),
-                                attributes: currentAttributes ?? {},
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              var docs = snapshot.data!.docs.toList();
+
+              docs.sort((a, b) {
+                var ad = a.data() as Map<String, dynamic>;
+                var bd = b.data() as Map<String, dynamic>;
+                int orderA = ad['order'] ?? 0;
+                int orderB = bd['order'] ?? 0;
+                if (orderA != orderB) return orderA.compareTo(orderB);
+                Timestamp? tA = ad['createdAt'];
+                Timestamp? tB = bd['createdAt'];
+                if (tA != null && tB != null) return tA.compareTo(tB);
+                return 0;
+              });
+
+              if (docs.isEmpty) {
+                if (!emptyCategorySubmitted) {
+                  emptyCategorySubmitted = true;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!context.mounted) return;
+                    Navigator.pop(
+                      context,
+                      _CategoryPickerAction.selectCategory(
+                        categoryId: parentId,
+                        path: currentPath,
+                        displayPath: currentDisplayPath,
+                        attributes: currentAttributes ?? {},
+                      ),
+                    );
+                  });
+                }
+                return Center(
+                  child: Text(tr('approving'), style: LocalFonts.poppins()),
+                );
+              }
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+                    child: Row(
+                      children: [
+                        if (currentPath.isNotEmpty)
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back),
+                            tooltip: 'Üst kategoriye dön',
+                            onPressed: () async {
+                              final parentSnapshot = await FirebaseFirestore
+                                  .instance
+                                  .collection('categories')
+                                  .doc(parentId)
+                                  .get();
+                              if (!context.mounted) return;
+                              final categoryData = parentSnapshot.data();
+                              final grandParentId =
+                                  categoryData?['parentId']?.toString() ?? '';
+                              final pathParts = currentPath
+                                  .split(' > ')
+                                  .where((part) => part.isNotEmpty)
+                                  .toList();
+                              final displayParts = currentDisplayPath
+                                  .split(' > ')
+                                  .where((part) => part.isNotEmpty)
+                                  .toList();
+                              pathParts.removeLast();
+                              if (displayParts.isNotEmpty) {
+                                displayParts.removeLast();
+                              }
+                              Navigator.pop(
+                                context,
+                                _CategoryPickerAction.openCategory(
+                                  parentId: grandParentId,
+                                  path: pathParts.join(' > '),
+                                  displayPath: displayParts.join(' > '),
+                                  attributes: currentAttributes ?? {},
+                                ),
+                              );
+                            },
+                          ),
+                        if (currentPath.isEmpty)
+                          Expanded(
+                            child: Center(
+                              child: Text(
+                                tr('select_category'),
+                                style: LocalFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primary,
+                                ),
                               ),
-                            );
-                          },
-                        ),
-                      if (currentPath.isEmpty)
-                        Expanded(
-                          child: Center(
+                            ),
+                          )
+                        else
+                          Expanded(
                             child: Text(
-                              tr('select_category'),
+                              currentDisplayPath,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: LocalFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.primary,
                               ),
                             ),
                           ),
-                        )
-                      else
-                        Expanded(
-                          child: Text(
-                            currentDisplayPath,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: LocalFonts.poppins(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: StatefulBuilder(
+                      builder: (context, setModalState) => Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: TextField(
+                              key: ValueKey(searchResetVersion),
+                              decoration: InputDecoration(
+                                hintText: tr('search_category_hint'),
+                                prefixIcon: const Icon(Icons.search),
+                                suffixIcon: searchQuery.isEmpty
+                                    ? null
+                                    : IconButton(
+                                        icon: const Icon(Icons.clear),
+                                        onPressed: () {
+                                          setModalState(() {
+                                            searchQuery = '';
+                                            searchResetVersion++;
+                                          });
+                                        },
+                                      ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                isDense: true,
+                              ),
+                              onChanged: (value) {
+                                searchQuery = value;
+                                if (value.trim().isNotEmpty) {
+                                  categorySearchFuture ??= FirebaseFirestore
+                                      .instance
+                                      .collection('categories')
+                                      .get();
+                                }
+                                setModalState(() {});
+                              },
                             ),
                           ),
-                        ),
-                    ],
+                          Expanded(
+                            child: searchQuery.trim().isNotEmpty
+                                ? FutureBuilder<
+                                    QuerySnapshot<Map<String, dynamic>>
+                                  >(
+                                    future: categorySearchFuture,
+                                    builder: (context, searchSnapshot) {
+                                      if (searchSnapshot.hasError) {
+                                        return Center(
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(24),
+                                            child: Text(
+                                              tr('categories_load_failed'),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      if (!searchSnapshot.hasData) {
+                                        return const Center(
+                                          child: CircularProgressIndicator(),
+                                        );
+                                      }
+
+                                      final queryTerms =
+                                          _normalizeCategorySearchText(
+                                                searchQuery,
+                                              )
+                                              .split(' ')
+                                              .where((term) => term.isNotEmpty);
+                                      final allResults =
+                                          categorySearchResults ??=
+                                              _buildCategorySearchResults(
+                                                searchSnapshot.data!.docs,
+                                              );
+                                      final results = allResults.where((
+                                        category,
+                                      ) {
+                                        final searchableText =
+                                            _normalizeCategorySearchText(
+                                              '${category.path} ${category.displayPath}',
+                                            );
+                                        return queryTerms.every(
+                                          (term) =>
+                                              searchableText.contains(term),
+                                        );
+                                      }).toList();
+
+                                      if (results.isEmpty) {
+                                        return Center(
+                                          child: Text(
+                                            tr('category_not_found'),
+                                            style: LocalFonts.poppins(),
+                                          ),
+                                        );
+                                      }
+
+                                      return ListView.builder(
+                                        itemCount: results.length,
+                                        itemBuilder: (context, index) {
+                                          final category = results[index];
+                                          return ListTile(
+                                            title: Text(
+                                              category.displayPath,
+                                              style: LocalFonts.poppins(),
+                                            ),
+                                            trailing: const Icon(
+                                              Icons.check_circle_outline,
+                                            ),
+                                            onTap: () {
+                                              Navigator.pop(
+                                                context,
+                                                _CategoryPickerAction.selectCategory(
+                                                  categoryId:
+                                                      category.categoryId,
+                                                  path: category.path,
+                                                  displayPath:
+                                                      category.displayPath,
+                                                  attributes:
+                                                      category.attributes,
+                                                ),
+                                              );
+                                            },
+                                          );
+                                        },
+                                      );
+                                    },
+                                  )
+                                : ListView.builder(
+                                    itemCount: docs.length,
+                                    itemBuilder: (context, index) {
+                                      var docData =
+                                          docs[index].data()
+                                              as Map<String, dynamic>;
+                                      String originalName = docData['name'];
+                                      String translatedName = getTranslatedText(
+                                        docData,
+                                        'name',
+                                      );
+                                      String attrType =
+                                          docData['attributeType'] ?? '';
+                                      String clickedId = docs[index].id;
+
+                                      return ListTile(
+                                        title: Text(
+                                          translatedName,
+                                          style: LocalFonts.poppins(),
+                                        ),
+                                        trailing: const Icon(
+                                          Icons.chevron_right,
+                                        ),
+                                        onTap: () async {
+                                          String newPath = currentPath.isEmpty
+                                              ? originalName
+                                              : "$currentPath > $originalName";
+                                          String newDisplayPath =
+                                              currentDisplayPath.isEmpty
+                                              ? translatedName
+                                              : "$currentDisplayPath > $translatedName";
+
+                                          Map<String, String> newAttributes =
+                                              Map.from(currentAttributes ?? {});
+                                          if (attrType.trim().isNotEmpty) {
+                                            newAttributes[attrType.trim()] =
+                                                originalName;
+                                          }
+
+                                          var subCats = await FirebaseFirestore
+                                              .instance
+                                              .collection('categories')
+                                              .where(
+                                                'parentId',
+                                                isEqualTo: clickedId,
+                                              )
+                                              .limit(1)
+                                              .get();
+                                          if (!context.mounted) return;
+
+                                          if (subCats.docs.isEmpty) {
+                                            Navigator.pop(
+                                              context,
+                                              _CategoryPickerAction.selectCategory(
+                                                categoryId: clickedId,
+                                                path: newPath,
+                                                displayPath: newDisplayPath,
+                                                attributes: newAttributes,
+                                              ),
+                                            );
+                                          } else {
+                                            Navigator.pop(
+                                              context,
+                                              _CategoryPickerAction.openCategory(
+                                                parentId: clickedId,
+                                                path: newPath,
+                                                displayPath: newDisplayPath,
+                                                attributes: newAttributes,
+                                              ),
+                                            );
+                                          }
+                                        },
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: docs.length,
-                    itemBuilder: (context, index) {
-                      var docData = docs[index].data() as Map<String, dynamic>;
-                      String originalName = docData['name'];
-                      String translatedName = getTranslatedText(
-                        docData,
-                        'name',
-                      );
-                      String attrType = docData['attributeType'] ?? '';
-                      String clickedId = docs[index].id;
-
-                      return ListTile(
-                        title: Text(
-                          translatedName,
-                          style: LocalFonts.poppins(),
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () async {
-                          String newPath = currentPath.isEmpty
-                              ? originalName
-                              : "$currentPath > $originalName";
-                          String newDisplayPath = currentDisplayPath.isEmpty
-                              ? translatedName
-                              : "$currentDisplayPath > $translatedName";
-
-                          Map<String, String> newAttributes = Map.from(
-                            currentAttributes ?? {},
-                          );
-                          if (attrType.trim().isNotEmpty) {
-                            newAttributes[attrType.trim()] = originalName;
-                          }
-
-                          // YENİ ÇÖZÜM: Veritabanına alt kategori var mı diye bakana kadar pencereyi açık tutuyoruz.
-                          var subCats = await FirebaseFirestore.instance
-                              .collection('categories')
-                              .where('parentId', isEqualTo: clickedId)
-                              .limit(1)
-                              .get();
-                          if (!context.mounted) return;
-
-                          if (subCats.docs.isEmpty) {
-                            Navigator.pop(
-                              context,
-                              _CategoryPickerAction.selectCategory(
-                                categoryId: clickedId,
-                                path: newPath,
-                                displayPath: newDisplayPath,
-                                attributes: newAttributes,
-                              ),
-                            );
-                          } else {
-                            Navigator.pop(
-                              context,
-                              _CategoryPickerAction.openCategory(
-                                parentId: clickedId,
-                                path: newPath,
-                                displayPath: newDisplayPath,
-                                attributes: newAttributes,
-                              ),
-                            );
-                          }
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         );
       },
     );
@@ -1929,6 +2175,13 @@ class _AddListingScreenState extends State<AddListingScreen> {
       return;
     }
 
+    if (_tradeEnabled && _selectedTradeTypes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(tr('trade_types_required'))),
+      );
+      return;
+    }
+
     final previewAction = await _showListingPreview();
     if (!mounted) return;
     if (previewAction == _ListingPreviewAction.editListingInfo) {
@@ -2100,6 +2353,9 @@ class _AddListingScreenState extends State<AddListingScreen> {
               ),
               autoRenew: false,
               tradeEnabled: _tradeEnabled,
+              tradePreferences: {
+                'desiredTradeTypes': _selectedTradeTypes.toList(),
+              },
               cashOnDeliveryAvailable: _cashOnDeliveryAvailable,
             );
             if (success && mounted) {
@@ -2643,40 +2899,9 @@ class _AddListingScreenState extends State<AddListingScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildDraftNotice(),
-                    _currentStep == 1 ? _buildStep1() : _buildStep2(),
-                  ],
+                  children: [_currentStep == 1 ? _buildStep1() : _buildStep2()],
                 ),
               ),
-      ),
-    );
-  }
-
-  Widget _buildDraftNotice() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.save_outlined, color: AppColors.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              tr(
-                _hasLocalDraft
-                    ? 'listing_draft_saved_notice'
-                    : 'listing_draft_local_notice',
-              ),
-              style: LocalFonts.poppins(fontSize: 12),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -2943,6 +3168,23 @@ class _AddListingScreenState extends State<AddListingScreen> {
             },
           ),
         ),
+        if (_tradeEnabled)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: TradeTypeSelector(
+                selectedTypes: _selectedTradeTypes,
+                onTypeToggled: (typeId) {
+                  setState(() {
+                    if (!_selectedTradeTypes.add(typeId)) {
+                      _selectedTradeTypes.remove(typeId);
+                    }
+                  });
+                  _scheduleDraftSave();
+                },
+              ),
+            ),
+          ),
         Card(
           child: SwitchListTile(
             title: Text(tr('cash_on_delivery_option')),
@@ -3279,6 +3521,20 @@ class _AddListingScreenState extends State<AddListingScreen> {
 enum _ListingPhotoSource { camera, gallery }
 
 enum _ListingPreviewAction { cancel, publish, editListingInfo, editCategory }
+
+class _CategorySearchResult {
+  const _CategorySearchResult({
+    required this.categoryId,
+    required this.path,
+    required this.displayPath,
+    required this.attributes,
+  });
+
+  final String categoryId;
+  final String path;
+  final String displayPath;
+  final Map<String, String> attributes;
+}
 
 class _CategoryPickerAction {
   final String parentId;

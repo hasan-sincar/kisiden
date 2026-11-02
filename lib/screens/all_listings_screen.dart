@@ -12,6 +12,8 @@ import '../services/banner_ad_settings_service.dart';
 import '../utils/theme_colors.dart';
 import '../utils/turkey_locations.dart';
 import '../utils/translations.dart';
+import '../data/trade_types.dart';
+import '../widgets/trade_type_selector.dart';
 import 'listing_detail_screen.dart';
 import 'listing_comparison_screen.dart';
 
@@ -63,6 +65,7 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
   bool _urgentOnly = false;
   String _sortBy = 'date_desc';
   int? _createdWithinHours;
+  final Set<String> _selectedTradeTypes = <String>{};
   double _distance = 30.0;
   final TextEditingController _minPriceController = TextEditingController();
   final TextEditingController _maxPriceController = TextEditingController();
@@ -234,6 +237,12 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
           filters['createdWithinHours'] == 48) {
         _createdWithinHours = filters['createdWithinHours'] as int;
       }
+      final tradeTypes = filters['tradeTypes'];
+      if (tradeTypes is List) {
+        _selectedTradeTypes
+          ..clear()
+          ..addAll(tradeTypes.whereType<String>());
+      }
     });
   }
 
@@ -254,6 +263,10 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
             createdWithinHours == 24 || createdWithinHours == 48
             ? createdWithinHours
             : null;
+        final tradeTypes = prefs.getStringList('allListingsTradeTypes') ?? [];
+        _selectedTradeTypes
+          ..clear()
+          ..addAll(tradeTypes);
         _minPriceController.text = prefs.getString('minPrice') ?? "";
         _maxPriceController.text = prefs.getString('maxPrice') ?? "";
       });
@@ -292,6 +305,14 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
         await prefs.setInt(
           'allListingsCreatedWithinHours',
           _createdWithinHours!,
+        );
+      }
+      if (_selectedTradeTypes.isEmpty) {
+        await prefs.remove('allListingsTradeTypes');
+      } else {
+        await prefs.setStringList(
+          'allListingsTradeTypes',
+          _selectedTradeTypes.toList(),
         );
       }
       await prefs.setString('minPrice', _minPriceController.text);
@@ -725,6 +746,23 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                     ),
 
                     _filterSection(
+                      title: tr('trade_types_filter'),
+                      child: TradeTypeSelector(
+                        showHeading: false,
+                        selectedTypes: _selectedTradeTypes,
+                        onTypeToggled: (typeId) {
+                          setModalState(() {
+                            if (!_selectedTradeTypes.add(typeId)) {
+                              _selectedTradeTypes.remove(typeId);
+                            }
+                          });
+                          setState(() {});
+                          _savePreferences();
+                        },
+                      ),
+                    ),
+
+                    _filterSection(
                       title: tr('distance'),
                       child: Column(
                         children: [
@@ -1115,6 +1153,12 @@ class _AllListingsScreenState extends State<AllListingsScreen> {
                   var data = doc.data() as Map<String, dynamic>;
                   if (hiddenUsers.contains(data['sellerId']))
                     return false; // YENİ: Engellenenleri gizle
+                  if (!listingMatchesTradeTypeFilter(
+                    data,
+                    _selectedTradeTypes,
+                  )) {
+                    return false;
+                  }
                   final ts = data['urgentUntil'] as Timestamp?;
                   final isUrgentActive =
                       data['isUrgent'] == true &&
